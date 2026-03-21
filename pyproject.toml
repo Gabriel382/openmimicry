@@ -11,10 +11,22 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-basic = ["requests>=2.32.0"]
-extended = ["requests>=2.32.0"]
-studio = ["requests>=2.32.0"]
-full = ["requests>=2.32.0"]
+basic = [
+    "requests>=2.32",
+    "pillow>=10.0"
+]
+extended = [
+    "requests>=2.32",
+    "pillow>=10.0"
+]
+studio = [
+    "requests>=2.32",
+    "pillow>=10.0"
+]
+full = [
+    "requests>=2.32",
+    "pillow>=10.0"
+]
 
 [tool.setuptools]
 py-modules = []
