@@ -1,0 +1,34 @@
+
+name = "Alt Mimic"
+version = "0.1.0"
+default_state = "idle"
+fallback_state = "idle"
+assets_dir = "states"
+
+[states.idle]
+asset = "idle.png"
+duration_ms = 2000
+loop = true
+speech_bubble_text = "Ready."
+
+[states.listening]
+asset = "listening.png"
+duration_ms = 1800
+speech_bubble_text = "Go ahead."
+
+[states.thinking]
+asset = "thinking.png"
+duration_ms = 2200
+speech_bubble_text = "Working on it."
+
+[states.speaking]
+asset = "speaking.png"
+duration_ms = 1800
+speech_bubble_text = "Answering."
+
+# happy intentionally missing to test fallback behavior
+
+[states.error]
+asset = "error.png"
+duration_ms = 2200
+speech_bubble_text = "Error state."

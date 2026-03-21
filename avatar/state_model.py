@@ -1,12 +1,12 @@
-"""Avatar state model used by the simple 2D runtime."""
+
+"""Avatar state definitions for OpenMimicry."""
 
 from __future__ import annotations
-
 from enum import Enum
 
 
 class AvatarState(str, Enum):
-    """Canonical states supported by the first 2D avatar runtime."""
+    """Supported high-level avatar states."""
 
     IDLE = "idle"
     LISTENING = "listening"
@@ -16,6 +16,6 @@ class AvatarState(str, Enum):
     ERROR = "error"
 
     @classmethod
-    def default(cls) -> "AvatarState":
-        """Return the default avatar state."""
-        return cls.IDLE
+    def values(cls) -> list[str]:
+        """Return all state names as strings."""
+        return [state.value for state in cls]

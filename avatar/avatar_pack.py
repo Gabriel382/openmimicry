@@ -1,74 +1,42 @@
-"""Utilities for loading a simple image-based avatar pack."""
+
+"""Avatar pack loading helpers."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
-import json
 
-from .state_model import AvatarState
+from avatar.avatar_config import AvatarPackConfig, AvatarStateConfig
 
 
 @dataclass(slots=True)
-class AvatarPack:
-    """Loaded avatar pack metadata and asset paths."""
+class LoadedAvatarPack:
+    """Resolved avatar pack with filesystem paths."""
 
-    name: str
     root: Path
-    width: int
-    height: int
-    bubble_enabled: bool
-    states: Dict[AvatarState, Path]
+    config: AvatarPackConfig
 
-    @classmethod
-    def load(cls, root: str | Path) -> "AvatarPack":
-        """Load an avatar pack from a folder.
+    def get_state_config(self, state: str) -> AvatarStateConfig | None:
+        """Return config for the requested state, if present."""
+        return self.config.states.get(state)
 
-        Expected structure:
-            pack/
-              manifest.json
-              states/
-                idle.png
-                listening.png
-                thinking.png
-                speaking.png
-                happy.png
-                error.png
-        """
-        root = Path(root)
-        manifest_path = root / "manifest.json"
-        if not manifest_path.exists():
-            raise FileNotFoundError(f"Missing avatar manifest: {manifest_path}")
+    def get_fallback_state(self) -> str:
+        """Return the configured fallback state."""
+        return self.config.fallback_state
 
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        width = int(manifest.get("width", 320))
-        height = int(manifest.get("height", 320))
-        bubble_enabled = bool(manifest.get("bubble_enabled", True))
+    def resolve_asset_path(self, state: str) -> Path | None:
+        """Resolve the asset path for a state, falling back when needed."""
+        state_config = self.get_state_config(state)
+        if state_config is None:
+            state_config = self.get_state_config(self.get_fallback_state())
+            if state_config is None:
+                return None
+        asset_path = self.root / self.config.assets_dir / state_config.asset
+        return asset_path if asset_path.exists() else None
 
-        state_dir = root / "states"
-        states: Dict[AvatarState, Path] = {}
-        for state in AvatarState:
-            state_path = state_dir / f"{state.value}.png"
-            if state_path.exists():
-                states[state] = state_path
 
-        if AvatarState.IDLE not in states:
-            raise ValueError("Avatar pack must include states/idle.png")
-
-        # Fill missing states with the idle image to keep packs easy to build.
-        for state in AvatarState:
-            states.setdefault(state, states[AvatarState.IDLE])
-
-        return cls(
-            name=str(manifest.get("name", root.name)),
-            root=root,
-            width=width,
-            height=height,
-            bubble_enabled=bubble_enabled,
-            states=states,
-        )
-
-    def asset_for(self, state: AvatarState) -> Path:
-        """Return the image path for a given state."""
-        return self.states.get(state, self.states[AvatarState.IDLE])
+def load_avatar_pack(pack_root: Path) -> LoadedAvatarPack:
+    """Load a pack from its root folder."""
+    config_path = pack_root / "avatar.toml"
+    config = AvatarPackConfig.from_toml(config_path)
+    return LoadedAvatarPack(root=pack_root, config=config)

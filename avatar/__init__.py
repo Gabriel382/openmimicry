@@ -1,1 +1,1 @@
-"""Avatar runtime package for OpenMimicry."""
+# OpenMimicry avatar package.
