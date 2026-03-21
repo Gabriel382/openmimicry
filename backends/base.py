@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
+from typing import Any
 
 from core.backend_types import BackendEvent, BackendRequest, BackendResponse, HealthCheckResult, StreamingChunk
 
@@ -13,8 +14,9 @@ class BaseBackendAdapter(ABC):
 
     provider_name: str
 
-    def __init__(self, provider_name: str) -> None:
+    def __init__(self, provider_name: str, config: dict[str, Any] | None = None) -> None:
         self.provider_name = provider_name
+        self.config = config or {}
 
     @abstractmethod
     def chat(self, request: BackendRequest) -> BackendResponse:

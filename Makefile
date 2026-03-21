@@ -6,11 +6,14 @@ PROFILE ?= basic
 
 help:
 	@echo "Available commands:"
-	@echo "  make install PROFILE=basic    Create venv and install selected profile"
-	@echo "  make run PROFILE=basic        Run the minimal app entrypoint"
-	@echo "  make validate PROFILE=basic   Validate and print resolved config"
-	@echo "  make doctor                   Check local environment"
-	@echo "  make clean                    Remove local caches and venv"
+	@echo "  make install PROFILE=basic       Create venv and install selected profile"
+	@echo "  make run PROFILE=basic           Run the minimal app entrypoint"
+	@echo "  make validate PROFILE=basic      Validate and print resolved config"
+	@echo "  make health PROFILE=basic        Run backend health check"
+	@echo "  make switch-test PROFILE=basic   Test switching between backends"
+	@echo "  make ollama-test PROFILE=basic   Test Ollama connection directly"
+	@echo "  make doctor                      Check local environment"
+	@echo "  make clean                       Remove local caches and venv"
 
 $(VENV_DIR):
 	$(PYTHON) -m venv $(VENV_DIR)
@@ -30,6 +33,9 @@ health: $(VENV_DIR)
 
 switch-test: $(VENV_DIR)
 	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/test_backend_switch.py --profile $(PROFILE)
+
+ollama-test: $(VENV_DIR)
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/test_ollama_connection.py --profile $(PROFILE)
 
 doctor:
 	@echo "Python: $$($(PYTHON) --version 2>/dev/null || echo missing)"

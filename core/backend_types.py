@@ -16,6 +16,8 @@ BackendEventType = Literal[
     "backend.request.started",
     "backend.request.finished",
     "backend.stream.delta",
+    "backend.fallback",
+    "backend.log",
     "backend.error",
 ]
 

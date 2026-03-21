@@ -1,9 +1,8 @@
-"""CLI utility to validate backend switching and request routing."""
+"""Test switching between registered backends."""
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -12,36 +11,40 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backends.router import BackendRouter
+from core.backend_config import select_backend_config
 from core.backend_types import BackendMessage, BackendRequest
 from core.config_loader import ConfigLoader
 
 
 def main() -> int:
+    """CLI entrypoint."""
+
     parser = argparse.ArgumentParser(description="Test backend switching.")
-    parser.add_argument("--profile", default=os.getenv("OPENMIMICRY_PROFILE", "basic"))
-    parser.add_argument("--provider", default=None, help="Override backend provider for the test.")
-    parser.add_argument("--message", default="Hello from OpenMimicry")
+    parser.add_argument("--profile", default="basic", help="Profile to load")
     args = parser.parse_args()
 
-    loader = ConfigLoader()
-    settings, _, _ = loader.load(args.profile)
-    provider = args.provider or settings.backend_provider
-
+    settings, _, _ = ConfigLoader().load(args.profile)
+    backend_config = select_backend_config(settings)
     router = BackendRouter()
-    request = BackendRequest(
-        messages=[BackendMessage(role="user", content=args.message)],
-        model=settings.model_name,
-        stream=False,
-        metadata={"profile": settings.profile},
-    )
-    response = router.chat(provider, request)
 
-    print(f"Selected provider: {provider}")
-    print(f"Response model: {response.model}")
-    print(f"Response text: {response.text}")
-    print("Events:")
-    for event in router.events():
-        print(f"- {event.timestamp} | {event.event_type} | {event.message}")
+    request = BackendRequest(
+        messages=[BackendMessage(role="user", content="Ping from switch test")],
+        model=backend_config.model,
+    )
+
+    print("Available backends:", ", ".join(router.available_backends()))
+    for provider in router.available_backends():
+        response = router.chat(
+            provider,
+            request,
+            {
+                "endpoint": backend_config.endpoint,
+                "model": backend_config.model,
+                "timeout_seconds": backend_config.options.get("timeout_seconds", 30),
+            },
+        )
+        print(f"[{provider}] -> active provider: {response.provider} | text: {response.text}")
+
     return 0
 
 

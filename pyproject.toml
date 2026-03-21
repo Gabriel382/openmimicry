@@ -32,4 +32,4 @@ full = [
 py-modules = []
 
 [tool.setuptools.packages.find]
-include = ["core*"]
+include = ["core*", "backends*"]
