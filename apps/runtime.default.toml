@@ -1,3 +1,4 @@
+
 app_name = "OpenMimicry"
 overlay_enabled = true
 avatar_runtime = "2d"
@@ -12,7 +13,8 @@ idle_timeout_seconds = 3
 
 [avatar]
 runtime = "2d"
-avatar_root = "packs/avatar_2d_demo"
+packs_root = "packs"
+pack_name = "avatar_2d_demo"
 bubble_enabled = true
 idle_timeout_ms = 2500
 always_on_top = true
