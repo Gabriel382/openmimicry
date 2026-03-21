@@ -1,0 +1,7 @@
+name = "basic"
+description = "Minimal profile with simple 2D runtime and VRM support."
+packs = ["core-base", "avatar-2d", "avatar-vrm"]
+
+[runtime_overrides]
+avatar_runtime = "2d"
+log_level = "INFO"

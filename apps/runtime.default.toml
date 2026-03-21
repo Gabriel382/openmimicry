@@ -1,0 +1,7 @@
+app_name = "OpenMimicry"
+log_level = "INFO"
+backend_provider = "mock"
+backend_endpoint = "http://localhost:11434"
+model_name = "qwen2.5:7b"
+overlay_enabled = true
+avatar_runtime = "2d"

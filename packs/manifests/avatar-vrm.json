@@ -1,0 +1,9 @@
+{
+  "name": "avatar-vrm",
+  "version": "0.1.0",
+  "description": "VRM 3D avatar runtime support.",
+  "category": "avatar",
+  "python_extra": "basic",
+  "dependencies": ["core-base"],
+  "runtime_enabled_by_default": false
+}
