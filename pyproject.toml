@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry"
+version = "0.1.0"
+description = "Open embodied avatar interfaces for LLMs and agentic systems"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "OpenMimicry contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+basic = []
+extended = []
+studio = []
+full = []
+
+[tool.setuptools]
+py-modules = []
