@@ -30,5 +30,8 @@ def select_backend_config(settings: RuntimeSettings) -> SelectedBackendConfig:
             "log_level": settings.log_level,
             "overlay_enabled": settings.overlay_enabled,
             "avatar_runtime": settings.avatar_runtime,
+            "timeout_seconds": settings.backend_options.get("timeout_seconds", 30),
+            "stream": settings.backend_options.get("stream", True),
+            "api_key": settings.backend_options.get("api_key"),
         },
     )

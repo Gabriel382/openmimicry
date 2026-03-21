@@ -11,8 +11,8 @@ from core.backend_types import BackendRequest, BackendResponse, HealthCheckResul
 class MockBackendAdapter(BaseBackendAdapter):
     """Very small backend that echoes the last user message."""
 
-    def __init__(self) -> None:
-        super().__init__(provider_name="mock")
+    def __init__(self, config: dict | None = None) -> None:
+        super().__init__(provider_name="mock", config=config)
         self._status = "ready"
 
     def chat(self, request: BackendRequest) -> BackendResponse:
