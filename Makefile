@@ -25,6 +25,12 @@ run: $(VENV_DIR)
 validate: $(VENV_DIR)
 	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/validate_config.py --profile $(PROFILE)
 
+health: $(VENV_DIR)
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/backend_health.py --profile $(PROFILE)
+
+switch-test: $(VENV_DIR)
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/test_backend_switch.py --profile $(PROFILE)
+
 doctor:
 	@echo "Python: $$($(PYTHON) --version 2>/dev/null || echo missing)"
 	@test -f pyproject.toml && echo "pyproject.toml: OK" || echo "pyproject.toml: MISSING"

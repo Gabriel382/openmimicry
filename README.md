@@ -16,3 +16,11 @@ make install PROFILE=basic
 make validate PROFILE=basic
 make run PROFILE=basic
 ```
+
+
+## Milestone 2 commands
+
+```bash
+make health PROFILE=basic
+make switch-test PROFILE=basic
+```

@@ -39,6 +39,7 @@ class ConfigLoader:
             overlay_enabled=resolved.merged_runtime_settings["overlay_enabled"],
             avatar_runtime=resolved.merged_runtime_settings["avatar_runtime"],
             profile=resolved.merged_runtime_settings["profile"],
+            backend_options=resolved.merged_runtime_settings.get("backend_options", {}),
         )
         package_names = [manifest.name for manifest in resolved.manifests]
         extras = resolved.extras_to_install

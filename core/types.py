@@ -19,6 +19,7 @@ class RuntimeSettings:
     overlay_enabled: bool
     avatar_runtime: str
     profile: str = "basic"
+    backend_options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
