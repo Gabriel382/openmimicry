@@ -1,0 +1,10 @@
+{
+  "packages": {
+    "core-base": "manifests/core-base.json",
+    "avatar-2d": "manifests/avatar-2d.json",
+    "avatar-vrm": "manifests/avatar-vrm.json",
+    "avatar-live2d": "manifests/avatar-live2d.json",
+    "voice-core": "manifests/voice-core.json",
+    "state-studio": "manifests/state-studio.json"
+  }
+}
