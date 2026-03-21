@@ -1,43 +1,39 @@
-# Project settings
 PYTHON ?= python3
 VENV_DIR ?= .venv
 VENV_PYTHON := $(VENV_DIR)/bin/python
-VENV_PIP := $(VENV_DIR)/bin/pip
 PROFILE ?= basic
-
-# Default target
 .DEFAULT_GOAL := help
 
 help:
 	@echo "Available commands:"
-	@echo "  make install PROFILE=basic     Create venv and install dependencies"
-	@echo "  make run                       Run the project"
-	@echo "  make doctor                    Check local environment"
-	@echo "  make clean                     Remove cache/build artifacts"
+	@echo "  make install PROFILE=basic    Create venv and install selected profile"
+	@echo "  make run PROFILE=basic        Run the minimal app entrypoint"
+	@echo "  make validate PROFILE=basic   Validate and print resolved config"
+	@echo "  make doctor                   Check local environment"
+	@echo "  make clean                    Remove local caches and venv"
 
-# Create virtual environment if missing
 $(VENV_DIR):
 	$(PYTHON) -m venv $(VENV_DIR)
 
-# Install project inside the virtual environment
-# $(VENV_PYTHON) -m pip install --upgrade pip setuptools wheel
 install: $(VENV_DIR)
 	@echo "Installing OpenMimicry with PROFILE=$(PROFILE)"
-	$(VENV_PIP) install -e ".[${PROFILE}]"
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/install_profile.py --profile $(PROFILE)
 
-# Run the app through the virtual environment
 run: $(VENV_DIR)
-	$(VENV_PYTHON) scripts/run.py
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/run.py
 
-# Basic diagnostics
+validate: $(VENV_DIR)
+	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/validate_config.py --profile $(PROFILE)
+
 doctor:
 	@echo "Python: $$($(PYTHON) --version 2>/dev/null || echo missing)"
-	@echo "Venv: $(VENV_DIR)"
-	@test -d $(VENV_DIR) && echo "Virtual environment: OK" || echo "Virtual environment: MISSING"
 	@test -f pyproject.toml && echo "pyproject.toml: OK" || echo "pyproject.toml: MISSING"
-	@test -f .env.example && echo ".env.example: OK" || echo ".env.example: MISSING"
+	@test -f apps/runtime.default.toml && echo "runtime.default.toml: OK" || echo "runtime.default.toml: MISSING"
+	@test -f packs/registry.json && echo "packs/registry.json: OK" || echo "packs/registry.json: MISSING"
+	@for profile in basic extended studio full; do \
+		if [ -f profiles/$$profile.toml ]; then echo "profiles/$$profile.toml: OK"; else echo "profiles/$$profile.toml: MISSING"; fi; \
+	done
 
-# Cleanup
 clean:
 	rm -rf $(VENV_DIR)
 	find . -type d -name "__pycache__" -exec rm -rf {} +

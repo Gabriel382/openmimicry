@@ -1,0 +1,9 @@
+{
+  "name": "avatar-live2d",
+  "version": "0.1.0",
+  "description": "Live2D runtime support.",
+  "category": "avatar",
+  "python_extra": "extended",
+  "dependencies": ["core-base"],
+  "runtime_enabled_by_default": false
+}

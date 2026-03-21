@@ -1,0 +1,9 @@
+{
+  "name": "state-studio",
+  "version": "0.1.0",
+  "description": "State authoring and studio helpers.",
+  "category": "studio",
+  "python_extra": "studio",
+  "dependencies": ["core-base", "avatar-vrm"],
+  "runtime_enabled_by_default": false
+}
