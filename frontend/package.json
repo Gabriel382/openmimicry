@@ -1,4 +1,3 @@
-
 {
   "name": "openmimicry-frontend",
   "private": true,
@@ -9,6 +8,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

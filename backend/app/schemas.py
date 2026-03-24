@@ -26,4 +26,4 @@ class HealthResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    preferred_adapter: Optional[str] = None
+    preferred_adapter: str | None = None

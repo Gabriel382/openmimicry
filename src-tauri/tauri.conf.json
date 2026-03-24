@@ -11,23 +11,14 @@
     "windows": [
       {
         "label": "overlay",
-        "title": "OpenMimicry Overlay",
-        "width": 420,
-        "height": 520,
+        "title": "OpenMimicry",
+        "width": 500,
+        "height": 700,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
-        "resizable": false
-      },
-      {
-        "label": "panel",
-        "title": "OpenMimicry Panel",
-        "width": 520,
-        "height": 760,
-        "transparent": false,
-        "decorations": true,
-        "alwaysOnTop": false,
-        "resizable": true
+        "resizable": false,
+        "shadow": false
       }
     ]
   }

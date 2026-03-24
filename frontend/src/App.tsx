@@ -1,112 +1,150 @@
-
-import React, { useEffect, useMemo, useState } from 'react'
-import { getConfig, getHealth, postChat, postTts } from './api'
-import { speakWithBrowserVoice } from './tts/browserVoice'
+import React, { useEffect, useMemo, useState } from "react";
+import { getConfig, postChat, postTts } from "./api";
+import { speakWithBrowserVoice } from "./browserVoice";
+import { minimizeWindow, closeWindow, startWindowDrag } from "./windowApi";
 
 export default function App() {
-  const [config, setConfig] = useState<any>(null)
-  const [health, setHealth] = useState<any>(null)
-  const [messages, setMessages] = useState<any[]>([])
-  const [input, setInput] = useState('')
-  const [mode, setMode] = useState<'overlay'|'panel'|'split'>('split')
-  const [currentAnimation, setCurrentAnimation] = useState('idle')
-  const [bubbleText, setBubbleText] = useState('')
-  const [frameUrl, setFrameUrl] = useState<string | null>(null)
-  const [frameIndex, setFrameIndex] = useState(0)
-
-  useEffect(() => { getConfig().then(setConfig); getHealth().then(setHealth) }, [])
-
-  const character = config?.character
-  const theme = config?.theme
-  const personality = config?.personality
-  const currentFrames = useMemo(() => character?.animations?.[currentAnimation]?.frames ?? [], [character, currentAnimation])
+  const [config, setConfig] = useState<any>(null);
+  const [currentAnimation, setCurrentAnimation] = useState("idle");
+  const [bubbleText, setBubbleText] = useState("");
+  const [input, setInput] = useState("");
+  const [frameUrl, setFrameUrl] = useState<string | null>(null);
+  const [dragEnabled, setDragEnabled] = useState(true);
 
   useEffect(() => {
-    if (!currentFrames.length) return
-    setFrameUrl(`http://localhost:8000/static/${currentFrames[0]}`)
-    setFrameIndex(0)
-    const fps = character?.animations?.[currentAnimation]?.fps ?? 6
+    getConfig().then(setConfig);
+  }, []);
+
+  const character = config?.character;
+  const theme = config?.theme;
+  const colors = theme?.colors ?? {};
+
+  const currentFrames = useMemo(
+    () => character?.animations?.[currentAnimation]?.frames ?? [],
+    [character, currentAnimation]
+  );
+
+  useEffect(() => {
+    if (!character?.default_state) return;
+    setCurrentAnimation(character.default_state);
+  }, [character]);
+
+  useEffect(() => {
+    if (!currentFrames.length) return;
+
+    let index = 0;
+    setFrameUrl(`http://localhost:8000/static/${currentFrames[0]}`);
+
+    const fps = character?.animations?.[currentAnimation]?.fps ?? 6;
     const timer = window.setInterval(() => {
-      setFrameIndex(prev => {
-        const next = (prev + 1) % currentFrames.length
-        setFrameUrl(`http://localhost:8000/static/${currentFrames[next]}`)
-        return next
-      })
-    }, Math.max(80, Math.floor(1000 / fps)))
-    return () => window.clearInterval(timer)
-  }, [currentFrames, currentAnimation, character])
+      index = (index + 1) % currentFrames.length;
+      setFrameUrl(`http://localhost:8000/static/${currentFrames[index]}`);
+    }, Math.max(80, Math.floor(1000 / fps)));
 
-  useEffect(() => {
-    if (character?.default_state) setCurrentAnimation(character.default_state)
-  }, [character])
+    return () => window.clearInterval(timer);
+  }, [currentFrames, currentAnimation, character]);
 
   async function onSend() {
-    const text = input.trim()
-    if (!text) return
-    setMessages(prev => [...prev, { role: 'user', text }])
-    setInput('')
-    setCurrentAnimation(character?.thinking_animation ?? 'thinking')
-    setBubbleText('Thinking...')
-    const res = await postChat(text)
-    setMessages(prev => [...prev, { role: 'assistant', text: res.text, avatar: res.avatar, backend: res.backend }])
-    setCurrentAnimation(res.avatar.animation)
-    setBubbleText(res.text)
-    const ok = speakWithBrowserVoice(res.text)
-    if (!ok) await postTts(res.text)
+    const text = input.trim();
+    if (!text) return;
+
+    setInput("");
+    setCurrentAnimation(character?.thinking_animation ?? "thinking");
+    setBubbleText("Thinking...");
+
+    const res = await postChat(text);
+
+    setBubbleText(res.text);
+    setCurrentAnimation(res.avatar.animation);
+
+    const spokeInBrowser = speakWithBrowserVoice(res.text);
+    if (!spokeInBrowser) {
+      await postTts(res.text);
+    }
+
     window.setTimeout(() => {
-      setCurrentAnimation(res.avatar.next_state || 'idle')
-      setBubbleText('')
-    }, 2200)
+      setCurrentAnimation(res.avatar.next_state || "idle");
+      setBubbleText("");
+    }, 2500);
   }
 
-  if (!config) return <div className="boot">Loading OpenMimicry…</div>
+  async function onDragMouseDown(
+    e: React.MouseEvent<HTMLButtonElement | HTMLDivElement>
+  ) {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    await startWindowDrag();
+  }
 
-  const colors = theme?.colors ?? {}
+  if (!config) return <div className="boot">Loading…</div>;
+
   return (
-    <div className={`app-shell mode-${mode}`}>
-      <div className="mode-switch">
-        <button onClick={() => setMode('overlay')}>Overlay</button>
-        <button onClick={() => setMode('panel')}>Panel</button>
-        <button onClick={() => setMode('split')}>Split</button>
+    <div className="overlay-root">
+      <div className="topbar">
+        <div className="title">OpenMimicry</div>
+
+        <button
+          className={`drag-handle ${dragEnabled ? "active" : "inactive"}`}
+          onMouseDown={onDragMouseDown}
+          title={dragEnabled ? "Click and drag window" : "Dragging locked"}
+        >
+          ⠿ Drag
+        </button>
+
+        <div className="window-buttons">
+          <button
+            className="control-btn"
+            onClick={() => setDragEnabled((v) => !v)}
+            title={dragEnabled ? "Lock movement" : "Enable dragging"}
+          >
+            {dragEnabled ? "🔓" : "🔒"}
+          </button>
+          <button className="control-btn" onClick={minimizeWindow} title="Minimize">
+            —
+          </button>
+          <button className="control-btn close-btn" onClick={closeWindow} title="Close">
+            ✕
+          </button>
+        </div>
       </div>
 
-      {(mode === 'overlay' || mode === 'split') && (
-        <div className="overlay-root">
-          {bubbleText ? <div className="bubble" style={{ background: colors.bubble_bg, color: colors.bubble_text }}>{bubbleText}</div> : null}
-          <div className="avatar-stage">
-            {frameUrl ? <img src={frameUrl} className="avatar-image" alt={currentAnimation} /> : null}
-          </div>
-          <div className="avatar-badge">{currentAnimation}</div>
+      {bubbleText ? (
+        <div
+          className="bubble"
+          style={{ background: colors.bubble_bg, color: colors.bubble_text }}
+        >
+          {bubbleText}
         </div>
-      )}
+      ) : null}
 
-      {(mode === 'panel' || mode === 'split') && (
-        <div className="panel-root" style={{ background: colors.panel_bg, color: colors.text_primary, borderColor: colors.panel_border }}>
-          <div className="panel-header">
-            <div>
-              <div className="panel-title">OpenMimicry</div>
-              <div className="panel-subtitle">{personality?.name ?? 'Assistant'}</div>
-            </div>
-            <div className="panel-badges">
-              <span className="badge">{health?.provider ?? 'backend'}</span>
-              <span className="badge">{health?.ok ? 'ready' : 'offline'}</span>
-            </div>
-          </div>
-          <div className="chat-scroll">
-            {messages.map((m, idx) => (
-              <div className={`chat-item ${m.role}`} key={idx}>
-                <div className="chat-role">{m.role}</div>
-                <div className="chat-text">{m.text}</div>
-                {m.avatar ? <div className="chat-meta">{m.avatar.animation}</div> : null}
-              </div>
-            ))}
-          </div>
-          <div className="input-row">
-            <input className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && onSend()} placeholder="Ask the model..." />
-            <button className="send-btn" onClick={onSend}>Send</button>
-          </div>
-        </div>
-      )}
+      <div className="avatar-stage">
+        {frameUrl ? (
+          <img src={frameUrl} className="avatar-image" alt={currentAnimation} />
+        ) : null}
+      </div>
+
+      <div className="state-badge">{currentAnimation}</div>
+
+      <div
+        className="input-dock"
+        style={{ background: colors.dock_bg, borderColor: colors.dock_border }}
+      >
+        <input
+          className="dock-input"
+          style={{
+            background: colors.input_bg,
+            borderColor: colors.input_border,
+            color: colors.text_primary,
+          }}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onSend()}
+          placeholder="Ask the model..."
+        />
+        <button className="send-btn" onClick={onSend}>
+          Send
+        </button>
+      </div>
     </div>
-  )
+  );
 }

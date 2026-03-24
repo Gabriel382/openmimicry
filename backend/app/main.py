@@ -47,5 +47,6 @@ def chat(req: ChatRequest):
 
 @app.post("/tts")
 def tts(req: TTSRequest):
+    from app.tts.router import speak_with_fallback
     adapter, ok = speak_with_fallback(req.text, preferred=req.preferred_adapter)
     return {"ok": ok, "adapter": adapter}
