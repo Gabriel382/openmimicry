@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenMimicry",
+  "version": "0.1.0",
+  "identifier": "com.openmimicry.app",
+  "build": {
+    "frontendDist": "../frontend/dist",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "overlay",
+        "title": "OpenMimicry Overlay",
+        "width": 420,
+        "height": 520,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "resizable": false
+      },
+      {
+        "label": "panel",
+        "title": "OpenMimicry Panel",
+        "width": 520,
+        "height": 760,
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "resizable": true
+      }
+    ]
+  }
+}

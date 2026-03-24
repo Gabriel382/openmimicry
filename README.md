@@ -1,25 +1,36 @@
-# OpenMimicry
 
-OpenMimicry is a local-first embodied interface layer for LLMs and agentic systems.
+# OpenMimicry UI Redesign Starter
 
-## Milestone 3 highlights
+This starter bundle includes:
+- modern React frontend intended for Tauri
+- separate overlay and control panel surfaces
+- YAML-driven theme, runtime, personality, and character config
+- FastAPI backend
+- LLM adapter layer
+- TTS adapter stack with fallback ordering
+- character packs using `emotion` and `emotion_speaking` folders
 
-- Ollama backend adapter
-- common backend router with fallback to mock backend
-- chat and streaming support
-- model selection from runtime config
-- backend health checks and direct Ollama connection test
-- runtime event logs and active backend debug output
+## TTS fallback order
+1. browser/system voice in frontend
+2. Piper adapter in backend if configured
+3. pyttsx3 adapter in backend
+4. noop fallback
 
-## Commands
+## Run
 
+Backend:
 ```bash
-make install PROFILE=basic
-make ollama-test PROFILE=basic
-make health PROFILE=basic
-make run PROFILE=basic
+cd backend
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-## Notes
-
-The Ollama adapter uses the official Ollama local HTTP API with `/api/chat` for chat and `/api/tags` for model discovery/health checks. Local access does not require authentication in the default local setup. citeturn872330search0turn872330search2turn872330search4
+Frontend:
+```bash
+cd frontend
+npm install
+npm install --save-dev @tauri-apps/cli@latest
+npm run dev
+```

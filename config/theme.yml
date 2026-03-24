@@ -1,0 +1,27 @@
+
+name: openmimicry-default
+windows:
+  overlay:
+    transparent: true
+    frameless: true
+    always_on_top: true
+    width: 420
+    height: 520
+  control_panel:
+    transparent: false
+    width: 520
+    height: 760
+theme:
+  font_family: Inter, Arial, sans-serif
+  border_radius: 18
+colors:
+  panel_bg: "rgba(20, 23, 30, 0.88)"
+  panel_border: "rgba(255,255,255,0.08)"
+  text_primary: "#f4f6fb"
+  text_secondary: "#aab3c5"
+  accent: "#ff8a3d"
+  bubble_bg: "rgba(255,255,255,0.96)"
+  bubble_text: "#1b1d22"
+layout:
+  bubble_max_width: 300
+  avatar_scale: 1.0

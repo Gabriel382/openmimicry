@@ -1,0 +1,52 @@
+
+name: MimicBlue
+default_state: idle
+thinking_animation: thinking
+bubble:
+  fallback: block
+animations:
+  idle:
+    fps: 5
+    frames:
+      - characters/mimic_blue/idle/000.png
+      - characters/mimic_blue/idle/001.png
+      - characters/mimic_blue/idle/002.png
+  idle_speaking:
+    fps: 9
+    frames:
+      - characters/mimic_blue/idle_speaking/000.png
+      - characters/mimic_blue/idle_speaking/001.png
+      - characters/mimic_blue/idle_speaking/002.png
+      - characters/mimic_blue/idle_speaking/003.png
+  thinking:
+    fps: 7
+    frames:
+      - characters/mimic_blue/thinking/000.png
+      - characters/mimic_blue/thinking/001.png
+      - characters/mimic_blue/thinking/002.png
+      - characters/mimic_blue/thinking/003.png
+  happy:
+    fps: 7
+    frames:
+      - characters/mimic_blue/happy/000.png
+      - characters/mimic_blue/happy/001.png
+      - characters/mimic_blue/happy/002.png
+  happy_speaking:
+    fps: 9
+    frames:
+      - characters/mimic_blue/happy_speaking/000.png
+      - characters/mimic_blue/happy_speaking/001.png
+      - characters/mimic_blue/happy_speaking/002.png
+      - characters/mimic_blue/happy_speaking/003.png
+  error:
+    fps: 6
+    frames:
+      - characters/mimic_blue/error/000.png
+      - characters/mimic_blue/error/001.png
+  error_speaking:
+    fps: 8
+    frames:
+      - characters/mimic_blue/error_speaking/000.png
+      - characters/mimic_blue/error_speaking/001.png
+      - characters/mimic_blue/error_speaking/002.png
+      - characters/mimic_blue/error_speaking/003.png

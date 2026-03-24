@@ -5,3 +5,5 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+frontend/node_modules/
+src-tauri/target/debug/
