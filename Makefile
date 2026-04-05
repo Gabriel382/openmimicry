@@ -1,56 +1,72 @@
 PYTHON ?= python3
-VENV_DIR ?= .venv
-VENV_PYTHON := $(VENV_DIR)/bin/python
 PROFILE ?= basic
+
+ifeq ($(OS),Windows_NT)
+	VENV_DIR := backend/.venv
+	VENV_PYTHON := $(VENV_DIR)/Scripts/python.exe
+	NPM_CMD := npm.cmd
+	CARGO_CMD := cargo
+	RM_VENV := if exist backend\.venv rmdir /s /q backend\.venv
+else
+	VENV_DIR := backend/.venv
+	VENV_PYTHON := $(VENV_DIR)/bin/python
+	NPM_CMD := npm
+	CARGO_CMD := cargo
+	RM_VENV := rm -rf backend/.venv
+endif
+
+.PHONY: help install backend frontend dev desktop doctor clean
+
 .DEFAULT_GOAL := help
 
 help:
-	@echo "Available commands:"
-	@echo "  make install PROFILE=basic       Create venv and install selected profile"
-	@echo "  make run PROFILE=basic           Run the minimal app entrypoint"
-	@echo "  make validate PROFILE=basic      Validate and print resolved config"
-	@echo "  make health PROFILE=basic        Run backend health check"
-	@echo "  make switch-test PROFILE=basic   Test switching between backends"
-	@echo "  make ollama-test PROFILE=basic   Test Ollama connection directly"
-	@echo "  make doctor                      Check local environment"
-	@echo "  make clean                       Remove local caches and venv"
+	@echo "make install PROFILE=basic"
+	@echo "make backend"
+	@echo "make frontend"
+	@echo "make dev"
+	@echo "make desktop"
+	@echo "make doctor"
+	@echo "make clean"
 
 $(VENV_DIR):
 	$(PYTHON) -m venv $(VENV_DIR)
 
 install: $(VENV_DIR)
 	@echo "Installing OpenMimicry with PROFILE=$(PROFILE)"
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/install_profile.py --profile $(PROFILE)
+	$(VENV_PYTHON) -m pip install --upgrade pip setuptools wheel
+	$(VENV_PYTHON) -m pip install -r backend/requirements.txt
+	cd frontend && $(NPM_CMD) install
+	@echo "Installation finished"
 
-run: $(VENV_DIR)
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/run.py
+backend:
+	cd backend && .venv/bin/python -m uvicorn app.main:app --reload --port 8000
 
-validate: $(VENV_DIR)
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/validate_config.py --profile $(PROFILE)
+frontend:
+	cd frontend && $(NPM_CMD) run dev
 
-health: $(VENV_DIR)
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/backend_health.py --profile $(PROFILE)
+dev:
+	@echo "Run these in separate terminals:"
+	@echo "make backend"
+	@echo "make frontend"
 
-switch-test: $(VENV_DIR)
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/test_backend_switch.py --profile $(PROFILE)
-
-ollama-test: $(VENV_DIR)
-	OPENMIMICRY_PROFILE=$(PROFILE) $(VENV_PYTHON) scripts/test_ollama_connection.py --profile $(PROFILE)
+desktop:
+	cd src-tauri && $(CARGO_CMD) tauri dev
 
 doctor:
-	@echo "Python: $$($(PYTHON) --version 2>/dev/null || echo missing)"
-	@test -f pyproject.toml && echo "pyproject.toml: OK" || echo "pyproject.toml: MISSING"
-	@test -f apps/runtime.default.toml && echo "runtime.default.toml: OK" || echo "runtime.default.toml: MISSING"
-	@test -f packs/registry.json && echo "packs/registry.json: OK" || echo "packs/registry.json: MISSING"
-	@for profile in basic extended studio full; do \
-		if [ -f profiles/$$profile.toml ]; then echo "profiles/$$profile.toml: OK"; else echo "profiles/$$profile.toml: MISSING"; fi; \
-	done
+	@echo "Checking Python..."
+	-$(PYTHON) --version
+	@echo "Checking backend venv..."
+	-$(VENV_PYTHON) --version
+	@echo "Checking Node..."
+	-$(NPM_CMD) --version
+	@echo "Checking Rust..."
+	-$(CARGO_CMD) --version
+	@echo "Checking Tauri CLI..."
+	-$(CARGO_CMD) tauri --version
+	@echo "Checking Ollama..."
+	-ollama --version
+	@echo "Checking Piper..."
+	-piper --version
 
 clean:
-	rm -rf $(VENV_DIR)
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-
-avatar-demo:
-	OPENMIMICRY_PROFILE=$(PROFILE) .venv/bin/python scripts/run_avatar_demo.py
+	$(RM_VENV)

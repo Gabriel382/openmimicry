@@ -5,14 +5,12 @@ from typing import Optional
 
 class ChatRequest(BaseModel):
     text: str
-    character: Optional[str] = None
 
 class AvatarDirective(BaseModel):
     emotion: str
     animation: str
     speaking: bool = False
     next_state: str = "idle"
-    duration_ms: Optional[int] = None
 
 class ChatResponse(BaseModel):
     text: str
@@ -26,4 +24,4 @@ class HealthResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    preferred_adapter: str | None = None
+    preferred_adapter: Optional[str] = None

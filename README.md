@@ -1,36 +1,41 @@
 
-# OpenMimicry UI Redesign Starter
+# OpenMimicry — Make + Hot Reload + Tray Starter
 
-This starter bundle includes:
-- modern React frontend intended for Tauri
-- separate overlay and control panel surfaces
-- YAML-driven theme, runtime, personality, and character config
-- FastAPI backend
-- LLM adapter layer
-- TTS adapter stack with fallback ordering
-- character packs using `emotion` and `emotion_speaking` folders
+This bundle adds:
 
-## TTS fallback order
-1. browser/system voice in frontend
-2. Piper adapter in backend if configured
-3. pyttsx3 adapter in backend
-4. noop fallback
+- `Makefile` orchestration
+- `make install PROFILE=basic`
+- `make backend`
+- `make frontend`
+- `make dev`
+- `make desktop`
+- `make doctor`
+- YAML hot reload on the backend
+- split overlay/panel architecture
+- Tauri tray scaffold
+- separate overlay and panel routes in the frontend
 
-## Run
+## Main commands
 
-Backend:
 ```bash
-cd backend
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+make install PROFILE=basic
+make backend
+make frontend
+make dev
+make desktop
+make doctor
 ```
 
-Frontend:
-```bash
-cd frontend
-npm install
-npm install --save-dev @tauri-apps/cli@latest
-npm run dev
-```
+## Notes
+
+- `make dev` starts backend + frontend together.
+- `make desktop` launches Tauri.
+- YAML config reload happens on each backend config request and on chat calls.
+- Frontend routes:
+  - `/overlay`
+  - `/panel`
+- Tauri windows:
+  - `overlay`
+  - `panel`
+
+This is a practical starter bundle and may still need platform-specific refinement for tray behavior or production packaging.

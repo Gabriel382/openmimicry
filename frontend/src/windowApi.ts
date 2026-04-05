@@ -1,9 +1,9 @@
+
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export async function minimizeWindow() {
   try {
-    const win = getCurrentWindow();
-    await win.minimize();
+    await getCurrentWindow().minimize();
   } catch (err) {
     console.error("minimize failed", err);
   }
@@ -11,8 +11,7 @@ export async function minimizeWindow() {
 
 export async function closeWindow() {
   try {
-    const win = getCurrentWindow();
-    await win.close();
+    await getCurrentWindow().close();
   } catch (err) {
     console.error("close failed", err);
   }
@@ -20,8 +19,7 @@ export async function closeWindow() {
 
 export async function startWindowDrag() {
   try {
-    const win = getCurrentWindow();
-    await win.startDragging();
+    await getCurrentWindow().startDragging();
   } catch (err) {
     console.error("startDragging failed", err);
   }

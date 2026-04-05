@@ -2,9 +2,6 @@
 name: OctoMimic
 default_state: idle
 thinking_animation: thinking
-bubble:
-  png: bubble.png
-  fallback: block
 animations:
   idle:
     fps: 5
@@ -26,12 +23,6 @@ animations:
       - characters/octomimic/thinking/001.png
       - characters/octomimic/thinking/002.png
       - characters/octomimic/thinking/003.png
-  happy:
-    fps: 7
-    frames:
-      - characters/octomimic/happy/000.png
-      - characters/octomimic/happy/001.png
-      - characters/octomimic/happy/002.png
   happy_speaking:
     fps: 9
     frames:
@@ -39,11 +30,6 @@ animations:
       - characters/octomimic/happy_speaking/001.png
       - characters/octomimic/happy_speaking/002.png
       - characters/octomimic/happy_speaking/003.png
-  error:
-    fps: 6
-    frames:
-      - characters/octomimic/error/000.png
-      - characters/octomimic/error/001.png
   error_speaking:
     fps: 8
     frames:

@@ -1,24 +1,16 @@
 
-app:
-  name: OpenMimicry
 backend:
   provider: ollama
   endpoint: http://localhost:11434
   model: qwen2.5:1.5b-instruct-q4_K_M
   fallback_to_mock: true
+
 tts:
   adapter_priority:
     - browser
-    - piper
     - pyttsx3
     - noop
-  piper:
-    executable: piper
-    model_path: ""
-  pyttsx3:
-    rate: 175
-    volume: 1.0
+
 ui:
   active_character: octomimic
-  active_personality: friendly_assistant
-  active_theme: openmimicry-default
+  show_panel_on_start: true
