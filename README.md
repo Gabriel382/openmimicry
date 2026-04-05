@@ -1,25 +1,41 @@
-# OpenMimicry
 
-OpenMimicry is a local-first embodied interface layer for LLMs and agentic systems.
+# OpenMimicry — Make + Hot Reload + Tray Starter
 
-## Milestone 3 highlights
+This bundle adds:
 
-- Ollama backend adapter
-- common backend router with fallback to mock backend
-- chat and streaming support
-- model selection from runtime config
-- backend health checks and direct Ollama connection test
-- runtime event logs and active backend debug output
+- `Makefile` orchestration
+- `make install PROFILE=basic`
+- `make backend`
+- `make frontend`
+- `make dev`
+- `make desktop`
+- `make doctor`
+- YAML hot reload on the backend
+- split overlay/panel architecture
+- Tauri tray scaffold
+- separate overlay and panel routes in the frontend
 
-## Commands
+## Main commands
 
 ```bash
 make install PROFILE=basic
-make ollama-test PROFILE=basic
-make health PROFILE=basic
-make run PROFILE=basic
+make backend
+make frontend
+make dev
+make desktop
+make doctor
 ```
 
 ## Notes
 
-The Ollama adapter uses the official Ollama local HTTP API with `/api/chat` for chat and `/api/tags` for model discovery/health checks. Local access does not require authentication in the default local setup. citeturn872330search0turn872330search2turn872330search4
+- `make dev` starts backend + frontend together.
+- `make desktop` launches Tauri.
+- YAML config reload happens on each backend config request and on chat calls.
+- Frontend routes:
+  - `/overlay`
+  - `/panel`
+- Tauri windows:
+  - `overlay`
+  - `panel`
+
+This is a practical starter bundle and may still need platform-specific refinement for tray behavior or production packaging.

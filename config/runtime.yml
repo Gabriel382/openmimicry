@@ -1,0 +1,16 @@
+
+backend:
+  provider: ollama
+  endpoint: http://localhost:11434
+  model: qwen2.5:1.5b-instruct-q4_K_M
+  fallback_to_mock: true
+
+tts:
+  adapter_priority:
+    - browser
+    - pyttsx3
+    - noop
+
+ui:
+  active_character: octomimic
+  show_panel_on_start: true

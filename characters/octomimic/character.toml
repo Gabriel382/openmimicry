@@ -1,0 +1,86 @@
+
+name = "OctoMimic"
+version = "0.1.0"
+default_state = "idle"
+fallback_state = "idle"
+root_scale = 1.0
+window_title = "OpenMimicry - OctoMimic"
+
+[bubble]
+image_path = "bubble.png"
+x_offset = 0
+y_offset = -140
+width = 320
+height = 110
+padding = 16
+auto_hide_ms = 0
+
+[animations.idle]
+path = "idle"
+playback_mode = "loopinfinity"
+fps = 5
+next_state = "idle"
+
+[animations.idle_speaking]
+path = "idle_speaking"
+playback_mode = "loopwhiletalk"
+fps = 9
+next_state = "idle"
+
+[animations.listening]
+path = "listening"
+playback_mode = "loopduringtime"
+fps = 7
+duration_ms = 1500
+next_state = "idle"
+text = "Listening..."
+
+[animations.listening_speaking]
+path = "listening_speaking"
+playback_mode = "loopwhiletalk"
+fps = 9
+next_state = "idle"
+
+[animations.thinking]
+path = "thinking"
+playback_mode = "loopduringtime"
+fps = 6
+duration_ms = 2000
+next_state = "idle"
+text = "Thinking..."
+
+[animations.thinking_speaking]
+path = "thinking_speaking"
+playback_mode = "loopwhiletalk"
+fps = 9
+next_state = "idle"
+
+[animations.speaking]
+path = "speaking"
+playback_mode = "loopwhiletalk"
+fps = 9
+next_state = "idle"
+
+[animations.happy]
+path = "happy"
+playback_mode = "noloop"
+fps = 8
+next_state = "idle"
+
+[animations.happy_speaking]
+path = "happy_speaking"
+playback_mode = "loopwhiletalk"
+fps = 9
+next_state = "idle"
+
+[animations.error]
+path = "error"
+playback_mode = "noloop"
+fps = 6
+next_state = "idle"
+
+[animations.error_speaking]
+path = "error_speaking"
+playback_mode = "loopwhiletalk"
+fps = 8
+next_state = "idle"
