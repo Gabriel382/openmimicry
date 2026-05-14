@@ -1,0 +1,34 @@
+
+name: openmimicry-default
+windows:
+  overlay:
+    width: 500
+    height: 700
+    transparent: true
+    frameless: true
+    always_on_top: true
+    movable: true
+  panel:
+    width: 420
+    height: 720
+    transparent: false
+    frameless: false
+theme:
+  font_family: Inter, Arial, sans-serif
+colors:
+  panel_bg: "rgba(18, 22, 30, 0.92)"
+  panel_border: "rgba(255,255,255,0.10)"
+  text_primary: "#f4f6fb"
+  text_secondary: "#aab3c5"
+  accent: "#ff8a3d"
+  bubble_bg: "rgba(255,255,255,0.96)"
+  bubble_text: "#1b1d22"
+  dock_bg: "rgba(18,22,30,0.52)"
+  dock_border: "rgba(255,255,255,0.10)"
+  button_bg: "rgba(18,22,30,0.58)"
+  button_border: "rgba(255,255,255,0.12)"
+  input_bg: "rgba(255,255,255,0.10)"
+  input_border: "rgba(255,255,255,0.14)"
+layout:
+  bubble_max_width: 320
+  avatar_width: 320

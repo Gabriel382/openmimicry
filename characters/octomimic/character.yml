@@ -1,0 +1,39 @@
+
+name: OctoMimic
+default_state: idle
+thinking_animation: thinking
+animations:
+  idle:
+    fps: 5
+    frames:
+      - characters/octomimic/idle/000.png
+      - characters/octomimic/idle/001.png
+      - characters/octomimic/idle/002.png
+  idle_speaking:
+    fps: 9
+    frames:
+      - characters/octomimic/idle_speaking/000.png
+      - characters/octomimic/idle_speaking/001.png
+      - characters/octomimic/idle_speaking/002.png
+      - characters/octomimic/idle_speaking/003.png
+  thinking:
+    fps: 7
+    frames:
+      - characters/octomimic/thinking/000.png
+      - characters/octomimic/thinking/001.png
+      - characters/octomimic/thinking/002.png
+      - characters/octomimic/thinking/003.png
+  happy_speaking:
+    fps: 9
+    frames:
+      - characters/octomimic/happy_speaking/000.png
+      - characters/octomimic/happy_speaking/001.png
+      - characters/octomimic/happy_speaking/002.png
+      - characters/octomimic/happy_speaking/003.png
+  error_speaking:
+    fps: 8
+    frames:
+      - characters/octomimic/error_speaking/000.png
+      - characters/octomimic/error_speaking/001.png
+      - characters/octomimic/error_speaking/002.png
+      - characters/octomimic/error_speaking/003.png

@@ -1,0 +1,18 @@
+
+app_name = "OpenMimicry"
+overlay_enabled = true
+avatar_runtime = "2d_animated"
+model_name = "qwen2.5:1.5b-instruct-q4_K_M"
+log_level = "INFO"
+backend_provider = "ollama"
+backend_endpoint = "http://localhost:11434"
+
+character_pack = "octomimic"
+speech_bubble_enabled = true
+tts_enabled = true
+
+[avatar]
+runtime = "2d_animated"
+characters_root = "characters"
+character_name = "octomimic"
+always_on_top = false
