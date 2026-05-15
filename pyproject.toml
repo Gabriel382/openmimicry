@@ -4,32 +4,145 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry"
-version = "0.1.0"
-description = "Open embodied avatar interfaces for LLMs and agentic systems."
+version = "0.2.0a0"
+description = "A modular avatar interface layer for LLMs, voice systems, and agentic task runtimes."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
 dependencies = []
 
+# Profile-based optional dependency sets. These mirror the YAML profiles in
+# `config/profiles/` and the `make install PROFILE=...` target.
 [project.optional-dependencies]
 basic = [
-    "requests>=2.32",
-    "pillow>=10.0"
+    "openmimicry-core",
 ]
-extended = [
-    "requests>=2.32",
-    "pillow>=10.0"
+voice = [
+    "openmimicry-core",
+    "openmimicry-voice",
 ]
-studio = [
-    "requests>=2.32",
-    "pillow>=10.0"
+threejs = [
+    "openmimicry-core",
+]
+live3d = [
+    "openmimicry-core",
+]
+unity = [
+    "openmimicry-core",
+]
+agent = [
+    "openmimicry-core",
+    "openmimicry-tasks",
 ]
 full = [
-    "requests>=2.32",
-    "pillow>=10.0"
+    "openmimicry-core",
+    "openmimicry-llm",
+    "openmimicry-voice",
+    "openmimicry-avatar",
+    "openmimicry-tasks",
+]
+studio = [
+    "openmimicry-core",
+    "openmimicry-llm",
+    "openmimicry-voice",
+    "openmimicry-avatar",
+    "openmimicry-tasks",
+]
+dev = [
+    "openmimicry-core",
+    "ruff>=0.6",
+    "pyright>=1.1.380",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "pytest-xdist>=3",
+    "pre-commit>=3",
 ]
 
+# Legacy prototype packages (core/, backends/). They will be removed as the
+# migration proceeds (see docs/migration.md). They stay here so `pip install -e .`
+# keeps working during the transition.
 [tool.setuptools]
 py-modules = []
 
 [tool.setuptools.packages.find]
 include = ["core*", "backends*"]
+
+# --- Ruff -------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    ".venv",
+    "frontend/node_modules",
+    "src-tauri/target",
+    "packages/*/build",
+    "packages/*/dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # function-call-in-default (FastAPI/typer pattern)
+    "RUF002", # en-dash in docstrings is intentional project-wide style
+    "RUF003", # ditto for noqa comments
+    "UP017",  # datetime.UTC alias is Python 3.11+ only; keep timezone.utc for portability
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B011", "SIM117"]
+"scripts/**/*.py" = ["SIM117"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --- Pytest -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "contract: parametrised contract tests for adapter Protocols",
+    "integration: cross-module integration tests",
+    "e2e: end-to-end smoke tests",
+    "slow: tests that take more than a second",
+]
+filterwarnings = [
+    "error::DeprecationWarning:openmimicry.*",
+]
+
+# --- Coverage ---------------------------------------------------------------
+
+[tool.coverage.run]
+branch = true
+source = ["packages"]
+omit = [
+    "*/tests/*",
+    "*/_version.py",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+fail_under = 70
+show_missing = true
+skip_covered = false
