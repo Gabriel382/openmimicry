@@ -35,12 +35,28 @@ agent = [
     "openmimicry-core",
     "openmimicry-tasks",
 ]
+# Optional, post-v0.2: webcam-driven hand-sign / gesture detection. See
+# docs/modules/M13_vision.md. Pulls MediaPipe + OpenCV (~200MB).
+vision = [
+    "openmimicry-core",
+    "openmimicry-vision",
+]
 full = [
     "openmimicry-core",
     "openmimicry-llm",
     "openmimicry-voice",
     "openmimicry-avatar",
     "openmimicry-tasks",
+]
+# `full + vision` — convenience target for demo machines / contributors who
+# want every modality available.
+full-vision = [
+    "openmimicry-core",
+    "openmimicry-llm",
+    "openmimicry-voice",
+    "openmimicry-avatar",
+    "openmimicry-tasks",
+    "openmimicry-vision",
 ]
 studio = [
     "openmimicry-core",
