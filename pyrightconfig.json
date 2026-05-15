@@ -1,0 +1,44 @@
+{
+  "include": [
+    "packages/openmimicry-core/src",
+    "packages/openmimicry-llm/src",
+    "packages/openmimicry-voice/src",
+    "packages/openmimicry-avatar/src",
+    "packages/openmimicry-tasks/src",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/node_modules",
+    "**/build",
+    "**/dist",
+    "**/*.egg-info",
+    "src-tauri/target",
+    "frontend",
+    "backend/.venv"
+  ],
+  "extraPaths": [
+    "packages/openmimicry-core/src",
+    "packages/openmimicry-llm/src",
+    "packages/openmimicry-voice/src",
+    "packages/openmimicry-avatar/src",
+    "packages/openmimicry-tasks/src"
+  ],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "basic",
+  "strict": [
+    "packages/openmimicry-core/src/openmimicry/core/contracts",
+    "packages/openmimicry-core/src/openmimicry/core/schemas",
+    "packages/openmimicry-core/src/openmimicry/core/bus.py",
+    "packages/openmimicry-core/src/openmimicry/core/store.py",
+    "packages/openmimicry-core/src/openmimicry/core/runtime.py",
+    "packages/openmimicry-core/src/openmimicry/core/config"
+  ],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownVariableType": false
+}

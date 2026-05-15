@@ -1,0 +1,27 @@
+# pnpm workspace declaration.
+# The frontend lives at `frontend/` today and will move to
+# `apps/desktop/frontend/` during M7 (see docs/modules/M7_frontend.md).
+# Both paths are listed so the migration is non-breaking.
+packages:
+  - "frontend"
+  - "apps/desktop/frontend"
+
+# Postinstall-script allowlist (`approve-builds`).
+# pnpm refuses to execute install lifecycle scripts unless the package is
+# listed here. Add a package ONLY after auditing its install script.
+# To regenerate after adding a dep: `pnpm approve-builds`.
+onlyBuiltDependencies:
+  - esbuild
+
+# Catalog of pinned versions used across the workspace, so dependencies
+# move only when this file moves.
+catalog:
+  react: 18.3.1
+  react-dom: 18.3.1
+  typescript: 5.6.3
+  vite: 5.4.10
+  vitest: 2.1.4
+
+# Audit policy: fail install when high or critical advisories appear.
+auditConfig:
+  ignoreCves: []
