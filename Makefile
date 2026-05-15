@@ -19,7 +19,8 @@ endif
 
 .PHONY: help install backend frontend dev desktop doctor clean \
         lint format typecheck test ci pre-commit-install \
-        check-imports validate-packs install-workspace
+        check-imports validate-packs install-workspace \
+        m1-demo m1-demo-ollama
 
 .DEFAULT_GOAL := help
 
@@ -35,6 +36,10 @@ help:
 	@echo "  make dev                     Hints to run backend + frontend"
 	@echo "  make desktop                 cargo tauri dev"
 	@echo "  make doctor                  Print environment checklist"
+	@echo ""
+	@echo "  make m1-demo                 Stream from MockLLMAdapter (no setup)"
+	@echo "  make m1-demo-ollama          Stream from a local Ollama model"
+	@echo "                                  (requires \`ollama serve\` + a model pulled)"
 	@echo ""
 	@echo "  make lint                    Ruff lint + format check"
 	@echo "  make format                  Apply Ruff formatting"
@@ -128,6 +133,18 @@ validate-packs:
 
 test:
 	$(SHELL_PY) -m pytest
+
+# ---------------------------------------------------------------------------
+# M1 smoke demos -- no backend required.
+# ---------------------------------------------------------------------------
+PROMPT ?= Say hello in one short sentence.
+LLM_MODEL ?= ollama/llama3.1
+
+m1-demo:
+	$(SHELL_PY) scripts/m1_demo.py --prompt "$(PROMPT)"
+
+m1-demo-ollama:
+	$(SHELL_PY) scripts/m1_demo.py --model "$(LLM_MODEL)" --prompt "$(PROMPT)"
 
 ci: lint typecheck check-imports test
 	@echo "make ci: OK"
