@@ -67,6 +67,34 @@ extend-exclude = [
     "src-tauri/target",
     "packages/*/build",
     "packages/*/dist",
+    # ---------------------------------------------------------------
+    # Legacy prototype directories (scheduled for removal during the
+    # migration to packages/openmimicry-*). They predate the modular
+    # ruff config; touching them is a migration concern, not a lint
+    # concern.
+    # ---------------------------------------------------------------
+    "core",
+    "backends",
+    "backend",
+    "avatar",
+    "tts",
+    "frontend",
+    "src-tauri",
+    "apps",
+    "openmimicry.egg-info",
+    # Legacy scripts that import from the prototype `core`/`backends`
+    # trees. The new scripts (check_imports.py, doctor.py, m1_demo.py)
+    # are linted normally.
+    "scripts/backend_health.py",
+    "scripts/install_profile.py",
+    "scripts/run.py",
+    "scripts/run_avatar_demo.py",
+    "scripts/run_character_demo.py",
+    "scripts/test_backend_switch.py",
+    "scripts/test_ollama_connection.py",
+    "scripts/validate_avatar.py",
+    "scripts/validate_character.py",
+    "scripts/validate_config.py",
 ]
 
 [tool.ruff.lint]
