@@ -3,6 +3,7 @@
 
 Cross-platform so Windows and Linux contributors get the same output.
 """
+
 from __future__ import annotations
 
 import os
