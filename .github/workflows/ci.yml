@@ -41,9 +41,6 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint
-        # The legacy prototype trees are excluded via `tool.ruff.extend-exclude`
-        # in pyproject.toml until the migration removes them. The modular tree
-        # is what we gate on.
         run: ruff check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py
 
       - name: Format check
@@ -86,14 +83,14 @@ jobs:
       - uses: actions/checkout@v4
 
       # pnpm 11 requires Node >= 22.13.
-      # Node 24 includes a newer Corepack, avoiding the pnpm signature-key error.
+      # Use Node 24 to get a newer Corepack.
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
 
+      # Do not use pnpm/action-setup.
       # Do not use npm install -g pnpm.
-      # Do not use pnpm/action-setup@v4, because it was running its installer
-      # with Node 20 in your CI and failing with pnpm 11.
+      # Do not use corepack prepare, because that is the command failing.
       - name: Enable pnpm with Corepack
         run: |
           corepack enable
