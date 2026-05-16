@@ -161,3 +161,42 @@ exclude_lines = [
 fail_under = 70
 show_missing = true
 skip_covered = false
+
+# --- Pyright ----------------------------------------------------------------
+
+[tool.pyright]
+include = [
+    "packages",
+    "tests",
+    "scripts/check_imports.py",
+    "scripts/doctor.py",
+    "scripts/m1_demo.py",
+]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    "frontend",
+    "src-tauri",
+    "apps",
+    "core",
+    "backend",
+    "backends",
+    "avatar",
+    "tts",
+    "openmimicry.egg-info",
+]
+
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+# Keep Pyright useful without making the early modular migration fail on
+# partially typed dictionaries, dynamic config loading, and third-party stubs.
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportMissingTypeArgument = "none"
+reportUnusedFunction = "none"
+reportDeprecated = "none"
