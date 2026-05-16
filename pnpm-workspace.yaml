@@ -5,13 +5,12 @@
 packages:
   - "frontend"
   - "apps/desktop/frontend"
+allowBuilds:
+  esbuild: false
 
-# Postinstall-script allowlist (`approve-builds`).
-# pnpm refuses to execute install lifecycle scripts unless the package is
-# listed here. Add a package ONLY after auditing its install script.
-# To regenerate after adding a dep: `pnpm approve-builds`.
-onlyBuiltDependencies:
-  - esbuild
+# Audit policy: fail install when high or critical advisories appear.
+auditConfig:
+  ignoreCves: []
 
 # Catalog of pinned versions used across the workspace, so dependencies
 # move only when this file moves.
@@ -22,6 +21,9 @@ catalog:
   vite: 5.4.10
   vitest: 2.1.4
 
-# Audit policy: fail install when high or critical advisories appear.
-auditConfig:
-  ignoreCves: []
+# Postinstall-script allowlist (`approve-builds`).
+# pnpm refuses to execute install lifecycle scripts unless the package is
+# listed here. Add a package ONLY after auditing its install script.
+# To regenerate after adding a dep: `pnpm approve-builds`.
+onlyBuiltDependencies:
+  - esbuild
