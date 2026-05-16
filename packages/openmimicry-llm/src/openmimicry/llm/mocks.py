@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from openmimicry.core.schemas import LLMChunk, LLMMessage, LLMUsage, ToolSpec
 
 __all__ = ["MockLLMAdapter", "make_mock_llm_adapter"]
+
+
+FinishReason = Literal["stop", "length", "tool_calls", "content_filter"]
 
 
 class MockLLMAdapter:
@@ -37,7 +40,7 @@ class MockLLMAdapter:
         self,
         script: list[str] | None = None,
         *,
-        finish_reason: str = "stop",
+        finish_reason: FinishReason = "stop",
         fail_on: int | None = None,
         failure: type[BaseException] | None = None,
         usage: LLMUsage | None = None,
@@ -46,7 +49,7 @@ class MockLLMAdapter:
         self._script: list[str] = (
             list(script) if script is not None else ["Hello", " from ", "the mock."]
         )
-        self._finish_reason = finish_reason
+        self._finish_reason: FinishReason = finish_reason
         self._fail_on = fail_on
         self._failure_cls: type[BaseException] = failure or _default_failure()
         self._usage = usage or LLMUsage(

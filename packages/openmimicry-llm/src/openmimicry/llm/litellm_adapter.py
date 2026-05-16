@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, cast
 
 from openmimicry.core.schemas import LLMChunk, LLMMessage, LLMUsage, ToolSpec
 
@@ -29,6 +29,10 @@ __all__ = [
     "LiteLLMSettings",
     "make_litellm_adapter",
 ]
+
+
+FinishReason = Literal["stop", "length", "tool_calls", "content_filter"]
+_ALLOWED_FINISH_REASONS: set[str] = {"stop", "length", "tool_calls", "content_filter"}
 
 
 @dataclass(frozen=True)
@@ -239,15 +243,15 @@ def _streaming_chunk_to_llm_chunk(raw: Any) -> LLMChunk | None:
 
     delta_obj = getattr(choice, "delta", None) or getattr(choice, "message", None)
     delta_text: str = ""
-    tool_calls: list[dict] = []
+    tool_calls: list[dict[str, Any]] = []
+
     if delta_obj is not None:
         delta_text = getattr(delta_obj, "content", None) or ""
         raw_tool_calls = getattr(delta_obj, "tool_calls", None) or []
         for tc in raw_tool_calls:
             tool_calls.append(_tool_call_to_dict(tc))
 
-    finish_reason_raw = getattr(choice, "finish_reason", None)
-    finish_reason = _coerce_finish_reason(finish_reason_raw)
+    finish_reason = _coerce_finish_reason(getattr(choice, "finish_reason", None))
 
     usage_obj = getattr(raw, "usage", None)
     usage = _usage_from_litellm(usage_obj) if usage_obj is not None else None
@@ -266,23 +270,27 @@ def _streaming_chunk_to_llm_chunk(raw: Any) -> LLMChunk | None:
 
 def _completion_to_chunk(response: Any, *, terminal: bool) -> LLMChunk:
     """Translate a non-streaming LiteLLM completion into a single chunk."""
+    fallback_finish_reason: FinishReason | None = "stop" if terminal else None
+
     try:
         choice = response.choices[0]
     except (AttributeError, IndexError):
-        return LLMChunk(delta="", finish_reason="stop" if terminal else None)
+        return LLMChunk(delta="", finish_reason=fallback_finish_reason)
 
     message_obj = getattr(choice, "message", None)
     delta_text = getattr(message_obj, "content", "") or "" if message_obj else ""
-    tool_calls = []
+    tool_calls: list[dict[str, Any]] = []
+
     if message_obj is not None:
         for tc in getattr(message_obj, "tool_calls", None) or []:
             tool_calls.append(_tool_call_to_dict(tc))
 
     finish_reason = _coerce_finish_reason(getattr(choice, "finish_reason", None))
     usage = _usage_from_litellm(getattr(response, "usage", None))
+
     return LLMChunk(
         delta=delta_text,
-        finish_reason=finish_reason or ("stop" if terminal else None),
+        finish_reason=finish_reason or fallback_finish_reason,
         tool_calls=tool_calls,
         usage=usage,
     )
@@ -292,11 +300,13 @@ def _tool_call_to_dict(tc: Any) -> dict[str, Any]:
     """Best-effort translation of LiteLLM's tool-call object into a dict."""
     if isinstance(tc, dict):
         return tc
+
     out: dict[str, Any] = {}
     for key in ("id", "type"):
         val = getattr(tc, key, None)
         if val is not None:
             out[key] = val
+
     func = getattr(tc, "function", None)
     if func is not None:
         out["function"] = {
@@ -306,13 +316,16 @@ def _tool_call_to_dict(tc: Any) -> dict[str, Any]:
     return out
 
 
-def _coerce_finish_reason(raw: Any) -> str | None:
-    """Constrain LiteLLM's finish_reason to the contract's Literal set."""
+def _coerce_finish_reason(raw: object) -> FinishReason | None:
+    """Constrain LiteLLM's finish_reason to the contract's Literal set.
+
+    Unknown provider-specific finish reasons are mapped to ``"stop"`` to
+    preserve the previous runtime behavior while satisfying the typed schema.
+    """
     if raw is None:
         return None
-    allowed = {"stop", "length", "tool_calls", "content_filter"}
-    if isinstance(raw, str) and raw in allowed:
-        return raw
+    if isinstance(raw, str) and raw in _ALLOWED_FINISH_REASONS:
+        return cast(FinishReason, raw)
     return "stop"
 
 
