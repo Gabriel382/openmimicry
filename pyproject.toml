@@ -45,6 +45,7 @@ dev = [
     "pytest-cov>=5",
     "pytest-xdist>=3",
     "pre-commit>=3",
+    "watchfiles>=0.24",
 ]
 
 # Legacy prototype packages (core/, backends/). They will be removed as the
