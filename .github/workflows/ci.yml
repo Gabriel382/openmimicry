@@ -27,12 +27,16 @@ jobs:
       - name: Install workspace
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          # Install workspace packages FIRST in editable mode so the root
+          # `.[dev]` install below sees them as already-satisfied. Reversing
+          # this order makes pip try to resolve `openmimicry-core` from
+          # PyPI, which fails until the project ships there.
           python -m pip install -e packages/openmimicry-core
           python -m pip install -e packages/openmimicry-llm
           python -m pip install -e packages/openmimicry-voice
           python -m pip install -e packages/openmimicry-avatar
           python -m pip install -e packages/openmimicry-tasks
+          python -m pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
       - name: Format check
@@ -70,7 +74,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 11
+          # No `version:` here — pnpm/action-setup@v4 refuses to run when
+          # `version:` AND `packageManager:` (in package.json) both pin a
+          # version. `packageManager: pnpm@11.0.0` in our root package.json
+          # is the source of truth; Corepack and every local `pnpm`
+          # invocation also honour it.
           run_install: false
       - uses: actions/setup-node@v4
         with:
