@@ -11,8 +11,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backends.ollama_backend import OllamaBackendAdapter
-from core.config_loader import ConfigLoader
 from core.backend_config import select_backend_config
+from core.config_loader import ConfigLoader
 
 
 def main() -> int:

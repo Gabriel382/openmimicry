@@ -1,0 +1,57 @@
+{
+  "include": [
+    "packages/openmimicry-core/src",
+    "packages/openmimicry-llm/src",
+    "packages/openmimicry-voice/src",
+    "packages/openmimicry-avatar/src",
+    "packages/openmimicry-tasks/src",
+    "tests",
+    "scripts/check_imports.py",
+    "scripts/doctor.py",
+    "scripts/m1_demo.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/venv",
+    "**/node_modules",
+    "**/build",
+    "**/dist",
+    "**/*.egg-info",
+    "src-tauri",
+    "src-tauri/target",
+    "frontend",
+    "backend",
+    "backends",
+    "core",
+    "avatar",
+    "tts",
+    "apps",
+    "openmimicry.egg-info"
+  ],
+  "extraPaths": [
+    "packages/openmimicry-core/src",
+    "packages/openmimicry-llm/src",
+    "packages/openmimicry-voice/src",
+    "packages/openmimicry-avatar/src",
+    "packages/openmimicry-tasks/src"
+  ],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "All",
+  "typeCheckingMode": "basic",
+
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none",
+
+  "reportUnknownVariableType": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownParameterType": "none",
+  "reportMissingTypeArgument": "none",
+  "reportMissingParameterType": "none",
+  "reportUnusedFunction": "none",
+  "reportDeprecated": "none",
+
+  "reportOptionalIterable": "none",
+  "reportAttributeAccessIssue": "none"
+}
