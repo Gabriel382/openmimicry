@@ -41,10 +41,6 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint
-        # The legacy prototype trees (core/, backends/, backend/, avatar/,
-        # tts/, frontend/, src-tauri/, apps/, the legacy scripts) are
-        # excluded via `tool.ruff.extend-exclude` in pyproject.toml until
-        # the migration removes them. The modular tree is what we gate on.
         run: ruff check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py
 
       - name: Format check
@@ -87,19 +83,16 @@ jobs:
       - uses: actions/checkout@v4
 
       # pnpm 11 requires Node >= 22.13.
-      # Do NOT use `cache: pnpm` here yet, because pnpm is not installed
-      # before pnpm/action-setup runs.
       - uses: actions/setup-node@v4
         with:
           node-version: "22.13"
 
-      - uses: pnpm/action-setup@v4
-        with:
-          # No `version:` here — pnpm/action-setup@v4 refuses to run when
-          # `version:` AND `packageManager:` in package.json both pin a
-          # version. `packageManager: pnpm@11.0.0` in the root package.json
-          # is the source of truth.
-          run_install: false
+      # Do not use pnpm/action-setup@v4 here.
+      # It runs its installer with Node 20 and fails with pnpm 11.
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.0.0 --activate
 
       - name: Show versions
         run: |
