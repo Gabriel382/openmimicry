@@ -12,61 +12,32 @@ license = { text = "MIT" }
 authors = [{ name = "Gabriel Henrique" }]
 dependencies = []
 
-# Profile-based optional dependency sets. These mirror the YAML profiles in
-# `config/profiles/` and the `make install PROFILE=...` target.
+# Profile-based optional dependency sets, mirrored 1:1 with the YAML profiles
+# in `config/profiles/`.
+#
+# IMPORTANT: workspace packages (`openmimicry-core`, `openmimicry-llm`, …)
+# are NOT listed here. Until the project ships to PyPI, they have to be
+# installed locally with `pip install -e packages/openmimicry-<x>` — which
+# the Makefile target `install-workspace` does for you. Listing them as
+# distribution requirements here would break editable installs because pip
+# would try to resolve them from PyPI.
+#
+# These extras therefore list third-party deps only. The Makefile is the
+# single source of truth for "which workspace packages to install for
+# PROFILE=foo".
+
 [project.optional-dependencies]
-basic = [
-    "openmimicry-core",
-]
-voice = [
-    "openmimicry-core",
-    "openmimicry-voice",
-]
-threejs = [
-    "openmimicry-core",
-]
-live3d = [
-    "openmimicry-core",
-]
-unity = [
-    "openmimicry-core",
-]
-agent = [
-    "openmimicry-core",
-    "openmimicry-tasks",
-]
-# Optional, post-v0.2: webcam-driven hand-sign / gesture detection. See
-# docs/modules/M13_vision.md. Pulls MediaPipe + OpenCV (~200MB).
-vision = [
-    "openmimicry-core",
-    "openmimicry-vision",
-]
-full = [
-    "openmimicry-core",
-    "openmimicry-llm",
-    "openmimicry-voice",
-    "openmimicry-avatar",
-    "openmimicry-tasks",
-]
-# `full + vision` — convenience target for demo machines / contributors who
-# want every modality available.
-full-vision = [
-    "openmimicry-core",
-    "openmimicry-llm",
-    "openmimicry-voice",
-    "openmimicry-avatar",
-    "openmimicry-tasks",
-    "openmimicry-vision",
-]
-studio = [
-    "openmimicry-core",
-    "openmimicry-llm",
-    "openmimicry-voice",
-    "openmimicry-avatar",
-    "openmimicry-tasks",
-]
+basic = []
+voice = []
+threejs = []
+live3d = []
+unity = []
+agent = []
+vision = []
+full = []
+full-vision = []
+studio = []
 dev = [
-    "openmimicry-core",
     "ruff>=0.6",
     "pyright>=1.1.380",
     "pytest>=8",
@@ -100,20 +71,20 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-    "SIM", # flake8-simplify
-    "RUF", # ruff-specific
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
 ]
 ignore = [
     "E501",   # line length handled by formatter
     "B008",   # function-call-in-default (FastAPI/typer pattern)
     "RUF002", # en-dash in docstrings is intentional project-wide style
     "RUF003", # ditto for noqa comments
-    "UP017",  # datetime.UTC alias is Python 3.11+ only; keep timezone.utc for portability
+    "UP017",  # datetime.UTC alias is Python 3.11+ only; keep timezone.utc
 ]
 
 [tool.ruff.lint.per-file-ignores]

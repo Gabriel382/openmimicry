@@ -58,14 +58,19 @@ install: install-workspace
 	@echo "OpenMimicry installed (PROFILE=$(PROFILE))"
 
 install-workspace: $(VENV_DIR)
-	@echo "Installing dev tooling and workspace packages (PROFILE=$(PROFILE))"
+	@echo "Installing workspace packages + dev tooling (PROFILE=$(PROFILE))"
 	$(VENV_PYTHON) -m pip install --upgrade pip setuptools wheel
-	$(VENV_PYTHON) -m pip install -e ".[dev]"
+	@# Install workspace packages FIRST in editable mode so the root
+	@# `pip install -e .[dev]` step below sees them as already-satisfied.
+	@# Reversing this order makes pip try to resolve `openmimicry-core`
+	@# from PyPI, which fails (we haven't published yet).
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-core
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-llm
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-voice
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-avatar
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-tasks
+	@# Root project + dev tooling (ruff, pyright, pytest, pre-commit, …).
+	$(VENV_PYTHON) -m pip install -e ".[dev]"
 	@# Optional, post-v0.2: webcam + MediaPipe gesture detection.
 	@# Only installed when the user opts in via PROFILE=vision (or full-vision).
 	@if [ "$(PROFILE)" = "vision" ] || [ "$(PROFILE)" = "full-vision" ]; then \
