@@ -20,7 +20,7 @@ endif
 .PHONY: help install backend frontend dev desktop doctor clean \
         lint format typecheck test ci pre-commit-install \
         check-imports validate-packs install-workspace \
-        m1-demo m1-demo-ollama
+        m1-demo m1-demo-ollama m2-demo m2-demo-barge-in
 
 .DEFAULT_GOAL := help
 
@@ -40,6 +40,9 @@ help:
 	@echo "  make m1-demo                 Stream from MockLLMAdapter (no setup)"
 	@echo "  make m1-demo-ollama          Stream from a local Ollama model"
 	@echo "                                  (requires \`ollama serve\` + a model pulled)"
+	@echo "  make m2-demo                 Drive SpeechController + mock STT/TTS"
+	@echo "                                  (prints every published RuntimeEvent)"
+	@echo "  make m2-demo-barge-in        Exercise the barge-in path"
 	@echo ""
 	@echo "  make lint                    Ruff lint + format check"
 	@echo "  make format                  Apply Ruff formatting"
@@ -150,6 +153,16 @@ m1-demo:
 
 m1-demo-ollama:
 	$(SHELL_PY) scripts/m1_demo.py --model "$(LLM_MODEL)" --prompt "$(PROMPT)"
+
+# M2 smoke demos -- mock STT/TTS, no audio device required.
+M2_TEXT ?= Hello from the voice mock.
+M2_PTT_TEXT ?= hello from the user
+
+m2-demo:
+	$(SHELL_PY) scripts/m2_demo.py --text "$(M2_TEXT)" --ptt-text "$(M2_PTT_TEXT)"
+
+m2-demo-barge-in:
+	$(SHELL_PY) scripts/m2_demo.py --barge-in --skip-ptt --skip-wake
 
 ci: lint typecheck check-imports test
 	@echo "make ci: OK"

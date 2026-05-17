@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openmimicry-voice"
 version = "0.2.0a0"
-description = "OpenMimicry voice adapter package (RealtimeSTT/RealtimeTTS, planned by M2)."
+description = "OpenMimicry voice: RealtimeSTT/RealtimeTTS adapters, SpeechController, WakeController, mocks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -14,15 +14,47 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Typing :: Typed",
 ]
 dependencies = [
     "openmimicry-core>=0.2.0a0",
 ]
 
+[project.optional-dependencies]
+# RealtimeSTT/RealtimeTTS are heavy and audio-device-bound. They are lazy-
+# imported inside the adapter, so pure-mock installs (tests, CI, dev
+# workstations without a microphone) don't need them.
+realtimestt = ["RealtimeSTT>=0.3"]
+realtimetts = ["RealtimeTTS>=0.4"]
+voice = ["RealtimeSTT>=0.3", "RealtimeTTS>=0.4"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+# Contract-test discovery: every adapter under these groups is picked up by
+# tests/contract/conftest.py and exercised against the Protocol.
+[project.entry-points."openmimicry.contracts.stt"]
+mock = "openmimicry.voice.mocks:make_mock_stt_adapter"
+realtimestt = "openmimicry.voice.stt.realtimestt_adapter:make_realtimestt_adapter"
+
+[project.entry-points."openmimicry.contracts.tts"]
+mock = "openmimicry.voice.mocks:make_mock_tts_adapter"
+realtimetts = "openmimicry.voice.tts.realtimetts_adapter:make_realtimetts_adapter"
+
+[project.entry-points."openmimicry.contracts.speech_controller"]
+default = "openmimicry.voice.controllers.speech:make_speech_controller"
+
 [tool.setuptools]
 package-dir = { "" = "src" }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.voice" = ["py.typed"]
