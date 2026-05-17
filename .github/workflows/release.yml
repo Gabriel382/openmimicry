@@ -13,8 +13,8 @@ jobs:
     name: build python wheels
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install build tools
@@ -26,7 +26,7 @@ jobs:
             (cd "$pkg" && python -m build)
             echo "::endgroup::"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-wheels
           path: |
@@ -38,9 +38,9 @@ jobs:
     needs: [build-wheels]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: python-wheels
           path: artifacts/
@@ -49,7 +49,7 @@ jobs:
         run: |
           # TODO: replace with git-cliff or release-please when those land
           echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.changelog.outputs.tag }}
           files: artifacts/**/*
