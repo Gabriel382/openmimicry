@@ -41,10 +41,10 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py
+        run: ruff check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py scripts/m2_demo.py scripts/validate_pack.py
 
       - name: Format check
-        run: ruff format --check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py
+        run: ruff format --check packages tests scripts/check_imports.py scripts/doctor.py scripts/m1_demo.py scripts/m2_demo.py scripts/validate_pack.py
 
       - name: Type-check
         run: pyright

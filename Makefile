@@ -130,13 +130,10 @@ check-imports:
 	$(SHELL_PY) scripts/check_imports.py
 
 validate-packs:
-	@if [ -f scripts/validate_pack.py ]; then \
-		for pack in characters/*/; do \
-			echo "Validating $$pack"; \
-			$(SHELL_PY) scripts/validate_pack.py "$$pack" || exit 1; \
-		done; \
+	@if [ -d characters ]; then \
+		$(SHELL_PY) scripts/validate_pack.py characters/; \
 	else \
-		echo "scripts/validate_pack.py not present (M3 not landed yet); skipping"; \
+		echo "no characters/ directory; skipping pack validation"; \
 	fi
 
 test:

@@ -1,0 +1,17 @@
+schema_version: 1
+id: missing_speaking
+name: Pack With No Speaking Variants
+default_state: idle
+default_emotion: neutral
+
+emotions:
+  idle:
+    frames: states/idle
+    fps: 8
+    loop: true
+  happy:
+    frames: states/happy
+    fps: 12
+    loop: false
+    return_to: idle
+    hold_ms: 1200
