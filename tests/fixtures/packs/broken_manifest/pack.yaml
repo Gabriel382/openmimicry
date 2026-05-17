@@ -1,0 +1,8 @@
+# Intentionally broken: missing required fields (id, name) and references a
+# nonexistent frame folder.
+schema_version: 1
+
+emotions:
+  idle:
+    frames: states/this_folder_does_not_exist
+    fps: 8

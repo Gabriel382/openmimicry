@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openmimicry-avatar"
 version = "0.2.0a0"
-description = "OpenMimicry avatar director + AvatarRuntimeAdapter implementations (M3/M4/M9)."
+description = "OpenMimicry avatar core: pack loader, director, orchestrator, mock runtime."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -14,15 +14,32 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Typing :: Typed",
 ]
 dependencies = [
     "openmimicry-core>=0.2.0a0",
+    "pyyaml>=6.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+[project.entry-points."openmimicry.contracts.avatar_runtime"]
+mock = "openmimicry.avatar.mocks:make_mock_avatar_runtime_adapter"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.avatar" = ["py.typed"]
