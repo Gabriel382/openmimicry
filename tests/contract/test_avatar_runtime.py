@@ -20,7 +20,8 @@ pytestmark = pytest.mark.contract
 
 
 def _is_hermetic(adapter) -> bool:
-    return getattr(adapter, "name", "") == "mock"
+    """Adapters that don't touch real renderers / hardware / network."""
+    return getattr(adapter, "name", "") in {"mock", "sprite2d"}
 
 
 @pytest.mark.parametrize("implementations", ["avatar_runtime"], indirect=True)
