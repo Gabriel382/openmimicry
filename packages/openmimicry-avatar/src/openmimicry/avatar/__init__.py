@@ -24,6 +24,11 @@ from .director import AvatarDirector
 from .mocks import MockAvatarRuntimeAdapter
 from .orchestrator import AvatarOrchestrator
 from .pack import PackLoadError, ValidationReport, load_pack, validate_pack
+from .runtimes.sprite2d import (
+    Sprite2DAvatarAdapter,
+    WSBridge,
+    build_sprite2d_projection,
+)
 
 __all__ = [
     "AvatarDirector",
@@ -31,7 +36,10 @@ __all__ = [
     "AvatarRuntimeAdapter",
     "MockAvatarRuntimeAdapter",
     "PackLoadError",
+    "Sprite2DAvatarAdapter",
     "ValidationReport",
+    "WSBridge",
+    "build_sprite2d_projection",
     "load_pack",
     "validate_pack",
 ]

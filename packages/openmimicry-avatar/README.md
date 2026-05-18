@@ -59,6 +59,41 @@ python scripts/validate_pack.py characters/octomimic/
 python scripts/validate_pack.py --strict characters/    # warnings -> errors
 ```
 
+## Wiring the Sprite2D runtime (M4)
+
+```python
+import asyncio
+from openmimicry.avatar import (
+    AvatarDirector,
+    AvatarOrchestrator,
+    Sprite2DAvatarAdapter,
+    load_pack,
+)
+from openmimicry.core import EventBus
+
+class PrintBridge:
+    """Toy WS bridge: prints every projection. M6 supplies the real one."""
+    async def publish(self, message):
+        print(message["type"], message.get("directive", {}).get("state"))
+
+async def main():
+    pack = load_pack("characters/octomimic")
+    bus = EventBus()
+    runtime = Sprite2DAvatarAdapter(pack=pack, ws_bridge=PrintBridge())
+    director = AvatarDirector()
+    orch = AvatarOrchestrator(
+        director=director, runtime=runtime, bus=bus, config=director.config,
+    )
+    await orch.start()
+    # ... publish RuntimeEvents on the bus; the runtime emits avatar.directive
+    #     messages via the bridge ...
+    await orch.stop()
+
+asyncio.run(main())
+```
+
+The matching React component lives at `apps/desktop/frontend/src/runtimes/sprite2d/` and consumes `avatar.directive` messages with `runtime === "sprite2d"`.
+
 ## See also
 
 - [`docs/contracts.md`](../../docs/contracts.md) §2.3, §2.4, §5 — frozen `AvatarDirective`, `CharacterPack`, and avatar Protocols.
