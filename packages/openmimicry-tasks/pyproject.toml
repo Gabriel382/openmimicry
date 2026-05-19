@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openmimicry-tasks"
 version = "0.2.0a0"
-description = "OpenMimicry task delegation package (mcp-agent, Claude Code, local-shell, planned by M5)."
+description = "OpenMimicry task delegation: TaskRouter, mcp-agent / Claude Code / local-shell adapters."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -14,15 +14,44 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Typing :: Typed",
 ]
 dependencies = [
     "openmimicry-core>=0.2.0a0",
 ]
 
+[project.optional-dependencies]
+# mcp-agent is heavy and pulls a lot of transitive deps. Lazy-imported.
+mcp-agent = [
+    "mcp-agent>=0.1",
+]
+# claude-code uses the `claude` CLI on PATH; no Python dep needed.
+claude-code = []
+# Aggregate: everything M5 can talk to.
+tasks = [
+    "mcp-agent>=0.1",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+[project.entry-points."openmimicry.contracts.task_runtime"]
+mock = "openmimicry.tasks.mocks:make_mock_task_runtime_adapter"
+local_shell = "openmimicry.tasks.adapters.local_shell_adapter:make_local_shell_adapter"
+claude_code = "openmimicry.tasks.adapters.claude_code_adapter:make_claude_code_adapter"
+mcp_agent = "openmimicry.tasks.adapters.mcp_agent_adapter:make_mcp_agent_adapter"
+
 [tool.setuptools]
 package-dir = { "" = "src" }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.tasks" = ["py.typed"]
