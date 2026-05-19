@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-backend"
+version = "0.2.0a0"
+description = "OpenMimicry backend: FastAPI process, WebSocket projection, single assembly point for concrete adapters."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+
+# These are intentionally NOT path-resolved; the workspace Makefile installs
+# the sibling packages with `pip install -e packages/openmimicry-<x>` before
+# this distribution is consumed. We declare them by name so dependency
+# discovery still finds them once the workspace is published.
+dependencies = [
+    "openmimicry-core>=0.2.0a0",
+    "openmimicry-llm>=0.2.0a0",
+    "openmimicry-voice>=0.2.0a0",
+    "openmimicry-avatar>=0.2.0a0",
+    "openmimicry-tasks>=0.2.0a0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "websockets>=13",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+openmimicry-backend = "openmimicry_backend.main:run_uvicorn"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry_backend*"]
+
+[tool.setuptools.package-data]
+"openmimicry_backend" = ["py.typed"]

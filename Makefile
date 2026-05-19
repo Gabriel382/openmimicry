@@ -72,6 +72,10 @@ install-workspace: $(VENV_DIR)
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-voice
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-avatar
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-tasks
+	@# M6 backend application (depends on every package above).
+	@if [ -f apps/backend/pyproject.toml ]; then \
+		$(VENV_PYTHON) -m pip install -e apps/backend; \
+	fi
 	@# Root project + dev tooling (ruff, pyright, pytest, pre-commit, …).
 	$(VENV_PYTHON) -m pip install -e ".[dev]"
 	@# Optional, post-v0.2: webcam + MediaPipe gesture detection.
@@ -92,6 +96,12 @@ install-workspace: $(VENV_DIR)
 
 backend:
 	cd backend && $(VENV_PYTHON) -m uvicorn app.main:app --reload --port 8000
+
+# M6 FastAPI process. Uses the `apps/backend` package and the modular
+# wiring layer. The legacy `backend:` target above stays during the
+# migration and will be removed when the prototype is fully retired.
+backend-m6:
+	$(VENV_PYTHON) -m uvicorn openmimicry_backend.main:app --reload --port 8000
 
 frontend:
 	cd frontend && $(PNPM_CMD) run dev

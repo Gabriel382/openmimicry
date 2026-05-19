@@ -81,7 +81,9 @@ extend-exclude = [
     "tts",
     "frontend",
     "src-tauri",
-    "apps",
+    # `apps/` is selectively included — apps/backend/src is linted,
+    # apps/desktop (Tauri shell) is excluded.
+    "apps/desktop",
     "openmimicry.egg-info",
     # Legacy scripts that import from the prototype `core`/`backends`
     # trees. The new scripts (check_imports.py, doctor.py, m1_demo.py)
@@ -145,7 +147,7 @@ filterwarnings = [
 
 [tool.coverage.run]
 branch = true
-source = ["packages"]
+source = ["packages", "apps/backend/src"]
 omit = [
     "*/tests/*",
     "*/_version.py",
@@ -168,6 +170,7 @@ skip_covered = false
 [tool.pyright]
 include = [
     "packages",
+    "apps/backend/src",
     "tests",
     "scripts/check_imports.py",
     "scripts/doctor.py",
@@ -180,7 +183,7 @@ exclude = [
     "node_modules",
     "frontend",
     "src-tauri",
-    "apps",
+    "apps/desktop",
     "core",
     "backend",
     "backends",
