@@ -125,6 +125,18 @@ dev:
 desktop:
 	cd src-tauri && $(CARGO_CMD) tauri dev
 
+# M8 Tauri shell. The new path is `apps/desktop/src-tauri`; the legacy
+# `desktop` target above stays during the migration and will be removed
+# when the prototype is fully retired.
+desktop-m8:
+	cd apps/desktop/src-tauri && $(CARGO_CMD) tauri dev
+
+desktop-m8-build:
+	cd apps/desktop/src-tauri && $(CARGO_CMD) tauri build
+
+desktop-m8-test:
+	cd apps/desktop/src-tauri && $(CARGO_CMD) fmt --check && $(CARGO_CMD) clippy -- -D warnings && $(CARGO_CMD) test
+
 lint:
 	$(SHELL_PY) -m ruff check .
 	$(SHELL_PY) -m ruff format --check .
