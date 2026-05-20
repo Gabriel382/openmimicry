@@ -38,6 +38,13 @@ from .runtimes.threejs import (
     ThreeJSPackError,
     build_threejs_projection,
 )
+from .runtimes.external import (
+    ExternalAvatarAdapter,
+    ExternalClient,
+    ExternalUnavailable,
+    MockExternalClient,
+    WSExternalClient,
+)
 from .runtimes.unity import (
     MockUnityTransport,
     UnityAvatarAdapter,
@@ -50,8 +57,12 @@ __all__ = [
     "AvatarDirector",
     "AvatarOrchestrator",
     "AvatarRuntimeAdapter",
+    "ExternalAvatarAdapter",
+    "ExternalClient",
+    "ExternalUnavailable",
     "Live3DAvatarAdapter",
     "MockAvatarRuntimeAdapter",
+    "MockExternalClient",
     "MockUnityTransport",
     "PackLoadError",
     "Sprite2DAvatarAdapter",
@@ -62,6 +73,7 @@ __all__ = [
     "UnityTransportUnavailable",
     "ValidationReport",
     "WSBridge",
+    "WSExternalClient",
     "WSUnityTransport",
     "build_live3d_projection",
     "build_sprite2d_projection",
