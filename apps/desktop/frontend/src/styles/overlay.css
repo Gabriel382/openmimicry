@@ -1,0 +1,42 @@
+/* Overlay route — full-bleed, transparent. */
+
+.overlay-route {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  pointer-events: none; /* the Tauri shell flips this when interactive */
+}
+
+.overlay-route > .avatar-host {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.speech-bubble {
+  pointer-events: auto;
+  margin: 0 16px 16px;
+  padding: 10px 14px;
+  background: rgba(20, 20, 22, 0.78);
+  color: #f4f4f6;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  max-width: 480px;
+  align-self: end;
+  justify-self: center;
+  backdrop-filter: blur(6px);
+}
+
+.speech-bubble__caret {
+  display: inline-block;
+  margin-left: 4px;
+  animation: openmimicry-caret 1s steps(2) infinite;
+}
+
+@keyframes openmimicry-caret {
+  to { opacity: 0; }
+}
