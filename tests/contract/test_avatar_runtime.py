@@ -23,7 +23,7 @@ pytestmark = pytest.mark.contract
 
 
 HERMETIC_NAMES: frozenset[str] = frozenset(
-    {"mock", "sprite2d", "threejs", "live3d", "unity"}
+    {"mock", "sprite2d", "threejs", "live3d", "unity", "external"}
 )
 
 # Pack used to drive `load_character` for the file-backed adapters. The
@@ -44,9 +44,9 @@ def _load_config_for(adapter) -> dict:
     name = getattr(adapter, "name", "")
     if name == "mock":
         return {}
-    if name == "unity":
-        # Unity doesn't read from disk — it sends the id + asset URL
-        # over the wire. The mock transport accepts the frame.
+    if name in ("unity", "external"):
+        # These adapters don't read from disk — they send id + asset URL
+        # over the wire. The mock client/transport accepts the frame.
         return {"asset_url": "https://example.invalid/character.fbx"}
     return {"pack_path": str(_PACK_FIXTURE_PATH)}
 
@@ -55,7 +55,7 @@ def _character_id_for(adapter) -> str:
     name = getattr(adapter, "name", "")
     if name == "mock":
         return "test"
-    if name == "unity":
+    if name in ("unity", "external"):
         return "test"
     return "good_pack"
 

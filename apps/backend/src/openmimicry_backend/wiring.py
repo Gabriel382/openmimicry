@@ -38,6 +38,7 @@ from openmimicry.core import (
 from openmimicry.avatar import (
     AvatarDirector,
     AvatarOrchestrator,
+    ExternalAvatarAdapter,
     Live3DAvatarAdapter,
     MockAvatarRuntimeAdapter,
     Sprite2DAvatarAdapter,
@@ -215,6 +216,9 @@ def _build_avatar_runtime(
     if name == "unity":
         runtime_cfg = config.avatar.runtimes.get("unity", {})
         return UnityAvatarAdapter(runtime_cfg=runtime_cfg)
+    if name == "external":
+        runtime_cfg = config.avatar.runtimes.get("external", {})
+        return ExternalAvatarAdapter(runtime_cfg=runtime_cfg)
     raise WiringError(f"unknown avatar.runtime: {name!r}")
 
 

@@ -30,6 +30,11 @@ dependencies = [
 unity = [
     "websockets>=12",
 ]
+# Optional `websockets` for the generic external bridge (M12). Same
+# rule as `unity` — lazy import, mock client works without it.
+external = [
+    "websockets>=12",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -42,6 +47,7 @@ sprite2d = "openmimicry.avatar.runtimes.sprite2d.adapter:make_sprite2d_avatar_ad
 threejs = "openmimicry.avatar.runtimes.threejs.adapter:make_threejs_avatar_adapter"
 live3d = "openmimicry.avatar.runtimes.live3d.adapter:make_live3d_avatar_adapter"
 unity = "openmimicry.avatar.runtimes.unity.adapter:make_unity_avatar_adapter"
+external = "openmimicry.avatar.runtimes.external.adapter:make_external_avatar_adapter"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

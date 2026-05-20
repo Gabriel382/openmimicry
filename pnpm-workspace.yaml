@@ -5,6 +5,7 @@
 packages:
   - "frontend"
   - "apps/desktop/frontend"
+  - "apps/external-echo"
 allowBuilds:
   esbuild: false
 
