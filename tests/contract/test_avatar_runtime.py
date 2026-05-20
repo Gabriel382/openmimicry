@@ -22,7 +22,9 @@ from openmimicry.core.schemas import AvatarDirective
 pytestmark = pytest.mark.contract
 
 
-HERMETIC_NAMES: frozenset[str] = frozenset({"mock", "sprite2d", "threejs", "live3d"})
+HERMETIC_NAMES: frozenset[str] = frozenset(
+    {"mock", "sprite2d", "threejs", "live3d", "unity"}
+)
 
 # Pack used to drive `load_character` for the file-backed adapters. The
 # fixture pack is `kind: sprite2d`; ThreeJS logs a warning about the
@@ -39,13 +41,21 @@ def _is_hermetic(adapter) -> bool:
 
 def _load_config_for(adapter) -> dict:
     """Return a config dict so ``load_character`` can find a real pack."""
-    if getattr(adapter, "name", "") == "mock":
+    name = getattr(adapter, "name", "")
+    if name == "mock":
         return {}
+    if name == "unity":
+        # Unity doesn't read from disk — it sends the id + asset URL
+        # over the wire. The mock transport accepts the frame.
+        return {"asset_url": "https://example.invalid/character.fbx"}
     return {"pack_path": str(_PACK_FIXTURE_PATH)}
 
 
 def _character_id_for(adapter) -> str:
-    if getattr(adapter, "name", "") == "mock":
+    name = getattr(adapter, "name", "")
+    if name == "mock":
+        return "test"
+    if name == "unity":
         return "test"
     return "good_pack"
 

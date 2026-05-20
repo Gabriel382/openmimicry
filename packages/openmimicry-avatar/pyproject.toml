@@ -24,6 +24,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional `websockets` for the Unity bridge transport. Lazy-imported
+# by `WSUnityTransport`; the adapter still works with the bundled
+# `MockUnityTransport` without this extra.
+unity = [
+    "websockets>=12",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -35,6 +41,7 @@ mock = "openmimicry.avatar.mocks:make_mock_avatar_runtime_adapter"
 sprite2d = "openmimicry.avatar.runtimes.sprite2d.adapter:make_sprite2d_avatar_adapter"
 threejs = "openmimicry.avatar.runtimes.threejs.adapter:make_threejs_avatar_adapter"
 live3d = "openmimicry.avatar.runtimes.live3d.adapter:make_live3d_avatar_adapter"
+unity = "openmimicry.avatar.runtimes.unity.adapter:make_unity_avatar_adapter"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
