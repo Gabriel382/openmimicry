@@ -29,6 +29,11 @@ from .runtimes.sprite2d import (
     WSBridge,
     build_sprite2d_projection,
 )
+from .runtimes.threejs import (
+    ThreeJSAvatarAdapter,
+    ThreeJSPackError,
+    build_threejs_projection,
+)
 
 __all__ = [
     "AvatarDirector",
@@ -37,9 +42,12 @@ __all__ = [
     "MockAvatarRuntimeAdapter",
     "PackLoadError",
     "Sprite2DAvatarAdapter",
+    "ThreeJSAvatarAdapter",
+    "ThreeJSPackError",
     "ValidationReport",
     "WSBridge",
     "build_sprite2d_projection",
+    "build_threejs_projection",
     "load_pack",
     "validate_pack",
 ]

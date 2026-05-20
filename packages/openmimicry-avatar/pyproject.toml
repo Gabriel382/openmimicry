@@ -33,6 +33,7 @@ dev = [
 [project.entry-points."openmimicry.contracts.avatar_runtime"]
 mock = "openmimicry.avatar.mocks:make_mock_avatar_runtime_adapter"
 sprite2d = "openmimicry.avatar.runtimes.sprite2d.adapter:make_sprite2d_avatar_adapter"
+threejs = "openmimicry.avatar.runtimes.threejs.adapter:make_threejs_avatar_adapter"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

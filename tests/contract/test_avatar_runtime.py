@@ -2,15 +2,18 @@
 
 Implementations register under entry-point group
 ``openmimicry.contracts.avatar_runtime``. M3 ships ``MockAvatarRuntimeAdapter``;
-M4 will add ``Sprite2DAvatarAdapter``; M9 will add ``ThreeJSAvatarAdapter``;
+M4 ships ``Sprite2DAvatarAdapter``; M9 ships ``ThreeJSAvatarAdapter``;
 post-v0.2 modalities add their own.
 
-Hermetic checks run against ``name == "mock"``. Real runtimes that touch
-audio / video / Unity / etc. are skipped via the same guard so the contract
-suite stays offline.
+Hermetic checks run against adapters whose ``name`` is in
+:data:`HERMETIC_NAMES`. Real runtimes that touch audio / video / Unity /
+etc. are skipped via the same guard so the contract suite stays
+offline.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 from openmimicry.core.contracts import AvatarRuntimeAdapter
@@ -19,9 +22,32 @@ from openmimicry.core.schemas import AvatarDirective
 pytestmark = pytest.mark.contract
 
 
+HERMETIC_NAMES: frozenset[str] = frozenset({"mock", "sprite2d", "threejs"})
+
+# Pack used to drive `load_character` for the file-backed adapters. The
+# fixture pack is `kind: sprite2d`; ThreeJS logs a warning about the
+# mismatch but accepts the load (M9 brief: "never raise").
+_PACK_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "packs" / "good_pack"
+)
+
+
 def _is_hermetic(adapter) -> bool:
     """Adapters that don't touch real renderers / hardware / network."""
-    return getattr(adapter, "name", "") in {"mock", "sprite2d"}
+    return getattr(adapter, "name", "") in HERMETIC_NAMES
+
+
+def _load_config_for(adapter) -> dict:
+    """Return a config dict so ``load_character`` can find a real pack."""
+    if getattr(adapter, "name", "") == "mock":
+        return {}
+    return {"pack_path": str(_PACK_FIXTURE_PATH)}
+
+
+def _character_id_for(adapter) -> str:
+    if getattr(adapter, "name", "") == "mock":
+        return "test"
+    return "good_pack"
 
 
 @pytest.mark.parametrize("implementations", ["avatar_runtime"], indirect=True)
@@ -55,7 +81,7 @@ async def test_apply_directive_round_trip(implementations) -> None:
         instance = factory()
         if not _is_hermetic(instance):
             continue
-        await instance.load_character("test", {})
+        await instance.load_character(_character_id_for(instance), _load_config_for(instance))
         await instance.apply_directive(AvatarDirective(state="listening"))
         await instance.apply_directive(
             AvatarDirective(

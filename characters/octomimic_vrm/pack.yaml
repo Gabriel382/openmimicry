@@ -1,0 +1,39 @@
+schema_version: 1
+id: octomimic_vrm
+name: OctomimicVRM
+author: OpenMimicry
+license: CC0-1.0
+kind: vrm
+preview: preview.png
+default_state: idle
+default_emotion: neutral
+transition_ms: 120
+
+# The Three.js modality reads `metadata.asset` when the runtime config
+# doesn't pass an explicit `asset.url` (see
+# `packages/openmimicry-avatar/src/openmimicry/avatar/runtimes/threejs/projection.py`
+# :: `resolve_asset`). The path is relative to the pack root and is
+# rewritten to a `/static/characters/<pack_id>/<path>` URL by the
+# backend's static mount.
+metadata:
+  asset:
+    kind: vrm
+    path: octomimic.vrm
+  notes: |
+    The bundled `octomimic.vrm` file is a placeholder. Drop a real VRM
+    here named `octomimic.vrm` to enable the demo, or override via
+    `avatar.runtimes.threejs.asset.url` in `app.yaml`. The frontend
+    surfaces a load-error label gracefully when the file is missing,
+    so this pack is safe to commit without the binary asset.
+
+# Three.js packs may still ship an `emotions` table when the same pack
+# id can also be loaded by Sprite2D (e.g. with `kind: sprite2d`). Here
+# we list a minimal idle entry so the pack validates against the shared
+# schema, even though Three.js plays animation clips from the asset
+# itself rather than image folders.
+emotions:
+  idle:
+    frames:
+      - preview.png
+    fps: 1
+    loop: true
