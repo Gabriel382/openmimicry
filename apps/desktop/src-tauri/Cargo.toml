@@ -1,0 +1,48 @@
+[package]
+name = "openmimicry-desktop"
+version = "0.2.0-alpha.0"
+description = "OpenMimicry desktop shell (M8): overlay + panel windows, IPC commands, tray, global hotkeys."
+edition = "2021"
+license = "MIT"
+build = "build.rs"
+rust-version = "1.77"
+
+[lib]
+name = "openmimicry_desktop"
+path = "src/lib.rs"
+# `cdylib` is required for the Tauri build to produce the bundle entry
+# point; the static lib is what the binary + the test target link
+# against.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "openmimicry-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+log = "0.4"
+once_cell = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[features]
+default = []
+# Optional `tauri-driver` smoke (off by default; the test harness in
+# `tests/test_smoke.rs` is gated on this).
+smoke = []

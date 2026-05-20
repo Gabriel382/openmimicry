@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenMimicry",
+  "version": "0.2.0-alpha.0",
+  "identifier": "com.openmimicry.desktop",
+  "build": {
+    "frontendDist": "../frontend/dist",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeDevCommand": "pnpm --filter @openmimicry/desktop-frontend dev",
+    "beforeBuildCommand": "pnpm --filter @openmimicry/desktop-frontend build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "overlay",
+        "title": "OpenMimicry Overlay",
+        "url": "/#/overlay",
+        "width": 360,
+        "height": 360,
+        "minWidth": 240,
+        "minHeight": 240,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": true,
+        "fullscreen": false
+      },
+      {
+        "label": "panel",
+        "title": "OpenMimicry Panel",
+        "url": "/#/panel",
+        "width": 480,
+        "height": 720,
+        "minWidth": 360,
+        "minHeight": 480,
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "resizable": true,
+        "visible": false,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000 http://localhost:8000 ws://localhost:8000; img-src 'self' data: blob: http://127.0.0.1:8000 http://localhost:8000; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis", "deb", "appimage"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "category": "Utility",
+    "shortDescription": "Avatar interface for LLMs and voice systems.",
+    "longDescription": "OpenMimicry is a modular desktop companion that connects animated 2D/3D avatars to LLMs, voice systems, and external agentic task runtimes."
+  },
+  "plugins": {
+    "globalShortcut": null
+  }
+}
