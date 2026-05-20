@@ -22,7 +22,7 @@ from openmimicry.core.schemas import AvatarDirective
 pytestmark = pytest.mark.contract
 
 
-HERMETIC_NAMES: frozenset[str] = frozenset({"mock", "sprite2d", "threejs"})
+HERMETIC_NAMES: frozenset[str] = frozenset({"mock", "sprite2d", "threejs", "live3d"})
 
 # Pack used to drive `load_character` for the file-backed adapters. The
 # fixture pack is `kind: sprite2d`; ThreeJS logs a warning about the
