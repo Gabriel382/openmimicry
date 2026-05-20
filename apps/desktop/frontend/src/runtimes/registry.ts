@@ -23,6 +23,8 @@ import { createElement, type ComponentType } from "react";
 
 import { Sprite2DRuntime } from "./sprite2d";
 import type { Sprite2DRuntimeProps } from "./sprite2d";
+import { Live3DRuntime } from "./live3d";
+import type { Live3DRuntimeProps } from "./live3d";
 import { ThreeJSRuntime } from "./threejs";
 import type { ThreeJSRuntimeProps } from "./threejs";
 
@@ -66,8 +68,8 @@ export const PlaceholderRuntime: RuntimeComponent = ({ projection }) => {
 export const runtimeRegistry: Record<string, RuntimeComponent> = {
   sprite2d: Sprite2DRuntime as unknown as RuntimeComponent,
   threejs: ThreeJSRuntime as unknown as RuntimeComponent,
+  live3d: Live3DRuntime as unknown as RuntimeComponent,
   // future:
-  // live3d: Live3DRuntime,
   // unity:   UnityRuntime,
   // external: ExternalRuntime,
 };
@@ -82,4 +84,4 @@ export function getRuntime(name: string): RuntimeComponent {
   return runtimeRegistry[name] ?? PlaceholderRuntime;
 }
 
-export type { Sprite2DRuntimeProps, ThreeJSRuntimeProps };
+export type { Live3DRuntimeProps, Sprite2DRuntimeProps, ThreeJSRuntimeProps };

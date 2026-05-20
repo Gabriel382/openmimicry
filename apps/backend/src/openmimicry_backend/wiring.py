@@ -38,6 +38,7 @@ from openmimicry.core import (
 from openmimicry.avatar import (
     AvatarDirector,
     AvatarOrchestrator,
+    Live3DAvatarAdapter,
     MockAvatarRuntimeAdapter,
     Sprite2DAvatarAdapter,
     ThreeJSAvatarAdapter,
@@ -207,6 +208,9 @@ def _build_avatar_runtime(
     if name == "threejs":
         runtime_cfg = config.avatar.runtimes.get("threejs", {})
         return ThreeJSAvatarAdapter(ws_bridge=ws_bridge, runtime_cfg=runtime_cfg)
+    if name == "live3d":
+        runtime_cfg = config.avatar.runtimes.get("live3d", {})
+        return Live3DAvatarAdapter(ws_bridge=ws_bridge, runtime_cfg=runtime_cfg)
     raise WiringError(f"unknown avatar.runtime: {name!r}")
 
 

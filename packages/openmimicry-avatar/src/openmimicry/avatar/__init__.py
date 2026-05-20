@@ -29,6 +29,10 @@ from .runtimes.sprite2d import (
     WSBridge,
     build_sprite2d_projection,
 )
+from .runtimes.live3d import (
+    Live3DAvatarAdapter,
+    build_live3d_projection,
+)
 from .runtimes.threejs import (
     ThreeJSAvatarAdapter,
     ThreeJSPackError,
@@ -39,6 +43,7 @@ __all__ = [
     "AvatarDirector",
     "AvatarOrchestrator",
     "AvatarRuntimeAdapter",
+    "Live3DAvatarAdapter",
     "MockAvatarRuntimeAdapter",
     "PackLoadError",
     "Sprite2DAvatarAdapter",
@@ -46,6 +51,7 @@ __all__ = [
     "ThreeJSPackError",
     "ValidationReport",
     "WSBridge",
+    "build_live3d_projection",
     "build_sprite2d_projection",
     "build_threejs_projection",
     "load_pack",
