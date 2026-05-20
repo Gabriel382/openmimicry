@@ -42,6 +42,7 @@ from openmimicry.avatar import (
     MockAvatarRuntimeAdapter,
     Sprite2DAvatarAdapter,
     ThreeJSAvatarAdapter,
+    UnityAvatarAdapter,
 )
 from openmimicry.llm import LiteLLMAdapter, LiteLLMSettings, MockLLMAdapter
 from openmimicry.tasks import (
@@ -211,6 +212,9 @@ def _build_avatar_runtime(
     if name == "live3d":
         runtime_cfg = config.avatar.runtimes.get("live3d", {})
         return Live3DAvatarAdapter(ws_bridge=ws_bridge, runtime_cfg=runtime_cfg)
+    if name == "unity":
+        runtime_cfg = config.avatar.runtimes.get("unity", {})
+        return UnityAvatarAdapter(runtime_cfg=runtime_cfg)
     raise WiringError(f"unknown avatar.runtime: {name!r}")
 
 

@@ -38,6 +38,13 @@ from .runtimes.threejs import (
     ThreeJSPackError,
     build_threejs_projection,
 )
+from .runtimes.unity import (
+    MockUnityTransport,
+    UnityAvatarAdapter,
+    UnityTransport,
+    UnityTransportUnavailable,
+    WSUnityTransport,
+)
 
 __all__ = [
     "AvatarDirector",
@@ -45,12 +52,17 @@ __all__ = [
     "AvatarRuntimeAdapter",
     "Live3DAvatarAdapter",
     "MockAvatarRuntimeAdapter",
+    "MockUnityTransport",
     "PackLoadError",
     "Sprite2DAvatarAdapter",
     "ThreeJSAvatarAdapter",
     "ThreeJSPackError",
+    "UnityAvatarAdapter",
+    "UnityTransport",
+    "UnityTransportUnavailable",
     "ValidationReport",
     "WSBridge",
+    "WSUnityTransport",
     "build_live3d_projection",
     "build_sprite2d_projection",
     "build_threejs_projection",
