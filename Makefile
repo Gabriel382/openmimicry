@@ -93,6 +93,7 @@ install-workspace: $(VENV_DIR)
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-voice
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-avatar
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-tasks
+	$(PYTHON) -m pip install -e packages/openmimicry-vision
 	@# M6 backend application (depends on every package above).
 	@if [ -f apps/backend/pyproject.toml ]; then \
 		$(VENV_PYTHON) -m pip install -e apps/backend; \
