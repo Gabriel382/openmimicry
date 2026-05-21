@@ -187,7 +187,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     ws.addEventListener("error", onError);
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     void onError;
-  }, [socketFactory, url, scheduleReconnect]);
+  }, [socketFactory, url]);
 
   const scheduleReconnect = useCallback(async (): Promise<void> => {
     if (stoppedRef.current) return;
