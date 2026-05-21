@@ -5,6 +5,8 @@
     "packages/openmimicry-voice/src",
     "packages/openmimicry-avatar/src",
     "packages/openmimicry-tasks/src",
+    "packages/openmimicry-vision/src",
+    "apps/backend/src",
     "tests",
     "scripts/check_imports.py",
     "scripts/doctor.py",
@@ -26,7 +28,7 @@
     "core",
     "avatar",
     "tts",
-    "apps",
+    "apps/desktop",
     "openmimicry.egg-info"
   ],
   "extraPaths": [
@@ -34,7 +36,9 @@
     "packages/openmimicry-llm/src",
     "packages/openmimicry-voice/src",
     "packages/openmimicry-avatar/src",
-    "packages/openmimicry-tasks/src"
+    "packages/openmimicry-tasks/src",
+    "packages/openmimicry-vision/src",
+    "apps/backend/src"
   ],
   "pythonVersion": "3.11",
   "pythonPlatform": "All",
