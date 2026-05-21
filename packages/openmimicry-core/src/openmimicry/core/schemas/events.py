@@ -1,6 +1,6 @@
 """Runtime event schemas — the in-process bus payloads.
 
-Source of truth: ``docs/contracts.md`` §2.1.
+Source of truth: ``docs/contracts.md`` §2.1 (+ §12 vision amendment).
 
 ``RuntimeEvent`` is a discriminated union keyed by the ``kind`` literal so
 subscribers can ``match event.kind: case "tts_done": ...`` and Pydantic can
@@ -15,13 +15,20 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from .tasks import TaskHandle, TaskResult, TaskUpdate
+from .vision import GestureDetection, MovementDetection
 
 __all__ = [
     "ConfigUpdated",
+    "ConsentRequired",
+    "ConsentResolved",
     "ErrorEvent",
+    "GestureDetected",
+    "HandPoseEnded",
+    "HandPoseStarted",
     "LLMReplyComplete",
     "LLMStarted",
     "LLMTokenStreamed",
+    "MovementDetected",
     "RuntimeEvent",
     "RuntimeEventAdapter",
     "TTSChunkSpoken",
@@ -132,6 +139,47 @@ class ErrorEvent(_Event):
     recoverable: bool = True
 
 
+# ---------------------------------------------------------------------------
+# Vision events (M13). Additive — no schema_version bump.
+# ---------------------------------------------------------------------------
+
+
+class HandPoseStarted(_Event):
+    kind: Literal["hand_pose_start"] = "hand_pose_start"
+    hand: Literal["left", "right"]
+
+
+class HandPoseEnded(_Event):
+    kind: Literal["hand_pose_end"] = "hand_pose_end"
+    hand: Literal["left", "right"]
+
+
+class GestureDetected(_Event):
+    kind: Literal["gesture"] = "gesture"
+    detection: GestureDetection
+
+
+class MovementDetected(_Event):
+    kind: Literal["movement"] = "movement"
+    detection: MovementDetection
+
+
+class ConsentRequired(_Event):
+    """Published when a privacy-sensitive subsystem (vision) is about
+    to start. Refuses to open the camera until ``ConsentResolved`` is
+    seen."""
+
+    kind: Literal["consent_required"] = "consent_required"
+    subsystem: str = "vision"
+    reason: str = "camera-capture"
+
+
+class ConsentResolved(_Event):
+    kind: Literal["consent_resolved"] = "consent_resolved"
+    subsystem: str = "vision"
+    granted: bool = False
+
+
 RuntimeEvent = Annotated[
     UserTextSubmitted
     | UserSpeechStarted
@@ -149,7 +197,13 @@ RuntimeEvent = Annotated[
     | TaskUpdatedEvent
     | TaskCompleted
     | ConfigUpdated
-    | ErrorEvent,
+    | ErrorEvent
+    | HandPoseStarted
+    | HandPoseEnded
+    | GestureDetected
+    | MovementDetected
+    | ConsentRequired
+    | ConsentResolved,
     Field(discriminator="kind"),
 ]
 """Discriminated union over every runtime event variant.

@@ -31,10 +31,16 @@ from .app import (
 from .avatar import AvatarDirective, CharacterPack, Emotion, EmotionFrames, State
 from .events import (
     ConfigUpdated,
+    ConsentRequired,
+    ConsentResolved,
     ErrorEvent,
+    GestureDetected,
+    HandPoseEnded,
+    HandPoseStarted,
     LLMReplyComplete,
     LLMStarted,
     LLMTokenStreamed,
+    MovementDetected,
     RuntimeEvent,
     RuntimeEventAdapter,
     TaskCompleted,
@@ -63,6 +69,19 @@ from .tasks import (
     TaskStatusName,
     TaskUpdate,
 )
+from .vision import (
+    BodyPose,
+    GestureDetection,
+    HandLandmark,
+    HandPose,
+    HeadPose,
+    Landmark,
+    MovementDetection,
+    VisionClassifierConfig,
+    VisionConfig,
+    VisionDetectorConfig,
+    VisionFrame,
+)
 from .voice import STTConfig, Transcript, TTSChunkBoundary, TTSConfig, WakeEvent
 
 __all__ = [
@@ -75,13 +94,25 @@ __all__ = [
     "AvatarConfig",
     # avatar
     "AvatarDirective",
+    # vision
+    "BodyPose",
     "CharacterPack",
     # events
     "ConfigUpdated",
+    "ConsentRequired",
+    "ConsentResolved",
     "Emotion",
     "EmotionFrames",
     "ErrorEvent",
+    "GestureDetected",
+    "GestureDetection",
+    "HandLandmark",
+    "HandPose",
+    "HandPoseEnded",
+    "HandPoseStarted",
+    "HeadPose",
     "HotkeysConfig",
+    "Landmark",
     # llm
     "LLMChunk",
     "LLMConfig",
@@ -92,6 +123,8 @@ __all__ = [
     "LLMStarted",
     "LLMTokenStreamed",
     "LLMUsage",
+    "MovementDetected",
+    "MovementDetection",
     "OverlayConfig",
     "PanelConfig",
     "RuntimeEvent",
@@ -130,6 +163,10 @@ __all__ = [
     "UserSpeechFinal",
     "UserSpeechStarted",
     "UserTextSubmitted",
+    "VisionClassifierConfig",
+    "VisionConfig",
+    "VisionDetectorConfig",
+    "VisionFrame",
     "VoiceConfig",
     "VoiceModesConfig",
     "WakeDetected",

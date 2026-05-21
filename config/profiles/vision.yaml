@@ -1,0 +1,121 @@
+# OpenMimicry "vision" profile — M13 demo.
+#
+# Overlays the basic profile with mock voice + the MediaPipe vision
+# adapter wired to a small sample gesture_map. Off by default; this
+# file is loaded only when the user passes PROFILE=vision (or sets
+# OPENMIMICRY_PROFILE=vision).
+#
+# Privacy posture: even with this profile, vision is gated behind
+# `vision.enabled: true` AND consent. The first activation publishes
+# `ConsentRequired` on the bus; the desktop frontend renders the
+# consent dialog and only then does the camera open.
+
+schema_version: 1
+
+app:
+  log_level: INFO
+  log_format: text
+  data_dir: ~/.openmimicry
+
+llm:
+  adapter: mock
+  model: mock/test
+
+voice:
+  stt:
+    adapter: mock
+  tts:
+    adapter: mock
+  modes:
+    text_always_on: true
+    live_wake: false
+    agent_voice: true
+
+avatar:
+  runtime: sprite2d
+  pack: octomimic
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock
+
+vision:
+  enabled: true
+  adapter: mediapipe
+  camera_index: 0
+  target_fps: 15
+  min_detection_confidence: 0.6
+  min_tracking_confidence: 0.6
+  require_consent: true
+
+  detectors:
+    hands:
+      enabled: true
+    body:
+      enabled: false      # M14 will turn this on by default
+    head:
+      enabled: false
+
+  gesture_classifiers:
+    default:
+      enabled: true
+      kind: rules
+      threshold: 0.6
+    # Optional second-pass:
+    # ml:
+    #   enabled: false
+    #   kind: onnx
+    #   path: ~/.openmimicry/models/gestures.onnx
+    #   labels: [wave, thumbs_up, peace]
+    #   threshold: 0.7
+
+  movement_classifiers:
+    default:
+      enabled: true
+      kind: rules
+      threshold: 0.6
+
+  gesture_map:
+    wave_pose:
+      emotion: happy
+      gesture: wave
+      duration_ms: 1200
+    thumbs_up:
+      emotion: happy
+      gesture: thumbs_up
+      duration_ms: 900
+    peace:
+      emotion: happy
+      gesture: peace
+      duration_ms: 900
+    open_palm:
+      emotion: focused
+      gesture: open_palm
+      duration_ms: 600
+    point:
+      emotion: focused
+      gesture: point
+      duration_ms: 600
+    fist:
+      emotion: angry
+      duration_ms: 600
+
+  movement_map:
+    wave_motion:
+      emotion: happy
+      gesture: wave
+      duration_ms: 1500
+      intensity: 0.8
+    nodding:
+      state: happy
+      emotion: happy
+      duration_ms: 600
+    shaking_head:
+      state: error
+      emotion: worried
+      duration_ms: 600
+    raised_hand:
+      emotion: focused
+      duration_ms: 800
