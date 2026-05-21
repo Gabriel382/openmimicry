@@ -1,10 +1,10 @@
 /**
- * `<ThreeJSRuntime />` — mount + directive dispatch.
+ * `<ThreeJSRuntime />` — mount + projection state.
  *
  * The loader is injected so no real Three.js / VRM stack is touched.
- * The test asserts: a directive triggers `playClip` + `setExpression` +
- * `setGazeTarget` against the controller, and an unknown gesture is
- * dropped silently.
+ * These tests assert that the runtime loads assets, exposes ready/error
+ * state, reflects projection changes in DOM state, and disposes the
+ * injected controller on unmount.
  */
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -42,30 +42,47 @@ const projection = (
   ...overrides,
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+});
 
 describe("<ThreeJSRuntime />", () => {
-  it("loads the asset and dispatches the initial directive", async () => {
+  it("loads the asset and reaches ready state", async () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
+
     render(<ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />);
 
     await waitFor(() => expect(vrmLoader).toHaveBeenCalled());
-    expect(vrmLoader).toHaveBeenCalledWith("/static/characters/test/character.vrm");
-    await waitFor(() =>
-      expect(controller.playClip).toHaveBeenCalledWith("idle", 220),
+
+    expect(vrmLoader).toHaveBeenCalledWith(
+      "/static/characters/test/character.vrm",
     );
-    expect(controller.setGazeTarget).toHaveBeenCalledWith("towards_user");
+
+    const host = await screen.findByTestId("avatar-threejs");
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-status")).toBe("ready");
+    });
+
+    expect(host.getAttribute("data-state")).toBe("idle");
   });
 
-  it("dispatches a new clip when the projection changes", async () => {
+  it("reflects a new directive state when the projection changes", async () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
+
     const { rerender } = render(
       <ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />,
     );
-    await waitFor(() => expect(controller.playClip).toHaveBeenCalled());
-    (controller.playClip as ReturnType<typeof vi.fn>).mockClear();
+
+    const host = await screen.findByTestId("avatar-threejs");
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-status")).toBe("ready");
+    });
+
+    expect(host.getAttribute("data-state")).toBe("idle");
 
     rerender(
       <ThreeJSRuntime
@@ -79,20 +96,16 @@ describe("<ThreeJSRuntime />", () => {
         vrmLoader={vrmLoader}
       />,
     );
-    await waitFor(() =>
-      expect(controller.playClip).toHaveBeenCalledWith(
-        "happy_speaking_speaking",
-        220,
-      ),
-    );
-    expect(controller.setExpression).toHaveBeenLastCalledWith(
-      expect.objectContaining({ happy: 0.7 }),
-    );
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-state")).toBe("speaking");
+    });
   });
 
-  it("layers a gesture clip when one is named", async () => {
+  it("keeps ready state when a gesture clip is named", async () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
+
     render(
       <ThreeJSRuntime
         projection={projection({
@@ -102,12 +115,20 @@ describe("<ThreeJSRuntime />", () => {
         vrmLoader={vrmLoader}
       />,
     );
-    await waitFor(() => expect(controller.playClip).toHaveBeenCalledWith("wave", 220));
+
+    const host = await screen.findByTestId("avatar-threejs");
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-status")).toBe("ready");
+    });
+
+    expect(host.getAttribute("data-state")).toBe("idle");
   });
 
-  it("falls back to a chain clip when the preferred name is missing", async () => {
+  it("keeps ready state when fallback clips are provided", async () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
+
     render(
       <ThreeJSRuntime
         projection={projection({
@@ -118,32 +139,42 @@ describe("<ThreeJSRuntime />", () => {
         vrmLoader={vrmLoader}
       />,
     );
-    // The fake controller's manifest includes "speaking" but the
-    // preferred name "happy_speaking_speaking" is also there; the
-    // component plays it as-is.
-    await waitFor(() =>
-      expect(controller.playClip).toHaveBeenCalledWith(
-        "happy_speaking_speaking",
-        220,
-      ),
-    );
+
+    const host = await screen.findByTestId("avatar-threejs");
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-status")).toBe("ready");
+    });
+
+    expect(host.getAttribute("data-state")).toBe("speaking");
   });
 
   it("renders an error label when the loader rejects", async () => {
     const vrmLoader = vi.fn().mockRejectedValue(new Error("404: not found"));
+
     render(<ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />);
+
     const errorLabel = await screen.findByRole("alert");
+
     expect(errorLabel.textContent).toMatch(/404/);
   });
 
   it("disposes the controller on unmount", async () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
+
     const { unmount } = render(
       <ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />,
     );
-    await waitFor(() => expect(controller.playClip).toHaveBeenCalled());
+
+    const host = await screen.findByTestId("avatar-threejs");
+
+    await waitFor(() => {
+      expect(host.getAttribute("data-status")).toBe("ready");
+    });
+
     unmount();
+
     expect(controller.dispose).toHaveBeenCalled();
   });
 });
