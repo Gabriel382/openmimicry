@@ -42,6 +42,16 @@ const projection = (
   ...overrides,
 });
 
+function getHost(container: HTMLElement): HTMLElement {
+  const host = container.querySelector(".avatar--threejs");
+
+  if (!(host instanceof HTMLElement)) {
+    throw new Error("ThreeJSRuntime host not found");
+  }
+
+  return host;
+}
+
 afterEach(() => {
   cleanup();
 });
@@ -51,7 +61,9 @@ describe("<ThreeJSRuntime />", () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
 
-    render(<ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />);
+    const { container } = render(
+      <ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />,
+    );
 
     await waitFor(() => expect(vrmLoader).toHaveBeenCalled());
 
@@ -59,7 +71,7 @@ describe("<ThreeJSRuntime />", () => {
       "/static/characters/test/character.vrm",
     );
 
-    const host = await screen.findByTestId("avatar-threejs");
+    const host = getHost(container);
 
     await waitFor(() => {
       expect(host.getAttribute("data-status")).toBe("ready");
@@ -72,11 +84,11 @@ describe("<ThreeJSRuntime />", () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
 
-    const { rerender } = render(
+    const { container, rerender } = render(
       <ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />,
     );
 
-    const host = await screen.findByTestId("avatar-threejs");
+    const host = getHost(container);
 
     await waitFor(() => {
       expect(host.getAttribute("data-status")).toBe("ready");
@@ -106,7 +118,7 @@ describe("<ThreeJSRuntime />", () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
 
-    render(
+    const { container } = render(
       <ThreeJSRuntime
         projection={projection({
           directive: { state: "idle", emotion: "happy", gesture: "wave" },
@@ -116,7 +128,7 @@ describe("<ThreeJSRuntime />", () => {
       />,
     );
 
-    const host = await screen.findByTestId("avatar-threejs");
+    const host = getHost(container);
 
     await waitFor(() => {
       expect(host.getAttribute("data-status")).toBe("ready");
@@ -129,7 +141,7 @@ describe("<ThreeJSRuntime />", () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
 
-    render(
+    const { container } = render(
       <ThreeJSRuntime
         projection={projection({
           directive: { state: "speaking", emotion: "happy", speaking: true },
@@ -140,7 +152,7 @@ describe("<ThreeJSRuntime />", () => {
       />,
     );
 
-    const host = await screen.findByTestId("avatar-threejs");
+    const host = getHost(container);
 
     await waitFor(() => {
       expect(host.getAttribute("data-status")).toBe("ready");
@@ -163,11 +175,11 @@ describe("<ThreeJSRuntime />", () => {
     const controller = makeFakeController();
     const vrmLoader = vi.fn().mockResolvedValue(controller);
 
-    const { unmount } = render(
+    const { container, unmount } = render(
       <ThreeJSRuntime projection={projection()} vrmLoader={vrmLoader} />,
     );
 
-    const host = await screen.findByTestId("avatar-threejs");
+    const host = getHost(container);
 
     await waitFor(() => {
       expect(host.getAttribute("data-status")).toBe("ready");
