@@ -11,18 +11,34 @@ from .avatar import AvatarDirector, AvatarOrchestrator, AvatarRuntimeAdapter
 from .bus import EventBus
 from .llm import LLMAdapter
 from .tasks import TaskRuntimeAdapter
+from .vision import (
+    BodyDetector,
+    GestureClassifier,
+    HandDetector,
+    HeadDetector,
+    LandmarkDetector,
+    MovementClassifier,
+    VisionAdapter,
+)
 from .voice import OnChunk, SpeechController, STTAdapter, TTSAdapter, WakeController
 
 __all__ = [
     "AvatarDirector",
     "AvatarOrchestrator",
     "AvatarRuntimeAdapter",
+    "BodyDetector",
     "EventBus",
+    "GestureClassifier",
+    "HandDetector",
+    "HeadDetector",
     "LLMAdapter",
+    "LandmarkDetector",
+    "MovementClassifier",
     "OnChunk",
     "STTAdapter",
     "SpeechController",
     "TTSAdapter",
     "TaskRuntimeAdapter",
+    "VisionAdapter",
     "WakeController",
 ]

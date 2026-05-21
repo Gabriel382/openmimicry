@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-vision"
+version = "0.2.0a0"
+description = "OpenMimicry vision (M13): optional, opt-in webcam → hand/body/head landmarks + gesture/movement detection."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video :: Capture",
+    "Typing :: Typed",
+]
+
+# Only the core schemas / contracts are required by default. The
+# `mocks` adapter works in this minimal install; tests run without
+# OpenCV or MediaPipe.
+dependencies = [
+    "openmimicry-core>=0.2.0a0",
+]
+
+[project.optional-dependencies]
+# Webcam + MediaPipe stack. Heavy and platform-sensitive (precompiled
+# wheels needed on macOS arm64 / Windows). Lazy-imported by the
+# adapter so installing the bare package never touches them.
+mediapipe = [
+    "opencv-python-headless>=4.10",
+    "mediapipe>=0.10",
+    "numpy>=1.26",
+]
+# Opt-in classifier backends.
+sklearn = [
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+    "numpy>=1.26",
+]
+onnx = [
+    "onnxruntime>=1.18",
+    "numpy>=1.26",
+]
+# Aggregate: everything M13 can light up.
+full = [
+    "opencv-python-headless>=4.10",
+    "mediapipe>=0.10",
+    "numpy>=1.26",
+    "scikit-learn>=1.5",
+    "joblib>=1.4",
+    "onnxruntime>=1.18",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+# Three entry-point groups so future modules plug in without amending
+# this package. The vision adapter looks up every group at start time.
+[project.entry-points."openmimicry.contracts.vision"]
+mock = "openmimicry.vision.mocks:make_mock_vision_adapter"
+mediapipe = "openmimicry.vision.adapters.mediapipe_adapter:make_mediapipe_vision_adapter"
+
+[project.entry-points."openmimicry.contracts.vision_detector"]
+# Detector plugins. M13 ships MediaPipe Hands; M14 may ship
+# `mediapipe_pose`, `mediapipe_holistic`, ``movenet_pose``, etc.
+mediapipe_hands = "openmimicry.vision.pipeline.detectors.hands:make_mediapipe_hands_detector"
+mediapipe_pose = "openmimicry.vision.pipeline.detectors.body:make_mediapipe_pose_detector"
+mediapipe_head = "openmimicry.vision.pipeline.detectors.head:make_mediapipe_head_detector"
+mock_hands = "openmimicry.vision.mocks:make_mock_hand_detector"
+
+[project.entry-points."openmimicry.contracts.vision_gesture_classifier"]
+rules = "openmimicry.vision.classifiers.rules:make_rule_classifier"
+sklearn = "openmimicry.vision.classifiers.sklearn:make_sklearn_classifier"
+onnx = "openmimicry.vision.classifiers.onnx:make_onnx_classifier"
+mock = "openmimicry.vision.mocks:make_mock_gesture_classifier"
+
+[project.entry-points."openmimicry.contracts.vision_movement_classifier"]
+rules = "openmimicry.vision.classifiers.movements.rules:make_rule_movement_classifier"
+mock = "openmimicry.vision.mocks:make_mock_movement_classifier"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.vision" = ["py.typed"]

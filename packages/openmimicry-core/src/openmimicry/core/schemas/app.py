@@ -19,6 +19,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .avatar import Emotion, State
+from .vision import VisionConfig
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -38,6 +39,7 @@ __all__ = [
     "TasksConfig",
     "TrayConfig",
     "UIConfig",
+    "VisionConfig",
     "VoiceConfig",
     "VoiceModesConfig",
 ]
@@ -269,3 +271,6 @@ class AppConfig(BaseModel):
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
+    # Optional and **off by default**. Absent or ``enabled=False``
+    # means no camera ever opens.
+    vision: VisionConfig | None = None
