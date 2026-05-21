@@ -58,7 +58,7 @@ class MediaPipeHeadDetector:
                 min_detection_confidence=self._min_detection,
                 model_selection=self._model_selection,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise MediaPipeUnavailable(
                 f"failed to construct mediapipe.solutions.face_detection.FaceDetection: {exc}"
             ) from exc
@@ -72,7 +72,7 @@ class MediaPipeHeadDetector:
             return
         try:
             detector.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("MediaPipeHeadDetector close raised: %s", exc)
 
     async def detect(self, frame_bgr: Any) -> HeadPose | None:

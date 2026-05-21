@@ -47,7 +47,7 @@ export interface Live3DConfig {
   gaze_target?: string;
 }
 
-export interface Live3DProjection extends ThreeJSProjection {
+export interface Live3DProjection extends Omit<ThreeJSProjection, "runtime"> {
   runtime: "live3d" | "threejs";
   live?: Live3DConfig;
 }

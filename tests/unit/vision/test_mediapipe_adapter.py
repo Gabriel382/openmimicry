@@ -13,7 +13,6 @@ import logging
 
 import pytest
 from openmimicry.core.schemas import (
-    GestureDetection,
     HandPose,
     Landmark,
     VisionClassifierConfig,
@@ -77,13 +76,17 @@ def _open_palm() -> HandPose:
     # 21-point landmark fixture — open palm matches the rule classifier.
     landmarks = [Landmark(x=0.5, y=0.8)]  # wrist
     landmarks += [
-        Landmark(x=0.45, y=0.78), Landmark(x=0.4, y=0.74),
-        Landmark(x=0.34, y=0.72), Landmark(x=0.28, y=0.70),  # thumb
+        Landmark(x=0.45, y=0.78),
+        Landmark(x=0.4, y=0.74),
+        Landmark(x=0.34, y=0.72),
+        Landmark(x=0.28, y=0.70),  # thumb
     ]
     for x in (0.46, 0.50, 0.54, 0.58):
         landmarks += [
-            Landmark(x=x, y=0.7), Landmark(x=x, y=0.66),
-            Landmark(x=x, y=0.62), Landmark(x=x, y=0.58),
+            Landmark(x=x, y=0.7),
+            Landmark(x=x, y=0.66),
+            Landmark(x=x, y=0.62),
+            Landmark(x=x, y=0.58),
         ]
     return HandPose(hand="right", landmarks=landmarks, confidence=0.95)
 
@@ -183,12 +186,8 @@ async def test_adapter_emits_frames_with_landmark_data() -> None:
         require_consent=False,
         detectors={"hands": VisionDetectorConfig(enabled=True)},
         # Disable gesture classifier so we just see frames.
-        gesture_classifiers={
-            "off": VisionClassifierConfig(kind="rules", enabled=False)
-        },
-        movement_classifiers={
-            "off": VisionClassifierConfig(kind="rules", enabled=False)
-        },
+        gesture_classifiers={"off": VisionClassifierConfig(kind="rules", enabled=False)},
+        movement_classifiers={"off": VisionClassifierConfig(kind="rules", enabled=False)},
     )
     await adapter.start(cfg)
     try:

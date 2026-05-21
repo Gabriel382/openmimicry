@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from openmimicry.core.contracts import STTAdapter
 from openmimicry.core.schemas import STTConfig
 from openmimicry.voice.mocks import MockSTTAdapter

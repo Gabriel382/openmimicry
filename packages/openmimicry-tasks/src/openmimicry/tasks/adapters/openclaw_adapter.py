@@ -21,10 +21,7 @@ from openmimicry.core.schemas.tasks import (
 __all__ = ["OpenClawAdapter"]
 
 
-_MSG = (
-    "OpenClawAdapter is a post-v0.2 stub; see "
-    "docs/modules/post_v0_2_modalities.md."
-)
+_MSG = "OpenClawAdapter is a post-v0.2 stub; see docs/modules/post_v0_2_modalities.md."
 
 
 class OpenClawAdapter:

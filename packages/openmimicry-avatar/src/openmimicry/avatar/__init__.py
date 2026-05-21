@@ -82,4 +82,4 @@ __all__ = [
     "validate_pack",
 ]
 
-__version__ = "0.2.0a0"
+__version__ = "1.0.0"

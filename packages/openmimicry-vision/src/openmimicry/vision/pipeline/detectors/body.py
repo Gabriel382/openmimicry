@@ -62,7 +62,7 @@ class MediaPipePoseDetector:
                 enable_segmentation=self._enable_segmentation,
                 smooth_landmarks=self._smooth_landmarks,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise MediaPipeUnavailable(
                 f"failed to construct mediapipe.solutions.pose.Pose: {exc}"
             ) from exc
@@ -76,7 +76,7 @@ class MediaPipePoseDetector:
             return
         try:
             pose.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("MediaPipePoseDetector close raised: %s", exc)
 
     async def detect(self, frame_bgr: Any) -> BodyPose | None:

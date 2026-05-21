@@ -99,12 +99,7 @@ class RuleGestureClassifier:
         fingers = extended_fingers(pose.landmarks)
 
         # peace = index + middle up, ring + pinky down
-        if (
-            fingers["index"]
-            and fingers["middle"]
-            and not fingers["ring"]
-            and not fingers["pinky"]
-        ):
+        if fingers["index"] and fingers["middle"] and not fingers["ring"] and not fingers["pinky"]:
             return self._hit("peace", pose, confidence=0.85)
 
         # point = only index up
@@ -122,12 +117,7 @@ class RuleGestureClassifier:
 
         # wave_pose = four fingers up (thumb optional). Used as the
         # static pose for the temporal `wave_motion` movement.
-        if (
-            fingers["index"]
-            and fingers["middle"]
-            and fingers["ring"]
-            and fingers["pinky"]
-        ):
+        if fingers["index"] and fingers["middle"] and fingers["ring"] and fingers["pinky"]:
             return self._hit("wave_pose", pose, confidence=0.8)
 
         # thumbs_up = thumb up, others curled

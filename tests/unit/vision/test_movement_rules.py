@@ -52,10 +52,7 @@ def test_wave_motion_ignored_when_amplitude_too_small() -> None:
 
 def test_nodding_detected() -> None:
     cls = RuleMovementClassifier(min_pitch_rad=0.1)
-    window = [
-        _frame_with_head(ts_ms=i * 100, pitch=math.sin(i * 1.5) * 0.2)
-        for i in range(6)
-    ]
+    window = [_frame_with_head(ts_ms=i * 100, pitch=math.sin(i * 1.5) * 0.2) for i in range(6)]
     det = cls.classify(window)
     assert det is not None
     assert det.name == "nodding"
@@ -64,10 +61,7 @@ def test_nodding_detected() -> None:
 
 def test_shaking_head_detected() -> None:
     cls = RuleMovementClassifier(min_yaw_rad=0.1)
-    window = [
-        _frame_with_head(ts_ms=i * 100, yaw=math.sin(i * 1.5) * 0.25)
-        for i in range(6)
-    ]
+    window = [_frame_with_head(ts_ms=i * 100, yaw=math.sin(i * 1.5) * 0.25) for i in range(6)]
     det = cls.classify(window)
     assert det is not None
     assert det.name == "shaking_head"

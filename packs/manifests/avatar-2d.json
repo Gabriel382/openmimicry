@@ -1,9 +1,0 @@
-{
-  "name": "avatar-2d",
-  "version": "0.1.0",
-  "description": "Simple 2D avatar runtime with state-based assets.",
-  "category": "avatar",
-  "python_extra": "basic",
-  "dependencies": ["core-base"],
-  "runtime_enabled_by_default": true
-}

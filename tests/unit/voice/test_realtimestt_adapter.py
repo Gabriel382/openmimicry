@@ -125,8 +125,6 @@ async def test_wake_mode_sets_wake_words(monkeypatch: pytest.MonkeyPatch) -> Non
     captured = _install_fake_realtimestt(monkeypatch, recorder)
 
     adapter = RealtimeSTTAdapter()
-    await adapter.start(
-        STTConfig(mode="wake", wake_names=["Mimi", "Hey Mimi"])
-    )
+    await adapter.start(STTConfig(mode="wake", wake_names=["Mimi", "Hey Mimi"]))
     assert captured["kwargs"]["wake_words"] == "Mimi,Hey Mimi"
     await adapter.stop()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from openmimicry.core.schemas.app import STTConfigSection, STTWakeConfig
 from openmimicry.voice.controllers.wake import WakeController
 from openmimicry.voice.mocks import MockSTTAdapter

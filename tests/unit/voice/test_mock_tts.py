@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
-import pytest
 from openmimicry.core.contracts import TTSAdapter
 from openmimicry.core.schemas import TTSConfig
 from openmimicry.voice.mocks import MockTTSAdapter
@@ -38,18 +38,14 @@ async def test_stop_cancels_speak_within_100ms() -> None:
     """PTT-down must cancel TTS within 100ms (M2 DoD)."""
     tts = MockTTSAdapter(chunk_interval_s=0.05)
 
-    speak_task = asyncio.create_task(
-        tts.speak("a very long " * 100, config=TTSConfig())
-    )
+    speak_task = asyncio.create_task(tts.speak("a very long " * 100, config=TTSConfig()))
     await asyncio.sleep(0.02)
     assert tts.is_speaking is True
 
     start = asyncio.get_event_loop().time()
     await tts.stop()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await asyncio.wait_for(speak_task, timeout=0.5)
-    except asyncio.CancelledError:
-        pass
     elapsed = asyncio.get_event_loop().time() - start
     assert elapsed < 0.1, f"stop() took {elapsed:.3f}s, must be <100ms"
     assert tts.interrupt_calls == 1

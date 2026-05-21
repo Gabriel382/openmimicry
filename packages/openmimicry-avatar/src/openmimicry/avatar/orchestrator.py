@@ -89,8 +89,13 @@ class AvatarOrchestrator:
             self._cfg.runtimes.get(self._runtime.name, {}),
         )
         self._started = True
+
+        # Register the subscription synchronously before returning from start().
+        # This prevents events published immediately after `await start()` from
+        # being lost before the consumer task has a chance to run.
+        sub = self._bus.subscribe()
         self._subscriber_task = asyncio.create_task(
-            self._consume_bus(), name="openmimicry.avatar.orchestrator"
+            self._consume_bus(sub), name="openmimicry.avatar.orchestrator"
         )
 
     async def stop(self) -> None:
@@ -108,8 +113,7 @@ class AvatarOrchestrator:
 
     # --------------------------------------------------------------- dispatch
 
-    async def _consume_bus(self) -> None:
-        sub = self._bus.subscribe()
+    async def _consume_bus(self, sub) -> None:
         try:
             async for event in sub:
                 await self._handle_event(event)

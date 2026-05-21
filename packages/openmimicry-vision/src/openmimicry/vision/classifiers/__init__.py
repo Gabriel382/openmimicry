@@ -26,9 +26,9 @@ from .base import (
 )
 
 __all__ = [
-    "ClassifierUnavailable",
     "GESTURE_GROUP",
     "MOVEMENT_GROUP",
+    "ClassifierUnavailable",
     "available_gesture_classifiers",
     "available_movement_classifiers",
     "load_gesture_classifier",

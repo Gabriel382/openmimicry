@@ -38,6 +38,8 @@ jobs:
           python -m pip install -e packages/openmimicry-voice
           python -m pip install -e packages/openmimicry-avatar
           python -m pip install -e packages/openmimicry-tasks
+          python -m pip install -e packages/openmimicry-vision
+          python -m pip install -e apps/backend
           python -m pip install -e ".[dev]"
 
       - name: Lint

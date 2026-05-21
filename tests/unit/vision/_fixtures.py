@@ -54,7 +54,7 @@ def _thumb_extended() -> list[Landmark]:
     # from the wrist + MCP.
     return [
         _pt(0.45, 0.78),  # CMC (idx 1)
-        _pt(0.4, 0.74),   # MCP (idx 2)
+        _pt(0.4, 0.74),  # MCP (idx 2)
         _pt(0.34, 0.72),  # IP  (idx 3)
         _pt(0.28, 0.70),  # TIP (idx 4)
     ]
@@ -70,7 +70,7 @@ def _thumb_curled() -> list[Landmark]:
 
 
 def open_palm_hand() -> HandPose:
-    lms = [WRIST] + _thumb_extended()
+    lms = [WRIST, *_thumb_extended()]
     lms += _extended(0.7, x=0.46)  # index
     lms += _extended(0.7, x=0.50)  # middle
     lms += _extended(0.7, x=0.54)  # ring
@@ -79,7 +79,7 @@ def open_palm_hand() -> HandPose:
 
 
 def fist_hand() -> HandPose:
-    lms = [WRIST] + _thumb_curled()
+    lms = [WRIST, *_thumb_curled()]
     lms += _curled(0.78, x=0.46)
     lms += _curled(0.78, x=0.50)
     lms += _curled(0.78, x=0.54)
@@ -95,7 +95,7 @@ def thumbs_up_hand() -> HandPose:
         _pt(0.46, 0.66),
         _pt(0.46, 0.60),  # TIP — clearly above MCP
     ]
-    lms = [WRIST] + thumb
+    lms = [WRIST, *thumb]
     lms += _curled(0.78, x=0.46)
     lms += _curled(0.78, x=0.50)
     lms += _curled(0.78, x=0.54)
@@ -104,7 +104,7 @@ def thumbs_up_hand() -> HandPose:
 
 
 def point_hand() -> HandPose:
-    lms = [WRIST] + _thumb_curled()
+    lms = [WRIST, *_thumb_curled()]
     lms += _extended(0.7, x=0.46)  # index extended
     lms += _curled(0.78, x=0.50)
     lms += _curled(0.78, x=0.54)
@@ -113,7 +113,7 @@ def point_hand() -> HandPose:
 
 
 def peace_hand() -> HandPose:
-    lms = [WRIST] + _thumb_curled()
+    lms = [WRIST, *_thumb_curled()]
     lms += _extended(0.7, x=0.46)
     lms += _extended(0.7, x=0.50)
     lms += _curled(0.78, x=0.54)
@@ -124,7 +124,7 @@ def peace_hand() -> HandPose:
 def wave_pose_hand() -> HandPose:
     """Four fingers extended, thumb curled — the static pose used by
     the temporal ``wave_motion`` detector."""
-    lms = [WRIST] + _thumb_curled()
+    lms = [WRIST, *_thumb_curled()]
     lms += _extended(0.7, x=0.46)
     lms += _extended(0.7, x=0.50)
     lms += _extended(0.7, x=0.54)

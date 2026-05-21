@@ -25,6 +25,6 @@ def import_mediapipe() -> Any:
     except ImportError as exc:
         raise MediaPipeUnavailable(
             "mediapipe is not installed. Install with "
-            "`pip install \"openmimicry-vision[mediapipe]\"`."
+            '`pip install "openmimicry-vision[mediapipe]"`.'
         ) from exc
     return mediapipe

@@ -1,1 +1,0 @@
-# OpenMimicry avatar package.

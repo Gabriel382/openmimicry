@@ -27,9 +27,7 @@ def test_wave_gesture_maps_to_directive() -> None:
 
 def test_unmapped_gesture_returns_none() -> None:
     gesture_map = {"wave": {"emotion": "happy"}}
-    det = GestureDetection(
-        name="not-a-gesture", modality="hand", hand="right", confidence=0.9
-    )
+    det = GestureDetection(name="not-a-gesture", modality="hand", hand="right", confidence=0.9)
     assert directive_from_gesture(det, gesture_map) is None
 
 
@@ -47,9 +45,7 @@ def test_unknown_keys_in_override_are_dropped() -> None:
 
 def test_movement_maps_to_directive_with_duration_fallback() -> None:
     movement_map = {"nodding": {"state": "happy", "emotion": "happy"}}
-    det = MovementDetection(
-        name="nodding", modality="head", confidence=0.8, duration_ms=600
-    )
+    det = MovementDetection(name="nodding", modality="head", confidence=0.8, duration_ms=600)
     directive = directive_from_movement(det, movement_map)
     assert directive is not None
     assert directive.state == "happy"

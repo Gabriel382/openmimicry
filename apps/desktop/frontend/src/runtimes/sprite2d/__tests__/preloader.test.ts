@@ -1,11 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  _resetCache,
-  getCached,
-  isCached,
-  preload,
-} from "../preloader";
+import { _resetCache, getCached, isCached, preload } from "../preloader";
 
 /**
  * jsdom (Vitest's default DOM env) provides `Image`, but it does not fire
@@ -18,6 +13,7 @@ class FakeImage {
   complete = false;
   onload: (() => void) | null = null;
   onerror: ((event: Event | string) => void) | null = null;
+
   constructor() {
     setTimeout(() => {
       this.complete = true;
@@ -30,19 +26,19 @@ const originalImage = globalThis.Image;
 
 beforeEach(() => {
   _resetCache();
-  // @ts-expect-error -- we are deliberately swapping Image for the test.
-  globalThis.Image = FakeImage;
+  globalThis.Image = FakeImage as unknown as typeof Image;
 });
 
 afterEach(() => {
-  // @ts-expect-error -- restore the real Image constructor between tests.
   globalThis.Image = originalImage;
 });
 
 describe("preloader", () => {
   it("caches every frame URL after preload resolves", async () => {
     expect(isCached("/a.png")).toBe(false);
+
     await preload(["/a.png", "/b.png"]);
+
     expect(isCached("/a.png")).toBe(true);
     expect(isCached("/b.png")).toBe(true);
     expect(getCached("/a.png")).toBeDefined();
@@ -50,9 +46,13 @@ describe("preloader", () => {
 
   it("does not re-fetch a URL that is already cached", async () => {
     await preload(["/a.png"]);
+
     const first = getCached("/a.png");
+
     await preload(["/a.png"]);
+
     const second = getCached("/a.png");
+
     // Same image object is returned -- it was reused, not recreated.
     expect(second).toBe(first);
   });
@@ -63,16 +63,20 @@ describe("preloader", () => {
       complete = false;
       onload: (() => void) | null = null;
       onerror: ((event: Event | string) => void) | null = null;
+
       constructor() {
         setTimeout(() => {
           this.onerror?.(new Event("error"));
         }, 0);
       }
     }
-    // @ts-expect-error -- swap to the failing constructor for this test.
-    globalThis.Image = FailingImage;
+
+    globalThis.Image = FailingImage as unknown as typeof Image;
+
     const onError = vi.fn();
+
     await preload(["/x.png"], { onError });
+
     expect(onError).toHaveBeenCalledWith("/x.png", expect.anything());
   });
 });

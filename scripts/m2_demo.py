@@ -29,11 +29,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 from openmimicry.core.bus import EventBus
-from openmimicry.core.schemas import RuntimeEvent
 from openmimicry.core.schemas.app import (
     STTConfigSection,
     STTWakeConfig,
@@ -82,10 +82,8 @@ async def _run(args: argparse.Namespace) -> int:
     await controller.say(args.text)
     # Wait until the TTS task finishes.
     if controller._current_tts_task is not None:
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await controller._current_tts_task
-        except asyncio.CancelledError:
-            pass
 
     if not args.skip_ptt:
         print("--- ptt cycle ---", file=sys.stderr)
@@ -104,7 +102,9 @@ async def _run(args: argparse.Namespace) -> int:
 
     if args.barge_in:
         print("--- barge-in scenario ---", file=sys.stderr)
-        tts._chunk_interval_s = 0.2  # slow TTS so barge-in has time to fire  # type: ignore[attr-defined]
+        tts._chunk_interval_s = (
+            0.2  # slow TTS so barge-in has time to fire  # type: ignore[attr-defined]
+        )
         await controller.say("a very long sentence " * 5)
         await asyncio.sleep(0.05)
         await stt.trigger_speech_start()
@@ -112,20 +112,16 @@ async def _run(args: argparse.Namespace) -> int:
         await asyncio.sleep(0.5)
         await stt.trigger_speech_end()
         if controller._current_tts_task is not None:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await controller._current_tts_task
-            except asyncio.CancelledError:
-                pass
 
     # Drain anything left.
     await asyncio.sleep(0.05)
     stop.set()
     await controller.stop()
     await bus.aclose()
-    try:
+    with contextlib.suppress(TimeoutError, asyncio.CancelledError):
         await asyncio.wait_for(printer, timeout=0.5)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
-        pass
     return 0
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-backend"
-version = "0.2.0a0"
+version = "1.0.0"
 description = "OpenMimicry backend: FastAPI process, WebSocket projection, single assembly point for concrete adapters."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,11 +24,11 @@ classifiers = [
 # this distribution is consumed. We declare them by name so dependency
 # discovery still finds them once the workspace is published.
 dependencies = [
-    "openmimicry-core>=0.2.0a0",
-    "openmimicry-llm>=0.2.0a0",
-    "openmimicry-voice>=0.2.0a0",
-    "openmimicry-avatar>=0.2.0a0",
-    "openmimicry-tasks>=0.2.0a0",
+    "openmimicry-core>=1.0.0",
+    "openmimicry-llm>=1.0.0",
+    "openmimicry-voice>=1.0.0",
+    "openmimicry-avatar>=1.0.0",
+    "openmimicry-tasks>=1.0.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "websockets>=13",

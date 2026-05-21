@@ -71,27 +71,21 @@ def _check_vision_stack() -> None:
 
         importlib.import_module("openmimicry.vision")
         print(f"  {CHECK} openmimicry-vision: importable")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"  {WARN} openmimicry-vision: not importable ({exc})")
         return
 
     try:
         cv2 = __import__("cv2")
         print(f"  {CHECK} OpenCV: {getattr(cv2, '__version__', '?')}")
-    except Exception:  # noqa: BLE001
-        print(
-            f"  {WARN} OpenCV not installed "
-            "(pip install \"openmimicry-vision[mediapipe]\")"
-        )
+    except Exception:
+        print(f'  {WARN} OpenCV not installed (pip install "openmimicry-vision[mediapipe]")')
 
     try:
         mediapipe = __import__("mediapipe")
         print(f"  {CHECK} MediaPipe: {getattr(mediapipe, '__version__', '?')}")
-    except Exception:  # noqa: BLE001
-        print(
-            f"  {WARN} MediaPipe not installed "
-            "(pip install \"openmimicry-vision[mediapipe]\")"
-        )
+    except Exception:
+        print(f'  {WARN} MediaPipe not installed (pip install "openmimicry-vision[mediapipe]")')
 
     # Camera-index probe (best-effort, never raises). We only attempt
     # this when the env opt-in is set so running `make doctor` doesn't
@@ -106,13 +100,10 @@ def _check_vision_stack() -> None:
                 print(f"  {CHECK} camera index 0: opens")
             else:
                 print(f"  {WARN} camera index 0: failed to open")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  {WARN} camera probe raised: {exc}")
     else:
-        print(
-            f"  {WARN} camera probe skipped "
-            "(set OPENMIMICRY_DOCTOR_PROBE_CAMERA=1 to enable)"
-        )
+        print(f"  {WARN} camera probe skipped (set OPENMIMICRY_DOCTOR_PROBE_CAMERA=1 to enable)")
 
 
 def main() -> int:

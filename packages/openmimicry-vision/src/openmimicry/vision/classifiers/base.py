@@ -6,9 +6,9 @@ from importlib.metadata import entry_points
 from typing import Any
 
 __all__ = [
-    "ClassifierUnavailable",
     "GESTURE_GROUP",
     "MOVEMENT_GROUP",
+    "ClassifierUnavailable",
     "available_gesture_classifiers",
     "available_movement_classifiers",
     "load_gesture_classifier",
@@ -54,11 +54,8 @@ def _load(name: str, group: str, **kwargs: Any) -> Any:
             try:
                 factory = ep.load()
             except Exception as exc:
-                raise ClassifierUnavailable(
-                    f"{group} {name!r} failed to load: {exc}"
-                ) from exc
+                raise ClassifierUnavailable(f"{group} {name!r} failed to load: {exc}") from exc
             return factory(**kwargs)
     raise ClassifierUnavailable(
-        f"{group} {name!r} not registered "
-        f"(available: {[ep.name for ep in eps]})"
+        f"{group} {name!r} not registered (available: {[ep.name for ep in eps]})"
     )

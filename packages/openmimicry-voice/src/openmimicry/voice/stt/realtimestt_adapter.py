@@ -16,6 +16,7 @@ into the loop safely.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -117,7 +118,7 @@ class RealtimeSTTAdapter:
             while recorder is not None:
                 try:
                     text = recorder.text()  # blocking until a final
-                except Exception:  # noqa: BLE001 — shutdown race
+                except Exception:
                     return
                 if not text:
                     return
@@ -139,14 +140,10 @@ class RealtimeSTTAdapter:
         rec = self._recorder
         self._recorder = None
         if rec is not None:
-            try:
+            with contextlib.suppress(Exception):
                 rec.stop()
-            except Exception:  # noqa: BLE001
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 rec.shutdown()
-            except Exception:  # noqa: BLE001
-                pass
         # Drop a sentinel so any pending iterator exits.
         self._post(None)
 
@@ -191,10 +188,8 @@ class RealtimeSTTAdapter:
         loop = self._loop
         if loop is None or loop.is_closed():
             return
-        try:
+        with contextlib.suppress(RuntimeError):
             loop.call_soon_threadsafe(self._queue.put_nowait, item)
-        except RuntimeError:
-            pass
 
 
 def _import_recorder_class() -> Any:
