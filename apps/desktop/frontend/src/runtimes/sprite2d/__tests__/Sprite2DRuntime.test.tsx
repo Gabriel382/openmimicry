@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sprite2DRuntime, type Sprite2DProjection } from "../Sprite2DRuntime";
@@ -63,7 +63,9 @@ describe("Sprite2DRuntime", () => {
     render(<Sprite2DRuntime projection={projection({ fps: 10 })} />);
 
     // 10 fps -> 100ms per frame.
-    vi.advanceTimersByTime(110);
+    act(() => {
+      vi.advanceTimersByTime(110);
+    });
 
     const img = screen.getByRole("img") as HTMLImageElement;
 
@@ -77,8 +79,10 @@ describe("Sprite2DRuntime", () => {
       <Sprite2DRuntime projection={projection({ fps: 10, loop: true })} />,
     );
 
-    vi.advanceTimersByTime(110); // frame 1
-    vi.advanceTimersByTime(110); // wraps back to frame 0
+    act(() => {
+      vi.advanceTimersByTime(110); // frame 1
+      vi.advanceTimersByTime(110); // wraps back to frame 0
+    });
 
     const img = screen.getByRole("img") as HTMLImageElement;
 
@@ -92,9 +96,11 @@ describe("Sprite2DRuntime", () => {
       <Sprite2DRuntime projection={projection({ fps: 10, loop: false })} />,
     );
 
-    vi.advanceTimersByTime(110); // frame 1
-    vi.advanceTimersByTime(110); // would wrap, but loop=false clamps
-    vi.advanceTimersByTime(110);
+    act(() => {
+      vi.advanceTimersByTime(110); // frame 1
+      vi.advanceTimersByTime(110); // would wrap, but loop=false clamps
+      vi.advanceTimersByTime(110);
+    });
 
     const img = screen.getByRole("img") as HTMLImageElement;
 
@@ -108,7 +114,9 @@ describe("Sprite2DRuntime", () => {
       <Sprite2DRuntime projection={projection({ fps: 10 })} />,
     );
 
-    vi.advanceTimersByTime(110); // advance to frame 1
+    act(() => {
+      vi.advanceTimersByTime(110); // advance to frame 1
+    });
 
     rerender(
       <Sprite2DRuntime
