@@ -141,17 +141,22 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     const onMessage = (ev: Event): void => {
       const data = (ev as unknown as { data?: string }).data;
       if (typeof data !== "string") return;
+
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
       } catch {
         return;
       }
+
       if (!isServerMessage(parsed)) return;
+
       const msg = parsed;
       setLastMessage(msg);
+
       const bucket = listenersRef.current.get(msg.type);
       if (!bucket) return;
+
       for (const fn of Array.from(bucket)) {
         try {
           (fn as Listener<typeof msg.type>)(
@@ -182,12 +187,14 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     ws.addEventListener("error", onError);
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     void onError;
-  }, [socketFactory, url]);
+  }, [socketFactory, url, scheduleReconnect]);
 
   const scheduleReconnect = useCallback(async (): Promise<void> => {
     if (stoppedRef.current) return;
     if (!ctrlRef.current.hasAttemptsLeft()) return;
+
     await ctrlRef.current.wait();
+
     if (stoppedRef.current) return;
     connect();
   }, [connect]);
@@ -204,6 +211,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
       void scheduleReconnect();
     }
   }, [scheduleReconnect]);
+
   forceReconnectRef.current = forceReconnect;
 
   // -----------------------------------------------------------------------
@@ -212,12 +220,16 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
 
   useEffect(() => {
     if (!autoConnect) return;
+
     stoppedRef.current = false;
     connect();
+
     return () => {
       stoppedRef.current = true;
+
       const ws = socketRef.current;
       socketRef.current = null;
+
       if (ws) {
         try {
           ws.close();
@@ -240,6 +252,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
       // returns to "open".
       return;
     }
+
     try {
       ws.send(JSON.stringify(message));
     } catch {
@@ -251,12 +264,16 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     <T extends ServerMessageType>(type: T, handler: Listener<T>): (() => void) => {
       const bucket =
         listenersRef.current.get(type) ?? new Set<Listener<ServerMessageType>>();
-      bucket.add(handler as Listener<ServerMessageType>);
+
+      bucket.add(handler as unknown as Listener<ServerMessageType>);
       listenersRef.current.set(type, bucket);
+
       return () => {
         const b = listenersRef.current.get(type);
         if (!b) return;
-        b.delete(handler as Listener<ServerMessageType>);
+
+        b.delete(handler as unknown as Listener<ServerMessageType>);
+
         if (b.size === 0) listenersRef.current.delete(type);
       };
     },
