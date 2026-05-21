@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-llm"
-version = "0.2.0a0"
+version = "1.0.0"
 description = "OpenMimicry LLM adapter: LiteLLMAdapter, LLMRouter, MockLLMAdapter."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,7 +19,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=0.2.0a0",
+    "openmimicry-core>=1.0.0",
     "jinja2>=3.1",
 ]
 

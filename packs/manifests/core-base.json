@@ -1,9 +1,0 @@
-{
-  "name": "core-base",
-  "version": "0.1.0",
-  "description": "Core runtime, config, and package system.",
-  "category": "core",
-  "python_extra": "basic",
-  "dependencies": [],
-  "runtime_enabled_by_default": true
-}

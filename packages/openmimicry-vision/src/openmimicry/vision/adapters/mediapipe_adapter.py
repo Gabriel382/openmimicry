@@ -134,9 +134,7 @@ class MediaPipeVisionAdapter:
         if self._closed:
             raise MediaPipeVisionUnavailable("adapter has been shut down")
         if not config.enabled:
-            raise MediaPipeVisionUnavailable(
-                "vision.enabled is False; refusing to start"
-            )
+            raise MediaPipeVisionUnavailable("vision.enabled is False; refusing to start")
 
         # Consent gate. Caller may supply a coroutine/callable that
         # resolves to True/False.
@@ -145,10 +143,8 @@ class MediaPipeVisionAdapter:
                 granted = self._consent_resolver()
                 if asyncio.iscoroutine(granted):
                     granted = await granted
-            except Exception as exc:  # noqa: BLE001
-                raise MediaPipeVisionUnavailable(
-                    f"consent_resolver raised: {exc}"
-                ) from exc
+            except Exception as exc:
+                raise MediaPipeVisionUnavailable(f"consent_resolver raised: {exc}") from exc
             if not granted:
                 raise MediaPipeVisionUnavailable("consent not granted; refusing to start")
 
@@ -167,9 +163,7 @@ class MediaPipeVisionAdapter:
         self._capture = capture
 
         self._running = True
-        self._task = asyncio.create_task(
-            self._run_loop(), name="openmimicry.vision.mediapipe.loop"
-        )
+        self._task = asyncio.create_task(self._run_loop(), name="openmimicry.vision.mediapipe.loop")
 
     async def stop(self) -> None:
         self._running = False
@@ -226,9 +220,7 @@ class MediaPipeVisionAdapter:
             except DetectorUnavailable as exc:
                 _log.warning("vision: head detector unavailable: %s", exc)
 
-        if not any(
-            (self._hands_detector, self._body_detector, self._head_detector)
-        ):
+        if not any((self._hands_detector, self._body_detector, self._head_detector)):
             raise MediaPipeVisionUnavailable(
                 "no detectors available — check `vision.detectors.*.enabled` "
                 "and that the [mediapipe] extras are installed"
@@ -297,7 +289,7 @@ class MediaPipeVisionAdapter:
                 continue
             try:
                 await det.warmup()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning(
                     "vision: detector %r warmup raised: %s",
                     getattr(det, "name", "?"),
@@ -325,7 +317,7 @@ class MediaPipeVisionAdapter:
                 snapshot = await self._build_snapshot(
                     frame_bgr, ts_ms=ts_ms, w=image_width, h=image_height
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("vision: detector pass raised: %s", exc, exc_info=True)
                 continue
             await self._publish_frame(snapshot)
@@ -333,26 +325,24 @@ class MediaPipeVisionAdapter:
             await self._publish_gestures(snapshot, debouncer)
             await self._publish_movements(window, debouncer)
 
-    async def _build_snapshot(
-        self, frame_bgr: Any, *, ts_ms: int, w: int, h: int
-    ) -> VisionFrame:
+    async def _build_snapshot(self, frame_bgr: Any, *, ts_ms: int, w: int, h: int) -> VisionFrame:
         hands: list[HandPose] = []
         body: BodyPose | None = None
         head: HeadPose | None = None
         if self._hands_detector is not None:
             try:
                 hands = await self._hands_detector.detect(frame_bgr)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("vision: hands detector raised: %s", exc)
         if self._body_detector is not None:
             try:
                 body = await self._body_detector.detect(frame_bgr)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("vision: body detector raised: %s", exc)
         if self._head_detector is not None:
             try:
                 head = await self._head_detector.detect(frame_bgr)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("vision: head detector raised: %s", exc)
         return VisionFrame(
             ts_ms=ts_ms,
@@ -372,14 +362,12 @@ class MediaPipeVisionAdapter:
             with contextlib.suppress(asyncio.QueueFull):
                 self._frames.put_nowait(frame)
 
-    async def _publish_gestures(
-        self, frame: VisionFrame, debouncer: Debouncer
-    ) -> None:
+    async def _publish_gestures(self, frame: VisionFrame, debouncer: Debouncer) -> None:
         for hand in frame.hands:
             for classifier in self._gesture_classifiers:
                 try:
                     detection = classifier.classify(hand)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     _log.warning(
                         "vision: gesture classifier %r raised: %s",
                         getattr(classifier, "name", "?"),
@@ -393,15 +381,13 @@ class MediaPipeVisionAdapter:
                     continue
                 await self._offer_detection(detection)
 
-    async def _publish_movements(
-        self, window: deque[VisionFrame], debouncer: Debouncer
-    ) -> None:
+    async def _publish_movements(self, window: deque[VisionFrame], debouncer: Debouncer) -> None:
         if len(window) < 3:
             return
         for classifier in self._movement_classifiers:
             try:
                 detection = classifier.classify(list(window))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning(
                     "vision: movement classifier %r raised: %s",
                     getattr(classifier, "name", "?"),
@@ -415,9 +401,7 @@ class MediaPipeVisionAdapter:
                 continue
             await self._offer_detection(detection)
 
-    async def _offer_detection(
-        self, detection: GestureDetection | MovementDetection
-    ) -> None:
+    async def _offer_detection(self, detection: GestureDetection | MovementDetection) -> None:
         try:
             self._detections.put_nowait(detection)
         except asyncio.QueueFull:
@@ -470,7 +454,7 @@ def _frame_dims(frame: Any) -> tuple[int, int]:
         h = int(frame.shape[0])
         w = int(frame.shape[1])
         return w, h
-    except Exception:  # noqa: BLE001
+    except Exception:
         return 0, 0
 
 

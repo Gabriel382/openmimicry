@@ -142,7 +142,7 @@ class SpeechController:
             with suppress(Exception):
                 await self._tts.stop()
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("SpeechController: tts.speak raised: %s", exc, exc_info=True)
         finally:
             if cancelled:
@@ -188,7 +188,7 @@ class SpeechController:
                 await self.interrupt()
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("SpeechController.barge_in_loop: %s", exc, exc_info=True)
 
     # ----------------------------------------------------------------- PTT
@@ -241,15 +241,13 @@ class SpeechController:
                             is_final=False,
                         )
                     )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return last_partial, "no_speech" if not last_partial else "normal"
         return last_partial, "no_speech" if not last_partial else "normal"
 
     # --------------------------------------------------------- live wake mode
 
-    async def enable_live_listening(
-        self, *, wake_names: list[str] | None = None
-    ) -> None:
+    async def enable_live_listening(self, *, wake_names: list[str] | None = None) -> None:
         if self._live_listening:
             return
         names = wake_names if wake_names is not None else self._cfg.stt.wake.names
@@ -294,7 +292,7 @@ class SpeechController:
                     )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("SpeechController._live_listener: %s", exc, exc_info=True)
 
 

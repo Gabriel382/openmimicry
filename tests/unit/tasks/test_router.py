@@ -43,9 +43,7 @@ def test_select_preferred_wins() -> None:
         adapters={"primary": primary, "fallback": fallback},
         default_runtime="fallback",
     )
-    chosen = router.select(
-        TaskRequest(summary="s", instructions="i", preferred_runtime="primary")
-    )
+    chosen = router.select(TaskRequest(summary="s", instructions="i", preferred_runtime="primary"))
     assert chosen is primary
 
 
@@ -54,9 +52,7 @@ def test_select_capability_superset() -> None:
     shell = _CapAdapter("local_shell", {"shell"})
     router = TaskRouter(adapters={"claude_code": code, "local_shell": shell})
     chosen = router.select(
-        TaskRequest(
-            summary="s", instructions="i", capabilities_required={"code"}
-        )
+        TaskRequest(summary="s", instructions="i", capabilities_required={"code"})
     )
     assert chosen is code
 
@@ -66,11 +62,7 @@ def test_select_falls_back_to_default() -> None:
     b = MockTaskRuntimeAdapter()
     router = TaskRouter(adapters={"a": a, "mock": b}, default_runtime="mock")
     # No capability match for "y"; no preferred; falls back to default.
-    chosen = router.select(
-        TaskRequest(
-            summary="s", instructions="i", capabilities_required={"y"}
-        )
-    )
+    chosen = router.select(TaskRequest(summary="s", instructions="i", capabilities_required={"y"}))
     assert chosen is b
 
 
@@ -78,11 +70,7 @@ def test_select_no_match_raises() -> None:
     a = _CapAdapter("a", {"x"})
     router = TaskRouter(adapters={"a": a})
     with pytest.raises(NoAdapterForCapabilities):
-        router.select(
-            TaskRequest(
-                summary="s", instructions="i", capabilities_required={"y"}
-            )
-        )
+        router.select(TaskRequest(summary="s", instructions="i", capabilities_required={"y"}))
 
 
 def test_unknown_preferred_falls_through_to_capability_match() -> None:
@@ -103,9 +91,7 @@ async def test_submit_remembers_handle_runtime() -> None:
     a = MockTaskRuntimeAdapter(step_delay_s=0.0)
     b = MockTaskRuntimeAdapter(step_delay_s=0.0)
     router = TaskRouter(adapters={"a": a, "b": b}, default_runtime="a")
-    handle = await router.submit(
-        TaskRequest(summary="s", instructions="i", preferred_runtime="b")
-    )
+    handle = await router.submit(TaskRequest(summary="s", instructions="i", preferred_runtime="b"))
     # The router should route status/updates/result to the same adapter.
     status = await router.status(handle)
     assert status.handle.id == handle.id
@@ -118,9 +104,7 @@ async def test_submit_remembers_handle_runtime() -> None:
 async def test_cancel_dispatches_to_owning_adapter() -> None:
     a = MockTaskRuntimeAdapter(step_delay_s=0.1)
     router = TaskRouter(adapters={"a": a}, default_runtime="a")
-    handle = await router.submit(
-        TaskRequest(summary="s", instructions="i", preferred_runtime="a")
-    )
+    handle = await router.submit(TaskRequest(summary="s", instructions="i", preferred_runtime="a"))
     await router.cancel(handle)
     received = [upd async for upd in router.updates(handle)]
     assert received[-1].status == "cancelled"

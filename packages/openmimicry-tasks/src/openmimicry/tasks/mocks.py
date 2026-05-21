@@ -8,6 +8,7 @@ mock instead of spawning real subprocesses.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -101,10 +102,8 @@ class MockTaskRuntimeAdapter:
         if t.producer is not None and not t.producer.done():
             t.producer.cancel()
         upd = TaskUpdate(handle=handle, status="cancelled", ts=_now())
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             t.queue.put_nowait(upd)
-        except asyncio.QueueFull:
-            pass
         t.queue.put_nowait(None)  # sentinel
         t.last_status = "cancelled"
 
@@ -126,10 +125,8 @@ class MockTaskRuntimeAdapter:
         if t is None:
             return TaskResult(handle=handle, status="failed")
         if t.producer is not None:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t.producer
-            except asyncio.CancelledError:
-                pass
         if self._final_result_override is not None:
             return self._final_result_override.model_copy(update={"handle": handle})
         return TaskResult(handle=handle, status=t.last_status)
@@ -159,10 +156,8 @@ class MockTaskRuntimeAdapter:
             await t.queue.put(None)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001
-            _log.warning(
-                "MockTaskRuntimeAdapter producer crashed: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            _log.warning("MockTaskRuntimeAdapter producer crashed: %s", exc, exc_info=True)
             await t.queue.put(None)
 
 

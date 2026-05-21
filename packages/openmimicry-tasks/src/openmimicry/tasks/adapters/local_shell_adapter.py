@@ -18,6 +18,7 @@ Streaming back-pressure follows the same drop-with-warning policy as
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import shlex
@@ -29,7 +30,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from openmimicry.core.schemas.tasks import (
-    Artifact,
     TaskError,
     TaskHandle,
     TaskRequest,
@@ -160,7 +160,9 @@ class LocalShellAdapter:
         task = _ShellTask(handle=handle, request=req, queue=queue)
         task.argv = argv
         self._handles[handle.id] = task
-        task.task = asyncio.create_task(self._run(task), name=f"openmimicry.tasks.shell.{handle.id}")
+        task.task = asyncio.create_task(
+            self._run(task), name=f"openmimicry.tasks.shell.{handle.id}"
+        )
         return handle
 
     async def status(self, handle: TaskHandle) -> TaskStatus:
@@ -184,11 +186,9 @@ class LocalShellAdapter:
             return
         try:
             await asyncio.wait_for(proc.wait(), timeout=self._settings.cancel_grace_s)
-        except asyncio.TimeoutError:
-            try:
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            except ProcessLookupError:
-                pass
 
     def updates(self, handle: TaskHandle) -> AsyncIterator[TaskUpdate]:
         return self._iter_updates(handle)
@@ -208,10 +208,8 @@ class LocalShellAdapter:
         if t is None:
             return TaskResult(handle=handle, status="failed")
         if t.task is not None:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t.task
-            except asyncio.CancelledError:
-                pass
         if t.cancelled:
             return TaskResult(handle=handle, status="cancelled")
         if t.last_status == "failed":
@@ -228,19 +226,24 @@ class LocalShellAdapter:
     # --------------------------------------------------------------- runner
 
     async def _run(self, t: _ShellTask) -> None:
-        cwd = self._resolve_working_dir(t.request.constraints.working_dir)
-
         try:
+            cwd = self._resolve_working_dir(t.request.constraints.working_dir)
+
             t.process = await asyncio.create_subprocess_exec(
                 *t.argv,
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             t.last_status = "failed"
             t.last_note = str(exc)
-            self._audit(t.handle, argv=t.argv, exit_code=-1, reason=f"SPAWN FAILED: {exc}")
+            self._audit(
+                t.handle,
+                argv=t.argv,
+                exit_code=-1,
+                reason=f"SPAWN FAILED: {exc}",
+            )
             await self._offer(
                 t.queue,
                 TaskUpdate(
@@ -256,7 +259,12 @@ class LocalShellAdapter:
         t.last_status = "running"
         await self._offer(
             t.queue,
-            TaskUpdate(handle=t.handle, status="running", ts=_now(), note=" ".join(t.argv)),
+            TaskUpdate(
+                handle=t.handle,
+                status="running",
+                ts=_now(),
+                note=" ".join(t.argv),
+            ),
         )
 
         stdout_task = asyncio.create_task(self._pump_stream(t.process.stdout, t, kind="stdout"))
@@ -266,16 +274,15 @@ class LocalShellAdapter:
             exit_code = await t.process.wait()
         except asyncio.CancelledError:
             t.cancelled = True
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 t.process.kill()
-            except ProcessLookupError:
-                pass
             exit_code = -1
             raise
         finally:
             await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
 
         t.exit_code = exit_code
+
         if t.cancelled:
             t.last_status = "cancelled"
             await self._offer(
@@ -334,7 +341,7 @@ class LocalShellAdapter:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 — stream may close abruptly
+        except Exception:
             return
 
     # ----------------------------------------------------------- validation
@@ -378,20 +385,20 @@ class LocalShellAdapter:
         if candidate is None:
             return str(root)
         # Reject path traversal: candidate must resolve inside root OR equal it.
-        target = (root / candidate).resolve() if not Path(candidate).is_absolute() else Path(candidate).resolve()
+        target = (
+            (root / candidate).resolve()
+            if not Path(candidate).is_absolute()
+            else Path(candidate).resolve()
+        )
         try:
             target.relative_to(root)
         except ValueError as exc:
-            raise ShellNotAllowed(
-                f"working_dir {target} escapes configured root {root}"
-            ) from exc
+            raise ShellNotAllowed(f"working_dir {target} escapes configured root {root}") from exc
         return str(target)
 
     # ----------------------------------------------------------------- audit
 
-    def _audit(
-        self, handle: TaskHandle, *, argv: list[str], exit_code: int, reason: str
-    ) -> None:
+    def _audit(self, handle: TaskHandle, *, argv: list[str], exit_code: int, reason: str) -> None:
         if not self._settings.audit_log:
             return
         path = Path(self._settings.audit_log).expanduser()
@@ -403,7 +410,7 @@ class LocalShellAdapter:
                     f"exit={exit_code}\treason={reason}\t"
                     f"argv={argv!r}\n"
                 )
-        except OSError as exc:  # noqa: BLE001
+        except OSError as exc:
             _log.warning("LocalShellAdapter: audit log write failed: %s", exc)
 
     # ------------------------------------------------------------- back-pressure
@@ -413,16 +420,12 @@ class LocalShellAdapter:
         try:
             queue.put_nowait(item)
         except asyncio.QueueFull:
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 queue.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
             try:
                 queue.put_nowait(item)
             except asyncio.QueueFull:
-                _log.warning(
-                    "LocalShellAdapter: update queue full; dropping update for handle"
-                )
+                _log.warning("LocalShellAdapter: update queue full; dropping update for handle")
 
 
 def make_local_shell_adapter(*_args: Any, **_kwargs: Any) -> LocalShellAdapter:

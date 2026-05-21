@@ -26,9 +26,7 @@ def test_ttsadapter_protocol_isinstance(implementations) -> None:
         pytest.skip("no TTSAdapter implementations registered")
     for name, factory in implementations:
         instance = factory()
-        assert isinstance(instance, TTSAdapter), (
-            f"{name!r} does not satisfy TTSAdapter Protocol"
-        )
+        assert isinstance(instance, TTSAdapter), f"{name!r} does not satisfy TTSAdapter Protocol"
 
 
 @pytest.mark.parametrize("implementations", ["tts"], indirect=True)
@@ -61,9 +59,7 @@ async def test_speak_string_completes(implementations) -> None:
         instance = factory()
         if not _is_hermetic(instance):
             continue
-        await asyncio.wait_for(
-            instance.speak("hello", config=TTSConfig()), timeout=1.0
-        )
+        await asyncio.wait_for(instance.speak("hello", config=TTSConfig()), timeout=1.0)
         any_ran = True
     if not any_ran:
         pytest.skip("no hermetic TTSAdapter implementations registered")

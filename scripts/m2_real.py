@@ -1,9 +1,13 @@
 # scripts/m2_real.py (you can drop this in alongside m2_demo.py)
 import asyncio
+
 from openmimicry.core.bus import EventBus
 from openmimicry.voice import (
-    RealtimeSTTAdapter, RealtimeTTSAdapter, SpeechController,
+    RealtimeSTTAdapter,
+    RealtimeTTSAdapter,
+    SpeechController,
 )
+
 
 async def main():
     bus = EventBus()
@@ -19,5 +23,6 @@ async def main():
         await asyncio.sleep(30.0)
     finally:
         await ctl.stop()
+
 
 asyncio.run(main())

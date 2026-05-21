@@ -83,9 +83,7 @@ class RuleMovementClassifier:
 
     # ------------------------------------------------------------ wave
 
-    def _detect_wave(
-        self, window: Sequence[VisionFrame]
-    ) -> MovementDetection | None:
+    def _detect_wave(self, window: Sequence[VisionFrame]) -> MovementDetection | None:
         # Track the index-tip x trajectory. Need ≥3 frames with hands.
         xs: list[tuple[int, float, str]] = []
         for frame in window:
@@ -116,9 +114,7 @@ class RuleMovementClassifier:
 
     # ----------------------------------------------------- raised_hand
 
-    def _detect_raised_hand(
-        self, window: Sequence[VisionFrame]
-    ) -> MovementDetection | None:
+    def _detect_raised_hand(self, window: Sequence[VisionFrame]) -> MovementDetection | None:
         seen = 0
         raised = 0
         last_hand: str | None = None
@@ -146,9 +142,7 @@ class RuleMovementClassifier:
 
     # ----------------------------------------------------- head nod
 
-    def _detect_nod(
-        self, window: Sequence[VisionFrame]
-    ) -> MovementDetection | None:
+    def _detect_nod(self, window: Sequence[VisionFrame]) -> MovementDetection | None:
         pitches = [f.head.pitch for f in window if f.head is not None]
         if len(pitches) < 3:
             return None
@@ -169,9 +163,7 @@ class RuleMovementClassifier:
 
     # ----------------------------------------------------- head shake
 
-    def _detect_shake(
-        self, window: Sequence[VisionFrame]
-    ) -> MovementDetection | None:
+    def _detect_shake(self, window: Sequence[VisionFrame]) -> MovementDetection | None:
         yaws = [f.head.yaw for f in window if f.head is not None]
         if len(yaws) < 3:
             return None

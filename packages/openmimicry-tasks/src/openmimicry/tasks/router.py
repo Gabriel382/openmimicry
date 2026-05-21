@@ -56,15 +56,12 @@ class TaskRouter:
         self._adapters: dict[str, TaskRuntimeAdapter] = dict(adapters)
         if default_runtime is not None and default_runtime not in self._adapters:
             raise TaskRoutingError(
-                f"default_runtime {default_runtime!r} is not in adapters "
-                f"({list(self._adapters)})"
+                f"default_runtime {default_runtime!r} is not in adapters ({list(self._adapters)})"
             )
         self._default_runtime = default_runtime
         self._handle_to_runtime: dict[str, str] = {}
         # Union of every adapter's capabilities — useful for /health.
-        self.capabilities = set().union(
-            *(a.capabilities for a in self._adapters.values())
-        )
+        self.capabilities = set().union(*(a.capabilities for a in self._adapters.values()))
 
     # ----------------------------------------------------------------- API
 
@@ -92,14 +89,32 @@ class TaskRouter:
 
         # 4. No match.
         raise NoAdapterForCapabilities(
-            f"no adapter satisfies capabilities {required!r} "
-            f"(registered: {list(self._adapters)})"
+            f"no adapter satisfies capabilities {required!r} (registered: {list(self._adapters)})"
         )
 
     async def submit(self, req: TaskRequest) -> TaskHandle:
-        adapter = self.select(req)
+        """Submit a task to the selected adapter and remember ownership."""
+        requested_runtime = req.preferred_runtime
+        runtime = requested_runtime or self._default_runtime
+
+        # In production, a preferred runtime may be unavailable depending on the
+        # installed profile. In tests/dev, intents can request "claude_code" or
+        # "mcp_agent" while only a mock/default adapter is registered.
+        if runtime not in self._adapters:
+            runtime = self._default_runtime
+
+        if runtime is None:
+            raise TaskRoutingError("no runtime selected and no default runtime configured")
+
+        adapter = self._adapters.get(runtime)
+        if adapter is None:
+            raise TaskRoutingError(f"unknown runtime {runtime!r}")
+
         handle = await adapter.submit(req)
-        self._handle_to_runtime[handle.id] = adapter.name
+
+        # Store the router-owned adapter key, not handle.runtime.
+        self._handle_to_runtime[handle.id] = runtime
+
         return handle
 
     async def status(self, handle: TaskHandle) -> TaskStatus:
@@ -121,7 +136,7 @@ class TaskRouter:
             try:
                 if await adapter.healthcheck():
                     return True
-            except Exception:  # noqa: BLE001
+            except Exception:
                 continue
         return False
 
@@ -129,17 +144,15 @@ class TaskRouter:
 
     def _resolve(self, handle: TaskHandle) -> TaskRuntimeAdapter:
         """Find the adapter that owns ``handle``."""
-        # Prefer the runtime field on the handle (set by the chosen adapter).
-        runtime = handle.runtime or self._handle_to_runtime.get(handle.id)
+        runtime = self._handle_to_runtime.get(handle.id) or handle.runtime
+
         if runtime is None:
-            raise TaskRoutingError(
-                f"handle {handle.id!r} has no associated runtime"
-            )
+            raise TaskRoutingError(f"handle {handle.id!r} has no associated runtime")
+
         adapter = self._adapters.get(runtime)
         if adapter is None:
-            raise TaskRoutingError(
-                f"handle {handle.id!r} references unknown runtime {runtime!r}"
-            )
+            raise TaskRoutingError(f"handle {handle.id!r} references unknown runtime {runtime!r}")
+
         return adapter
 
     @property

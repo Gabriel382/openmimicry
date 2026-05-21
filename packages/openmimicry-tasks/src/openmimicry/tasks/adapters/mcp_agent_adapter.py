@@ -14,6 +14,7 @@ shapes if needed.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -124,9 +125,7 @@ class MCPAgentAdapter:
         queue = asyncio.Queue(maxsize=self._settings.queue_maxsize)
         t = _MCPTask(handle=handle, request=req, queue=queue)
         self._handles[handle.id] = t
-        t.task = asyncio.create_task(
-            self._run(t), name=f"openmimicry.tasks.mcp.{handle.id}"
-        )
+        t.task = asyncio.create_task(self._run(t), name=f"openmimicry.tasks.mcp.{handle.id}")
         return handle
 
     async def status(self, handle: TaskHandle) -> TaskStatus:
@@ -148,7 +147,7 @@ class MCPAgentAdapter:
                     res = cancel()
                     if asyncio.iscoroutine(res):
                         await res
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
         if t.task is not None and not t.task.done():
             t.task.cancel()
@@ -171,10 +170,8 @@ class MCPAgentAdapter:
         if t is None:
             return TaskResult(handle=handle, status="failed")
         if t.task is not None:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t.task
-            except asyncio.CancelledError:
-                pass
         if t.cancelled:
             return TaskResult(handle=handle, status="cancelled")
         if t.last_status == "failed":
@@ -209,8 +206,7 @@ class MCPAgentAdapter:
             agent = agent_cls(
                 instructions=t.request.instructions,
                 servers=[
-                    {"name": s.name, "command": list(s.command)}
-                    for s in self._settings.servers
+                    {"name": s.name, "command": list(s.command)} for s in self._settings.servers
                 ],
             )
             t.run_handle = agent
@@ -232,9 +228,7 @@ class MCPAgentAdapter:
                     note = _event_note(event)
                     await self._offer(
                         t.queue,
-                        TaskUpdate(
-                            handle=t.handle, status="running", ts=_now(), note=note
-                        ),
+                        TaskUpdate(handle=t.handle, status="running", ts=_now(), note=note),
                     )
             else:
                 final = await result if asyncio.iscoroutine(result) else result
@@ -256,11 +250,9 @@ class MCPAgentAdapter:
                 )
         except asyncio.CancelledError:
             t.cancelled = True
-            await self._offer(
-                t.queue, TaskUpdate(handle=t.handle, status="cancelled", ts=_now())
-            )
+            await self._offer(t.queue, TaskUpdate(handle=t.handle, status="cancelled", ts=_now()))
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             t.last_status = "failed"
             t.last_note = str(exc)
             _log.warning("MCPAgentAdapter run failed: %s", exc, exc_info=True)
@@ -280,10 +272,8 @@ class MCPAgentAdapter:
         try:
             queue.put_nowait(item)
         except asyncio.QueueFull:
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 queue.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
             try:
                 queue.put_nowait(item)
             except asyncio.QueueFull:
@@ -302,7 +292,7 @@ def _event_note(event: Any) -> str:
             return value
     try:
         return repr(event)[:256]
-    except Exception:  # noqa: BLE001
+    except Exception:
         return "<event>"
 
 
@@ -312,8 +302,7 @@ def _import_mcp_agent() -> Any:
         import mcp_agent  # type: ignore[import-not-found]
     except ImportError as exc:
         raise MCPAgentUnavailable(
-            "mcp-agent is not installed. "
-            'Install with `pip install "openmimicry-tasks[mcp-agent]"`.'
+            'mcp-agent is not installed. Install with `pip install "openmimicry-tasks[mcp-agent]"`.'
         ) from exc
     return mcp_agent
 

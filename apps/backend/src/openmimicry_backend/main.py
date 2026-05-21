@@ -108,7 +108,7 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="0.2.0a0",
+        version="1.0.0",
         lifespan=lifespan,
     )
 

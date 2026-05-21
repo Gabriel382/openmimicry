@@ -61,13 +61,10 @@ def load_detector(name: str, **kwargs: Any) -> Any:
             break
     if match is None:
         raise DetectorUnavailable(
-            f"vision detector {name!r} not registered "
-            f"(available: {available_detectors()})"
+            f"vision detector {name!r} not registered (available: {available_detectors()})"
         )
     try:
         factory = match.load()
     except Exception as exc:
-        raise DetectorUnavailable(
-            f"vision detector {name!r} failed to load: {exc}"
-        ) from exc
+        raise DetectorUnavailable(f"vision detector {name!r} failed to load: {exc}") from exc
     return factory(**kwargs)

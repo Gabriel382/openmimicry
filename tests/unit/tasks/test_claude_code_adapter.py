@@ -107,9 +107,7 @@ async def test_success_streams_stdout(fake_proc_factory) -> None:
         exit_code=0,
     )
     adapter = ClaudeCodeAdapter()
-    handle = await adapter.submit(
-        TaskRequest(summary="s", instructions="refactor utils")
-    )
+    handle = await adapter.submit(TaskRequest(summary="s", instructions="refactor utils"))
     received = [upd async for upd in adapter.updates(handle)]
     statuses = [u.status for u in received]
     assert "running" in statuses
@@ -149,9 +147,7 @@ async def test_env_is_curated(fake_proc_factory, monkeypatch: pytest.MonkeyPatch
 
 async def test_settings_extra_args_forwarded(fake_proc_factory) -> None:
     captured = fake_proc_factory(stdout_lines=[], exit_code=0)
-    adapter = ClaudeCodeAdapter(
-        settings=ClaudeCodeSettings(cli="claude", extra_args=("--print",))
-    )
+    adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(cli="claude", extra_args=("--print",)))
     handle = await adapter.submit(TaskRequest(summary="s", instructions="hi"))
     [_ async for _ in adapter.updates(handle)]
     assert "--print" in captured["argv"]

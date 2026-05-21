@@ -29,9 +29,7 @@ HERMETIC_NAMES: frozenset[str] = frozenset(
 # Pack used to drive `load_character` for the file-backed adapters. The
 # fixture pack is `kind: sprite2d`; ThreeJS logs a warning about the
 # mismatch but accepts the load (M9 brief: "never raise").
-_PACK_FIXTURE_PATH = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "packs" / "good_pack"
-)
+_PACK_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "packs" / "good_pack"
 
 
 def _is_hermetic(adapter) -> bool:

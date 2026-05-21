@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [1.0.0] — first stable release
+
+The contract surface in [`docs/contracts.md`](docs/contracts.md) is frozen.
+Within 1.x, every Protocol, schema, event variant, and §9 wire-protocol message
+stays stable; additive amendments may land in minor releases. A `schema_version`
+bump is reserved for the 2.0 line.
+
+### Highlights at v1.0
+
+- **6 publishable Python packages** behind one Protocol surface: `openmimicry-core`
+  (frozen contracts + EventBus + Runtime + AppConfig), `-llm`, `-voice`, `-avatar`
+  (with five concrete modalities), `-tasks`, `-vision` (optional, off by default).
+- **3 apps**: FastAPI backend (M6, single concrete-adapter assembly point in
+  `wiring.py`), React + Vite frontend with `/overlay` and `/panel` routes (M7),
+  Tauri 2 desktop shell with two windows + tray + global hotkeys (M8).
+- **5 avatar modalities** all behind the same `AvatarRuntimeAdapter` Protocol:
+  Sprite2D (M4), Three.js with VRM/glTF (M9), Live3D drivers over Three.js
+  (M10), Unity bridge with sample Unity project (M11), generic External
+  WebSocket bridge with reference echo server (M12). Live runtime swap is
+  preserved by `AvatarOrchestrator.swap_runtime`.
+- **3 task runtimes** behind `TaskRouter` (M5): allowlist-only LocalShell,
+  ClaudeCode CLI, MCP agent — plus a scripted mock that drives every
+  integration test.
+- **Vision** (M13) — optional MediaPipe Hands / Pose / Face → rule-based +
+  sklearn/ONNX gesture/movement classifiers → `AvatarDirective` overrides.
+  Off by default, consent-gated, frames never leave the process.
+- **Docker** — `docker-compose.yml` + `docker/Dockerfile.{backend,frontend-dev}`.
+  Single command brings up a mocks-only backend with `/health` wired.
+- **Cross-platform**. `make` for Linux / macOS / WSL; `scripts/win/*.bat`
+  wrappers for native Windows. Cross-platform `scripts/doctor.py` confirms
+  the toolchain.
+- **Tests at every layer** — ~250 Python unit + contract + integration tests,
+  Vitest frontend tests, Rust shell tests. CI runs the full suite on every PR.
+
+### Removed in 1.0
+
+- The pre-restructure prototype directories (`avatar/`, `backend/`, `backends/`,
+  `core/`, `frontend/`, `src-tauri/`, `tts/`, `packs/`, `profiles/`). Everything
+  migrated into `packages/` and `apps/` during M0–M13. Run
+  `bash scripts/cleanup-legacy.sh --apply` (or
+  `scripts\win\cleanup-legacy.bat` on Windows) to purge them from an old clone.
+- Root-level milestone notes (`Milestone.md`, `MILESTONE5_INTEGRATION.md`,
+  `PATCH_NOTES.md`, `README_MILESTONE*.md`,
+  `README_EMOTION_SPEAKING_PATCH.md`) — superseded by `docs/modules/M*.md`
+  and the CHANGELOG entries below.
+
+### Versioning
+
+Every workspace package + app + Tauri shell is pinned to `1.0.0`. Cross-package
+`openmimicry-core>=` lower bounds also bumped to `1.0.0`.
+
+### Added (during the 1.0 cycle, oldest → newest)
 
 - **M13 (`openmimicry-vision`):** the fifth sibling package — optional, opt-in webcam → hand / body / head detection + gesture and movement classification. **Off by default**; even with `vision.enabled: true`, no camera opens until the bus sees `ConsentResolved`. **Contracts amendment (additive, Stable, no `schema_version` bump)**: `packages/openmimicry-core/src/openmimicry/core/schemas/vision.py` introduces `Landmark` (3D + visibility/presence), `HandPose` (21 pts), `BodyPose` (33 pts), `HeadPose` (6-DoF + sparse landmarks), top-level `VisionFrame`, `GestureDetection`, `MovementDetection`, and `VisionConfig` (per-detector and per-classifier sub-blocks, `gesture_map` / `movement_map`); `openmimicry.core.contracts.vision` adds `VisionAdapter`, `LandmarkDetector` + specialisations (`HandDetector`, `BodyDetector`, `HeadDetector`), `GestureClassifier`, `MovementClassifier`; five new `RuntimeEvent` variants (`HandPoseStarted`, `HandPoseEnded`, `GestureDetected`, `MovementDetected`, `ConsentRequired`, `ConsentResolved`); `AppConfig.vision: VisionConfig | None`. **Package** `packages/openmimicry-vision/`: `mocks.py` (importable without OpenCV/MediaPipe — `MockVisionAdapter`, `MockHandDetector`, `MockGestureClassifier`, `MockMovementClassifier`); `pipeline/{capture,throttle}.py` (OpenCV-backed `VideoCapture` in a worker thread with drop-oldest queue; `Throttle` + `Debouncer` with pluggable clocks); `pipeline/detectors/{hands,body,head}.py` (MediaPipe Hands / Pose / Face wrappers, all lazy-imported, exposing the duck-typed `LandmarkDetector` Protocol); detector + classifier **entry-point registries** (`openmimicry.contracts.vision_detector` / `..._gesture_classifier` / `..._movement_classifier`) so M14 / third-party adapters can plug in without touching this package. **Default rule-based gesture classifier** (`classifiers/rules.py`) recognises `open_palm`, `fist`, `thumbs_up`, `point`, `peace`, `wave_pose` on the MediaPipe Hands skeleton. **Temporal movement classifier** (`classifiers/movements/rules.py`) recognises `wave_motion`, `raised_hand`, `nodding`, `shaking_head` from a sliding `VisionFrame` window. Optional `sklearn` and `onnx` loaders (`classifiers/{sklearn,onnx}.py`) lazy-import their heavy deps and `ClassifierUnavailable`-fail gracefully. **`MediaPipeVisionAdapter`** composes capture → detectors → classifiers → bus, with target-fps throttling, per-gesture debouncing, and a `consent_resolver` gate that refuses to start until consent is granted. **`director_mapping.py`** turns `GestureDetection` / `MovementDetection` into `AvatarDirective` overrides via `vision.gesture_map` / `vision.movement_map` (whitelisted keys only — garbage fields are dropped). **Sample profile** `config/profiles/vision.yaml` (basic + mock voice + MediaPipe vision + sample maps). **`scripts/doctor.py`** gains a `_check_vision_stack()` section that warns when OpenCV / MediaPipe / `openmimicry.vision` aren't importable; camera-probe is env-gated behind `OPENMIMICRY_DOCTOR_PROBE_CAMERA=1`. **Tests**: `tests/unit/vision/{test_throttle,test_classifiers_rules,test_movement_rules,test_mocks,test_director_mapping,test_mediapipe_adapter}.py` — throttle + debounce edge cases, every rule-based gesture against hand-crafted 21-point skeletons, every movement rule against synthetic frame windows, `MockVisionAdapter` lifecycle + Protocol satisfaction, director mapping (whitelisted keys, duration fallback, provenance metadata), and `MediaPipeVisionAdapter` end-to-end with a fake `VideoCapture` + fake hand detector (no MediaPipe import in the test path); contract test `tests/contract/test_vision.py` with a hermetic guard set to `{"mock"}`. **`Makefile`** already installed `packages/openmimicry-vision` for `PROFILE=vision`; no change needed.
 - **MX (tooling baseline):** workspace `pyproject.toml` with Ruff, pyright, pytest, coverage configuration. `.pre-commit-config.yaml` with ruff + commitlint. `.editorconfig`. `Makefile` targets `lint`, `format`, `typecheck`, `test`, `ci`, `check-imports`, `validate-packs`, `pre-commit-install`. Cross-platform `scripts/doctor.py` and `scripts/check_imports.py`. GitHub Actions: `ci.yml`, `release.yml`, `codeql.yml`. Dependabot grouped weekly updates.

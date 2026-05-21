@@ -1,7 +1,0 @@
-name = "extended"
-description = "Extended profile with Live2D and voice-ready extras."
-packs = ["core-base", "avatar-2d", "avatar-vrm", "avatar-live2d", "voice-core"]
-
-[runtime_overrides]
-avatar_runtime = "live2d"
-log_level = "INFO"

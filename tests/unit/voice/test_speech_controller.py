@@ -11,8 +11,6 @@ Covers, per the brief's DoD:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from datetime import datetime, timezone
 
 import pytest
 from openmimicry.core.bus import EventBus
@@ -20,7 +18,6 @@ from openmimicry.core.schemas import (
     RuntimeEvent,
     TTSFinished,
     TTSInterrupted,
-    TTSStarted,
     UserSpeechFinal,
     UserSpeechStarted,
 )
@@ -31,8 +28,8 @@ from openmimicry.core.schemas.app import (
     VoiceConfig,
     VoiceModesConfig,
 )
-from openmimicry.voice.mocks import MockSTTAdapter, MockTTSAdapter
 from openmimicry.voice.controllers.speech import SpeechController
+from openmimicry.voice.mocks import MockSTTAdapter, MockTTSAdapter
 
 
 def _voice_config(**modes_overrides) -> VoiceConfig:
@@ -73,6 +70,7 @@ async def controller():
         await ctl.stop()
         await bus.aclose()
 
+
 async def test_say_publishes_started_and_finished(controller) -> None:
     ctl, bus, _stt, tts = controller
 
@@ -96,6 +94,7 @@ async def test_say_publishes_started_and_finished(controller) -> None:
     assert kinds[0] == "TTSStarted"
     assert "TTSFinished" in kinds
     assert tts.spoken == ["hi"]
+
 
 async def test_say_cancels_previous_and_publishes_interrupted(controller) -> None:
     ctl, bus, _stt, tts = controller
@@ -129,7 +128,7 @@ async def test_say_cancels_previous_and_publishes_interrupted(controller) -> Non
 
 
 async def test_ptt_down_cancels_tts_within_100ms(controller) -> None:
-    ctl, bus, _stt, tts = controller
+    ctl, _bus, _stt, tts = controller
     tts._chunk_interval_s = 0.1  # type: ignore[attr-defined]
 
     await ctl.say("hello there long")

@@ -1,7 +1,7 @@
 {
   "name": "openmimicry-workspace",
   "private": true,
-  "version": "0.2.0-alpha.0",
+  "version": "1.0.0",
   "description": "OpenMimicry JavaScript workspace root. Use pnpm 11.x (see SECURITY.md).",
   "packageManager": "pnpm@11.0.0",
   "engines": {

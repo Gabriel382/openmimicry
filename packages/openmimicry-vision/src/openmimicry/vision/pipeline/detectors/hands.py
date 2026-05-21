@@ -60,7 +60,7 @@ class MediaPipeHandsDetector:
                 min_tracking_confidence=self._min_tracking,
                 model_complexity=self._model_complexity,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise MediaPipeUnavailable(
                 f"failed to construct mediapipe.solutions.hands.Hands: {exc}"
             ) from exc
@@ -74,7 +74,7 @@ class MediaPipeHandsDetector:
             return
         try:
             hands.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("MediaPipeHandsDetector close raised: %s", exc)
 
     async def detect(self, frame_bgr: Any) -> list[HandPose]:
@@ -109,9 +109,7 @@ class MediaPipeHandsDetector:
                 HandPose(
                     hand=label,  # type: ignore[arg-type]
                     confidence=score,
-                    landmarks=[
-                        Landmark(x=p.x, y=p.y, z=p.z) for p in landmarks.landmark
-                    ],
+                    landmarks=[Landmark(x=p.x, y=p.y, z=p.z) for p in landmarks.landmark],
                 )
             )
         return poses

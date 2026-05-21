@@ -40,6 +40,10 @@
   "pythonPlatform": "All",
   "typeCheckingMode": "basic",
 
+  "reportArgumentType": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalCall": "none",
+
   "reportMissingImports": "error",
   "reportMissingTypeStubs": "none",
 

@@ -36,9 +36,7 @@ class OnnxGestureClassifier:
         input_name: str | None = None,
     ) -> None:
         if not path:
-            raise ClassifierUnavailable(
-                "OnnxGestureClassifier requires path=<.onnx model>"
-            )
+            raise ClassifierUnavailable("OnnxGestureClassifier requires path=<.onnx model>")
         if not labels:
             raise ClassifierUnavailable(
                 "OnnxGestureClassifier requires labels=[list of class names]"
@@ -57,18 +55,14 @@ class OnnxGestureClassifier:
         except ImportError as exc:
             raise ClassifierUnavailable(
                 "onnxruntime is not installed. Install with "
-                "`pip install \"openmimicry-vision[onnx]\"`."
+                '`pip install "openmimicry-vision[onnx]"`.'
             ) from exc
         try:
             self._session = ort.InferenceSession(str(self._path))
         except FileNotFoundError as exc:
-            raise ClassifierUnavailable(
-                f"onnx model not found at {self._path}"
-            ) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ClassifierUnavailable(
-                f"failed to load onnx model {self._path}: {exc}"
-            ) from exc
+            raise ClassifierUnavailable(f"onnx model not found at {self._path}") from exc
+        except Exception as exc:
+            raise ClassifierUnavailable(f"failed to load onnx model {self._path}: {exc}") from exc
         # Pick input name.
         try:
             inputs = self._session.get_inputs()
@@ -78,7 +72,7 @@ class OnnxGestureClassifier:
                 self._input_name = inputs[0].name
             else:
                 self._input_name = "input"
-        except Exception:  # noqa: BLE001
+        except Exception:
             self._input_name = self._input_name_hint or "input"
 
     def classify(self, pose: HandPose) -> GestureDetection | None:
@@ -91,7 +85,7 @@ class OnnxGestureClassifier:
         vec = _featurise(pose, np)
         try:
             out = self._session.run(None, {self._input_name: vec.reshape(1, -1)})
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("OnnxGestureClassifier inference raised: %s", exc)
             return None
         if not out:
@@ -100,7 +94,7 @@ class OnnxGestureClassifier:
         try:
             idx = int(probs.argmax())
             confidence = float(probs[idx])
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
         if confidence < self._threshold:
             return None

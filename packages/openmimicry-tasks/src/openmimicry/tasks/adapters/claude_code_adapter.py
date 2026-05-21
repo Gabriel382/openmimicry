@@ -16,10 +16,10 @@ Per the M5 brief:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
-import shlex
 import shutil
 import uuid
 from collections.abc import AsyncIterator
@@ -117,9 +117,7 @@ class ClaudeCodeAdapter:
         queue: asyncio.Queue = asyncio.Queue(maxsize=self._settings.queue_maxsize)
         t = _ClaudeTask(handle=handle, request=req, queue=queue)
         self._handles[handle.id] = t
-        t.task = asyncio.create_task(
-            self._run(t), name=f"openmimicry.tasks.claude.{handle.id}"
-        )
+        t.task = asyncio.create_task(self._run(t), name=f"openmimicry.tasks.claude.{handle.id}")
         return handle
 
     async def status(self, handle: TaskHandle) -> TaskStatus:
@@ -142,11 +140,9 @@ class ClaudeCodeAdapter:
             return
         try:
             await asyncio.wait_for(proc.wait(), timeout=self._settings.cancel_grace_s)
-        except asyncio.TimeoutError:
-            try:
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            except ProcessLookupError:
-                pass
 
     def updates(self, handle: TaskHandle) -> AsyncIterator[TaskUpdate]:
         return self._iter_updates(handle)
@@ -166,10 +162,8 @@ class ClaudeCodeAdapter:
         if t is None:
             return TaskResult(handle=handle, status="failed")
         if t.task is not None:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await t.task
-            except asyncio.CancelledError:
-                pass
         if t.cancelled:
             return TaskResult(handle=handle, status="cancelled", artifacts=t.artifacts)
         if t.last_status == "failed":
@@ -265,7 +259,7 @@ class ClaudeCodeAdapter:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             t.last_status = "failed"
             t.last_note = str(exc)
             await self._offer(
@@ -302,10 +296,8 @@ class ClaudeCodeAdapter:
             exit_code = await t.process.wait()
         except asyncio.CancelledError:
             t.cancelled = True
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 t.process.kill()
-            except ProcessLookupError:
-                pass
             exit_code = -1
             raise
         finally:
@@ -367,7 +359,7 @@ class ClaudeCodeAdapter:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
 
     async def _drain_stderr(self, t: _ClaudeTask) -> None:
@@ -391,19 +383,17 @@ class ClaudeCodeAdapter:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
 
     def _parse_note(self, line: str, t: _ClaudeTask) -> str | None:
-        if (m := _WROTE_FILE_RE.match(line)):
+        if m := _WROTE_FILE_RE.match(line):
             path = m.group("path").strip()
-            t.artifacts.append(
-                Artifact(name=Path(path).name, mime="text/plain", path=path)
-            )
+            t.artifacts.append(Artifact(name=Path(path).name, mime="text/plain", path=path))
             return f"wrote {path}"
-        if (m := _RAN_CMD_RE.match(line)):
+        if m := _RAN_CMD_RE.match(line):
             return f"ran {m.group('cmd').strip()}"
-        if (m := _ERROR_RE.match(line)):
+        if m := _ERROR_RE.match(line):
             return f"error: {m.group('msg').strip()}"
         return None
 
@@ -411,10 +401,8 @@ class ClaudeCodeAdapter:
         try:
             queue.put_nowait(item)
         except asyncio.QueueFull:
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 queue.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
             try:
                 queue.put_nowait(item)
             except asyncio.QueueFull:

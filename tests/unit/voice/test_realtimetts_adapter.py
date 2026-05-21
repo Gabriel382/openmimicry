@@ -96,9 +96,7 @@ async def test_stop_cancels_play(monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_realtimetts(monkeypatch)
     adapter = RealtimeTTSAdapter()
 
-    speak_task = asyncio.create_task(
-        adapter.speak("long sentence " * 20, config=TTSConfig())
-    )
+    speak_task = asyncio.create_task(adapter.speak("long sentence " * 20, config=TTSConfig()))
     await asyncio.sleep(0.04)
     assert adapter.is_speaking is True
 

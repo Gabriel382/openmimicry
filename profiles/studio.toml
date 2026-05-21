@@ -1,7 +1,0 @@
-name = "studio"
-description = "Studio profile with creator tools and state-authoring helpers."
-packs = ["core-base", "avatar-2d", "avatar-vrm", "avatar-live2d", "voice-core", "state-studio"]
-
-[runtime_overrides]
-avatar_runtime = "vrm"
-log_level = "DEBUG"

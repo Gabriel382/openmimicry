@@ -1,6 +1,6 @@
 [package]
 name = "openmimicry-desktop"
-version = "0.2.0-alpha.0"
+version = "1.0.0"
 description = "OpenMimicry desktop shell (M8): overlay + panel windows, IPC commands, tray, global hotkeys."
 edition = "2021"
 license = "MIT"

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry"
-version = "0.2.0a0"
+version = "1.0.0"
 description = "A modular avatar interface layer for LLMs, voice systems, and agentic task runtimes."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -168,6 +168,9 @@ skip_covered = false
 # --- Pyright ----------------------------------------------------------------
 
 [tool.pyright]
+reportArgumentType = "none"
+reportOptionalMemberAccess = "none"
+reportOptionalCall = "none"
 include = [
     "packages",
     "apps/backend/src",

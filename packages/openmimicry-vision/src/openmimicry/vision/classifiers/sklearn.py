@@ -43,9 +43,7 @@ class SklearnGestureClassifier:
         labels: list[str] | None = None,
     ) -> None:
         if not path:
-            raise ClassifierUnavailable(
-                "SklearnGestureClassifier requires path=<.joblib bundle>"
-            )
+            raise ClassifierUnavailable("SklearnGestureClassifier requires path=<.joblib bundle>")
         self._path = Path(path).expanduser()
         self._threshold = max(0.0, min(1.0, threshold))
         self._labels_override = list(labels) if labels else None
@@ -58,16 +56,13 @@ class SklearnGestureClassifier:
             import joblib  # type: ignore[import-not-found]
         except ImportError as exc:
             raise ClassifierUnavailable(
-                "joblib is not installed. Install with "
-                "`pip install \"openmimicry-vision[sklearn]\"`."
+                'joblib is not installed. Install with `pip install "openmimicry-vision[sklearn]"`.'
             ) from exc
         try:
             bundle = joblib.load(self._path)
         except FileNotFoundError as exc:
-            raise ClassifierUnavailable(
-                f"sklearn bundle not found at {self._path}"
-            ) from exc
-        except Exception as exc:  # noqa: BLE001
+            raise ClassifierUnavailable(f"sklearn bundle not found at {self._path}") from exc
+        except Exception as exc:
             raise ClassifierUnavailable(
                 f"failed to load sklearn bundle {self._path}: {exc}"
             ) from exc
@@ -81,9 +76,7 @@ class SklearnGestureClassifier:
             labels = []
         self._labels = self._labels_override or list(labels)
         if not hasattr(self._estimator, "predict"):
-            raise ClassifierUnavailable(
-                f"sklearn bundle at {self._path} has no .predict()"
-            )
+            raise ClassifierUnavailable(f"sklearn bundle at {self._path} has no .predict()")
 
     def classify(self, pose: HandPose) -> GestureDetection | None:
         if self._estimator is None or len(pose.landmarks) < 21:
@@ -101,15 +94,12 @@ class SklearnGestureClassifier:
             else:
                 idx = int(self._estimator.predict(vec.reshape(1, -1))[0])
                 confidence = 1.0
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("SklearnGestureClassifier predict raised: %s", exc)
             return None
         if confidence < self._threshold:
             return None
-        if 0 <= idx < len(self._labels):
-            name = self._labels[idx]
-        else:
-            name = str(idx)
+        name = self._labels[idx] if 0 <= idx < len(self._labels) else str(idx)
         return GestureDetection(
             name=name,
             modality="hand",

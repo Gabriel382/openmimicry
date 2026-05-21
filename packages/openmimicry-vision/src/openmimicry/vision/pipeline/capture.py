@@ -14,6 +14,7 @@ queue via the event loop's :meth:`call_soon_threadsafe`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import threading
 from typing import Any
@@ -85,20 +86,21 @@ class VideoCapture:
             cv2 = _import_cv2()
         except CameraUnavailable:
             raise
-        args = (self._camera_index, self._backend) if self._backend is not None else (
-            self._camera_index,
+        args = (
+            (self._camera_index, self._backend)
+            if self._backend is not None
+            else (self._camera_index,)
         )
         self._cap = cv2.VideoCapture(*args)
         if not self._cap.isOpened():
             self._cap = None
             raise CameraUnavailable(
-                f"failed to open camera index {self._camera_index!r}; "
-                "is another app using it?"
+                f"failed to open camera index {self._camera_index!r}; is another app using it?"
             )
         try:
             # Best-effort: drivers usually ignore these but don't error.
             self._cap.set(cv2.CAP_PROP_FPS, self._target_fps)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("VideoCapture: ignoring CAP_PROP_FPS error: %s", exc)
 
         self._loop = asyncio.get_running_loop()
@@ -122,7 +124,7 @@ class VideoCapture:
         if cap is not None:
             try:
                 cap.release()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.debug("VideoCapture: cap.release() raised: %s", exc)
         self._cap = None
         # Wake any consumer with a sentinel.
@@ -140,7 +142,7 @@ class VideoCapture:
         while self._running.is_set():
             try:
                 ok, frame = cap.read()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("VideoCapture: cap.read() raised: %s", exc)
                 break
             if not ok:
@@ -156,10 +158,8 @@ class VideoCapture:
             return
         except asyncio.QueueFull:
             pass
-        try:
+        with contextlib.suppress(asyncio.QueueEmpty):
             self._queue.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
         try:
             self._queue.put_nowait(frame)
         except asyncio.QueueFull:
@@ -171,7 +171,6 @@ def _import_cv2() -> Any:
         import cv2  # type: ignore[import-not-found]
     except ImportError as exc:
         raise CameraUnavailable(
-            "OpenCV is not installed. Install with "
-            "`pip install \"openmimicry-vision[mediapipe]\"`."
+            'OpenCV is not installed. Install with `pip install "openmimicry-vision[mediapipe]"`.'
         ) from exc
     return cv2

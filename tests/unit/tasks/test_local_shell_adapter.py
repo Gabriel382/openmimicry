@@ -114,12 +114,8 @@ async def test_successful_command_runs_and_logs(tmp_path: Path) -> None:
         allowlist=(AllowlistEntry(cmd="python", flag_patterns=("-V", "--version")),),
     )
     if Path(sys.executable).name not in {"python", "python.exe", "python3"}:
-        pytest.skip(
-            "python executable not directly invokable from argv[0]='python'"
-        )
-    handle = await adapter.submit(
-        TaskRequest(summary="version", instructions="python -V")
-    )
+        pytest.skip("python executable not directly invokable from argv[0]='python'")
+    handle = await adapter.submit(TaskRequest(summary="version", instructions="python -V"))
     received = [upd async for upd in adapter.updates(handle)]
     statuses = [u.status for u in received]
     assert "running" in statuses
@@ -141,9 +137,7 @@ async def test_cancel_terminates_running_process(tmp_path: Path) -> None:
         allowlist=(AllowlistEntry(cmd="sleep", positional_pattern=r"\d+"),),
         cancel_grace_s=0.3,
     )
-    handle = await adapter.submit(
-        TaskRequest(summary="sleep", instructions="sleep 5")
-    )
+    handle = await adapter.submit(TaskRequest(summary="sleep", instructions="sleep 5"))
     # Give the process a moment to actually start.
     await asyncio.sleep(0.05)
     await adapter.cancel(handle)

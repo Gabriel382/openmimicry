@@ -25,9 +25,7 @@ def test_sttadapter_protocol_isinstance(implementations) -> None:
         pytest.skip("no STTAdapter implementations registered")
     for name, factory in implementations:
         instance = factory()
-        assert isinstance(instance, STTAdapter), (
-            f"{name!r} does not satisfy STTAdapter Protocol"
-        )
+        assert isinstance(instance, STTAdapter), f"{name!r} does not satisfy STTAdapter Protocol"
 
 
 @pytest.mark.parametrize("implementations", ["stt"], indirect=True)

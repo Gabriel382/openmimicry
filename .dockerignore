@@ -1,0 +1,32 @@
+# Keep Docker build context small + deterministic.
+.git
+.github
+.venv
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/node_modules
+**/dist
+**/build
+**/*.egg-info
+**/target
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+**/.next
+**/.vite
+*.log
+.env
+.env.*
+# Legacy prototype directories (post-v1.0 cleanup script removes these
+# locally; keep them out of the build context regardless).
+avatar
+backend
+backends
+core
+frontend
+src-tauri
+tts
+packs
+profiles
