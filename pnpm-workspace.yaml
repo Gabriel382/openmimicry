@@ -18,9 +18,9 @@ auditConfig:
 catalog:
   react: 18.3.1
   react-dom: 18.3.1
-  typescript: 5.6.3
+  typescript: 5.9.3
   vite: 5.4.10
-  vitest: 2.1.4
+  vitest: 2.1.9
 
 # Postinstall-script allowlist (`approve-builds`).
 # pnpm refuses to execute install lifecycle scripts unless the package is
