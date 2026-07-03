@@ -14,7 +14,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
-use tauri::{AppHandle, Manager, Runtime};
+// `Manager` isn't used directly; `Emitter` is the trait that brings
+// `handle.emit(...)` into scope under Tauri 2.x.
+use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::commands;
@@ -97,10 +99,10 @@ pub fn register_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     plugin.on_shortcut(ptt, move |handle, _shortcut, event| {
         match event.state() {
             ShortcutState::Pressed => {
-                let _ = handle.emit("ptt.down", ());
+                let _ = handle.emit("ptt:down", ());
             }
             ShortcutState::Released => {
-                let _ = handle.emit("ptt.up", ());
+                let _ = handle.emit("ptt:up", ());
             }
         }
     })?;
@@ -113,7 +115,7 @@ pub fn register_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
         INTERACTIVE.store(next, Ordering::SeqCst);
         if let Some(window) = overlay::overlay_window(handle) {
             let _ = overlay::set_interactive(&window, next);
-            let _ = handle.emit("overlay.interactive", next);
+            let _ = handle.emit("overlay:interactive", next);
         }
     })?;
 

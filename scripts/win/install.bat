@@ -5,11 +5,11 @@ setlocal enableextensions enabledelayedexpansion
 set "PROFILE=%~1"
 if "%PROFILE%"=="" set "PROFILE=basic"
 
-where make >nul 2>nul
-if %errorlevel%==0 (
-    make install PROFILE=%PROFILE%
-    goto :eof
-)
+REM where make >nul 2>nul
+REM if %errorlevel%==0 (
+REM     make install PROFILE=%PROFILE%
+REM     goto :eof
+REM )
 
 REM ----- Fallback path when GNU make isn't available ---------------------
 set "VENV=.venv"

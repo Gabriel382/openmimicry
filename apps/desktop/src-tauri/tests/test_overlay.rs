@@ -2,7 +2,7 @@
 //! so we only cover the pure helpers here. The unit tests inside
 //! `src/overlay.rs` cover the clamp + safe-corner exhaustively.
 
-use openmimicry_desktop::overlay::{clamp_to_monitor, safe_corner, Rect};
+use openmimicry_desktop_lib::overlay::{clamp_to_monitor, safe_corner, Rect};
 use tauri::{PhysicalPosition, PhysicalSize};
 
 #[test]

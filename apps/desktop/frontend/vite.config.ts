@@ -14,20 +14,33 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      // Generic `/api/...` rewrite path (left in for callers that
+      // prefer prefixed URLs).
       "/api": {
         target: BACKEND_HOST,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
+      // WebSocket bridge to the M6 backend.
       "/ws": {
         target: BACKEND_HOST.replace(/^http/, "ws"),
         ws: true,
         changeOrigin: true,
       },
+      // Static character assets (sprite frames, VRM meshes).
       "/static": {
         target: BACKEND_HOST,
         changeOrigin: true,
       },
+      // Bare backend routes — let the frontend fetch them without the
+      // `/api/` prefix. Mirrors `apps/backend/.../routes/*.py`.
+      "/chat": { target: BACKEND_HOST, changeOrigin: true },
+      "/health": { target: BACKEND_HOST, changeOrigin: true },
+      "/mode": { target: BACKEND_HOST, changeOrigin: true },
+      "/pack": { target: BACKEND_HOST, changeOrigin: true },
+      "/runtime": { target: BACKEND_HOST, changeOrigin: true },
+      "/admin": { target: BACKEND_HOST, changeOrigin: true },
+      "/config": { target: BACKEND_HOST, changeOrigin: true },
     },
   },
   build: {

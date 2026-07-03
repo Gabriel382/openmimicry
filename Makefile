@@ -1,7 +1,16 @@
-PYTHON ?= python3
 PROFILE ?= basic
 
+# Default Python interpreter, OS-aware.
+#   - Linux / macOS / WSL ship `python3` on PATH; `python` may be missing.
+#   - Windows ships `python.exe` (and the Python launcher `py.exe`). The
+#     `python3` alias on stock Windows is the Microsoft Store stub, which
+#     pops an install prompt instead of running, so it must NOT be the
+#     default there.
+#
+# Override with `make install PYTHON=py` if your Windows install uses
+# the launcher instead of `python.exe`.
 ifeq ($(OS),Windows_NT)
+	PYTHON ?= python
 	VENV_DIR := .venv
 	VENV_PYTHON := $(VENV_DIR)/Scripts/python.exe
 	PNPM_CMD := pnpm.cmd
@@ -9,6 +18,7 @@ ifeq ($(OS),Windows_NT)
 	RM_VENV := if exist .venv rmdir /s /q .venv
 	SHELL_PY := python
 else
+	PYTHON ?= python3
 	VENV_DIR := .venv
 	VENV_PYTHON := $(VENV_DIR)/bin/python
 	PNPM_CMD := pnpm

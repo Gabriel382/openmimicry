@@ -11,7 +11,9 @@ use anyhow::Result;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime};
+// Tauri 2.x: `emit` lives on the `Emitter` trait, `listen` on
+// `Listener`. Both must be in scope at call sites.
+use tauri::{AppHandle, Emitter, Event, Listener, Manager, Runtime};
 
 /// RGBA colour for an emotion. Order matches the frozen emotion enum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,9 +97,11 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
         })
         .build(app)?;
 
-    // Listen for emotion updates emitted by the frontend.
+    // Listen for emotion updates emitted by the frontend. The closure
+    // arg is annotated so type inference doesn't choke when the
+    // `Listener` trait is in scope through `tauri::Listener`.
     let app_for_listener = app.clone();
-    app.listen("avatar.emotion", move |evt| {
+    app.listen("avatar:emotion", move |evt: Event| {
         let payload = evt.payload();
         let emotion = payload.trim_matches('"');
         let color = emotion_to_color(emotion);
@@ -156,16 +160,16 @@ fn on_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
             }
         }
         "toggle_interact" => {
-            let _ = app.emit("tray.toggle_interact", ());
+            let _ = app.emit("tray:toggle_interact", ());
         }
         "mute_mic" => {
-            let _ = app.emit("tray.mute_mic", ());
+            let _ = app.emit("tray:mute_mic", ());
         }
         "mute_voice" => {
-            let _ = app.emit("tray.mute_voice", ());
+            let _ = app.emit("tray:mute_voice", ());
         }
         "pause_live_wake" => {
-            let _ = app.emit("tray.pause_live_wake", ());
+            let _ = app.emit("tray:pause_live_wake", ());
         }
         "quit" => {
             app.exit(0);

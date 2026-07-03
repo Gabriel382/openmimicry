@@ -1,6 +1,6 @@
 //! State persistence — save -> load roundtrip + tmpfile-atomic invariant.
 
-use openmimicry_desktop::state::{load_from, save_to, AppState, PersistedState, SCHEMA};
+use openmimicry_desktop_lib::state::{load_from, save_to, AppState, PersistedState, SCHEMA};
 
 #[test]
 fn state_roundtrips_through_disk() {

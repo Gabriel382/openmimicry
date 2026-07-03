@@ -1,6 +1,6 @@
 //! Tray mood-pixel mapping + render-buffer shape.
 
-use openmimicry_desktop::tray::{emotion_to_color, render_mood_pixel};
+use openmimicry_desktop_lib::tray::{emotion_to_color, render_mood_pixel};
 
 #[test]
 fn emotion_table_matches_brief() {

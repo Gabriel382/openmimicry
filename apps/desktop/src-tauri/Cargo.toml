@@ -8,7 +8,11 @@ build = "build.rs"
 rust-version = "1.77"
 
 [lib]
-name = "openmimicry_desktop"
+# Suffixed with `_lib` to avoid the Cargo output-filename collision on
+# Windows: `openmimicry-desktop` (bin) and `openmimicry_desktop` (lib)
+# both normalise to the same `.pdb`. The official Tauri 2 scaffold uses
+# the same convention.
+name = "openmimicry_desktop_lib"
 path = "src/lib.rs"
 # `cdylib` is required for the Tauri build to produce the bundle entry
 # point; the static lib is what the binary + the test target link

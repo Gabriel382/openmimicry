@@ -4,7 +4,9 @@
 //! plain string error message rather than a Rust debug payload.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, PhysicalPosition, Runtime};
+// Tauri 2.x: `emit` is a trait method on `Emitter`; the trait must be in
+// scope wherever `app.emit(...)` is called.
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime};
 
 use crate::overlay::{self, Rect};
 use crate::state::AppState;
@@ -27,7 +29,7 @@ pub fn set_overlay_interactive<R: Runtime>(
     if let Some(state) = app.try_state::<AppState>() {
         let _ = state.mutate(|s| s.interactive = interactive);
     }
-    let _ = app.emit("overlay.interactive", interactive);
+    let _ = app.emit("overlay:interactive", interactive);
     Ok(())
 }
 
@@ -47,7 +49,7 @@ pub fn swap_avatar_runtime<R: Runtime>(
         let runtime_cloned = runtime.clone();
         let _ = state.mutate(|s| s.runtime = Some(runtime_cloned));
     }
-    app.emit("avatar.swap_runtime", runtime.as_str())
+    app.emit("avatar:swap_runtime", runtime.as_str())
         .map_err(|e| e.to_string())
 }
 

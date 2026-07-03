@@ -1,0 +1,75 @@
+# OpenMimicry character pack — Octomimic (default Sprite2D pack).
+#
+# Schema version 1 — matches `docs/character_packs.md` + the loader in
+# `packages/openmimicry-avatar/src/openmimicry/avatar/pack/loader.py`.
+#
+# `frames:` and `speaking_frames:` accept either an explicit list of
+# image paths OR a directory name — the loader scans the directory
+# for PNGs and sorts them numerically. Every dir below
+# (`idle/`, `idle_speaking/`, …) was created by the v0.x prototype
+# and is still on disk after the v1.0 cleanup.
+
+schema_version: 1
+id: octomimic
+name: OctoMimic
+author: OpenMimicry
+license: MIT
+kind: sprite2d
+preview: bubble.png
+default_state: idle
+default_emotion: neutral
+transition_ms: 120
+celebration_ms: 1200
+error_ms: 1000
+
+emotions:
+  idle:
+    frames: idle
+    speaking_frames: idle_speaking
+    fps: 5
+    loop: true
+
+  listening:
+    frames: listening
+    speaking_frames: listening_speaking
+    fps: 6
+    loop: true
+
+  thinking:
+    frames: thinking
+    speaking_frames: thinking_speaking
+    fps: 7
+    loop: true
+
+  speaking:
+    frames: speaking
+    speaking_frames: speaking
+    fps: 9
+    loop: true
+
+  happy:
+    frames: idle
+    speaking_frames: happy_speaking
+    fps: 9
+    loop: false
+    return_to: idle
+    hold_ms: 1200
+
+  error:
+    frames: error
+    speaking_frames: error_speaking
+    fps: 8
+    loop: false
+    return_to: idle
+    hold_ms: 1000
+
+voice_hint:
+  default: en_female_1
+
+metadata:
+  notes: |
+    The bundled OctoMimic frames came over from the v0.x prototype.
+    `happy` reuses the idle base frames so the static pose is calm;
+    `happy_speaking` is the celebratory pose. The loader is happy
+    with one or the other — drop a dedicated `happy/` directory if
+    you want distinct happy frames in non-speaking mode.

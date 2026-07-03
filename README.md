@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/openmimicry-icon.png" alt="OpenMimicry — watercolor jester-mask mascot" width="220" />
+
 # OpenMimicry
 
 **An open-source desktop companion: animated 2D/3D avatars, voice, and agentic task runtimes — all behind a frozen contract surface.**
@@ -190,14 +192,15 @@ Full spec: [`docs/contracts.md`](docs/contracts.md) §9. Additive amendments for
 
 ```
 openmimicry/
-├── packages/                       # 6 publishable Python packages
-│   ├── openmimicry-core/           # Phase 0 — frozen contracts + schemas + runtime
-│   ├── openmimicry-llm/            # M1
-│   ├── openmimicry-voice/          # M2
-│   ├── openmimicry-avatar/         # M3 (core) + M4 (Sprite2D) + M9 (ThreeJS) + M10 (Live3D)
-│   │                               #          + M11 (Unity) + M12 (External)
-│   ├── openmimicry-tasks/          # M5
-│   └── openmimicry-vision/         # M13 (optional, off by default)
+├── packages/                       # 8 publishable Python packages
+│   ├── openmimicry-core/           # Foundation — frozen contracts + schemas + runtime
+│   ├── openmimicry-llm/            # Cognition — M1
+│   ├── openmimicry-voice/          # M2 — source of truth for STT + TTS adapters
+│   ├── openmimicry-stt/            # Sensor-layer facade over openmimicry-voice (STT)
+│   ├── openmimicry-tts/            # Effector-layer facade over openmimicry-voice (TTS)
+│   ├── openmimicry-avatar/         # Effectors — M3/M4/M9/M10/M11/M12 + AvatarDirector
+│   ├── openmimicry-tasks/          # Effectors — M5
+│   └── openmimicry-vision/         # Sensors — M13 (optional, off by default)
 ├── apps/
 │   ├── backend/                    # M6 — FastAPI process; wiring.py is the assembly point
 │   ├── desktop/
@@ -280,6 +283,7 @@ bash scripts/cleanup-legacy.sh --apply
 
 ## Documentation
 
+- **Layered architecture**: [`docs/architecture/`](docs/architecture/) — the 5-layer mental model (Foundation / Sensors / Cognition / Effectors / Surfaces), one doc per layer, and a [working-independently guide](docs/architecture/working_independently.md) for picking up one package at a time.
 - **Architecture & contracts**: [`docs/contracts.md`](docs/contracts.md), [`docs/architecture.md`](docs/architecture.md), [`docs/event_flows.md`](docs/event_flows.md)
 - **Per-modality briefs**: [`docs/modules/`](docs/modules/) — one numbered plan per M*
 - **Avatar specifics**: [`docs/character_packs.md`](docs/character_packs.md), [`docs/avatar_modalities.md`](docs/avatar_modalities.md), [`docs/desktop_overlay.md`](docs/desktop_overlay.md)

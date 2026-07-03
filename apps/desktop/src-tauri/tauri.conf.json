@@ -41,7 +41,7 @@
         "decorations": true,
         "alwaysOnTop": false,
         "resizable": true,
-        "visible": false,
+        "visible": true,
         "fullscreen": false
       }
     ],

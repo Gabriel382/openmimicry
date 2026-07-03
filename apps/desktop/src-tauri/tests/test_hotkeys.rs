@@ -2,7 +2,7 @@
 //! we only test the parser here; the live wiring is exercised in the
 //! manual smoke test.
 
-use openmimicry_desktop::hotkeys::{
+use openmimicry_desktop_lib::hotkeys::{
     parse_shortcut, DEFAULT_PTT, DEFAULT_TOGGLE_INTERACT, DEFAULT_TOGGLE_PANEL,
 };
 use tauri_plugin_global_shortcut::{Code, Modifiers};
