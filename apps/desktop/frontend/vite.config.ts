@@ -41,6 +41,7 @@ export default defineConfig({
       "/runtime": { target: BACKEND_HOST, changeOrigin: true },
       "/admin": { target: BACKEND_HOST, changeOrigin: true },
       "/config": { target: BACKEND_HOST, changeOrigin: true },
+      "/appearance": { target: BACKEND_HOST, changeOrigin: true },
     },
   },
   build: {

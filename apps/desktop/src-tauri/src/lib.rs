@@ -40,6 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::set_overlay_interactive,
+            commands::configure_overlay_windows,
             commands::swap_avatar_runtime,
             commands::show_panel,
             commands::hide_panel,
@@ -69,6 +70,14 @@ pub fn run() {
                 log::debug!("no saved overlay position to apply: {err}");
             }
 
+            if let Some(window) = overlay::overlay_window(&app.handle()) {
+                let _ = window.set_always_on_top(true);
+            }
+            if let Some(window) = overlay::controls_window(&app.handle()) {
+                let _ = window.set_always_on_top(true);
+            }
+            let _ = overlay::sync_controls_to_overlay(&app.handle(), 6);
+
             // The overlay starts click-through by default per UX spec;
             // the user toggles via the global hotkey or the tray.
             if let Some(window) = overlay::overlay_window(&app.handle()) {
@@ -78,12 +87,27 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() != "overlay" {
-                return;
-            }
             if let WindowEvent::Moved(pos) = event {
-                if let Some(state) = window.app_handle().try_state::<AppState>() {
-                    let _ = state.mutate(|s| s.overlay_position = Some((pos.x, pos.y)));
+                if window.label() == "avatar-controls" {
+                    let gap = window
+                        .app_handle()
+                        .try_state::<AppState>()
+                        .and_then(|state| state.snapshot().controls_gap)
+                        .unwrap_or(6);
+                    let _ = overlay::sync_overlay_to_controls(window.app_handle(), gap);
+                    if let Some(avatar) = overlay::overlay_window(window.app_handle()) {
+                        if let Ok(avatar_pos) = avatar.outer_position() {
+                            if let Some(state) = window.app_handle().try_state::<AppState>() {
+                                let _ = state.mutate(|s| {
+                                    s.overlay_position = Some((avatar_pos.x, avatar_pos.y))
+                                });
+                            }
+                        }
+                    }
+                } else if window.label() == "overlay" {
+                    if let Some(state) = window.app_handle().try_state::<AppState>() {
+                        let _ = state.mutate(|s| s.overlay_position = Some((pos.x, pos.y)));
+                    }
                 }
             }
         })

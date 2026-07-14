@@ -27,6 +27,7 @@ import logging
 from typing import Any
 
 from openmimicry.core.schemas import (
+    AvatarCue,
     ConfigUpdated,
     ErrorEvent,
     LLMReplyComplete,
@@ -149,6 +150,7 @@ def project(event: RuntimeEvent) -> dict[str, Any] | None:
     if isinstance(
         event,
         UserTextSubmitted
+        | AvatarCue
         | UserSpeechStarted
         | UserSpeechFinal
         | LLMStarted

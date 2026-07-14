@@ -34,6 +34,8 @@ pub struct PersistedState {
     pub panel_visible: bool,
     #[serde(default)]
     pub interactive: bool,
+    #[serde(default)]
+    pub controls_gap: Option<i32>,
 }
 
 fn default_schema() -> u32 {
@@ -157,6 +159,7 @@ mod tests {
                 s.runtime = Some("sprite2d".to_string());
                 s.panel_visible = true;
                 s.interactive = true;
+                s.controls_gap = Some(8);
             })
             .unwrap();
 
@@ -166,6 +169,7 @@ mod tests {
         assert_eq!(loaded.runtime.as_deref(), Some("sprite2d"));
         assert!(loaded.panel_visible);
         assert!(loaded.interactive);
+        assert_eq!(loaded.controls_gap, Some(8));
     }
 
     #[test]

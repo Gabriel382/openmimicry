@@ -1,6 +1,9 @@
 # Configuration
 
-OpenMimicry is configured by a single YAML file. Environment variables can override any leaf value. The merged tree is validated by Pydantic into an immutable `AppConfig`. The runtime reads only `AppConfig`; it never goes back to the file system or `os.environ`.
+OpenMimicry runtime behavior is configured by `config/app.yaml` plus an optional
+profile. Non-secret desktop appearance is configured separately in
+`config/theme.yml`, and assistant tone/cue vocabulary in
+`config/personality.yml`.
 
 ## 1. Resolution order
 
@@ -187,20 +190,28 @@ Each bump ships with a migration function in `openmimicry.core.config.migrations
 
 ## 6. Profiles
 
-`config/profiles/` ships these examples. Each profile is a small overlay merged on top of `config/app.yaml`; choosing one is `OPENMIMICRY_PROFILE=voice make backend`.
+`config/profiles/` ships these working examples. Each profile is a small overlay
+merged on top of `config/app.yaml`; choosing one is, for example,
+`OPENMIMICRY_PROFILE=openrouter-voice make backend`.
 
-- `basic.yaml` — Sprite2D avatar, text chat via LiteLLM, mock voice. Smallest install.
-- `voice.yaml` — basic + RealtimeSTT + RealtimeTTS.
-- `threejs.yaml` — basic + `avatar.runtime: threejs` + sample VRM/glTF asset.
-- `live3d.yaml` — threejs + `avatar.runtime: live3d` + mouth/gaze/blend config.
-- `unity.yaml` — `avatar.runtime: unity` over WebSocket; requires the sample Unity app running.
-- `agent.yaml` — voice + cloud LLM + mcp-agent task runtime.
-- `full.yaml` — everything turned on; useful for contributors and screenshots.
-- `studio.yaml` — full + character editor tools, pack validators, asset converters.
-- `dev.yaml` — every adapter is the mock; used by CI and demos.
+- `basic.yaml` — Sprite2D with mock LLM, voice, and tasks; no key/network/audio.
+- `openrouter-voice.yaml` — OpenRouter through LiteLLM, local RealtimeSTT, and
+  operating-system TTS.
+- `vision.yaml` — mocks plus the opt-in MediaPipe vision demonstration.
 
-These profiles intentionally line up 1:1 with the `pip` extras documented in [`avatar_modalities.md`](./avatar_modalities.md) §5 (`basic`, `voice`, `threejs`, `live3d`, `unity`, `full`, `studio`). The same word names the install footprint and the runtime configuration; that mapping is the contract between `make install PROFILE=...` and `OPENMIMICRY_PROFILE=...`.
+The install profile and `OPENMIMICRY_PROFILE` must use the same name when
+optional dependencies are involved.
 
-## 7. Validation in CI
+## 7. Appearance and personality files
+
+`config/theme.yml` is validated by the backend and exposed through the
+non-secret `GET /appearance` endpoint. Restart after editing it. Set
+`OPENMIMICRY_APPEARANCE_PATH` to keep a personal theme elsewhere.
+
+`config/personality.yml` defines the system prompt plus allow-listed emotions
+and actions for structured avatar cues. Override its location with
+`OPENMIMICRY_PERSONALITY_PATH`. Neither file may contain provider secrets.
+
+## 8. Validation in CI
 
 `scripts/validate_config.py` loads every YAML in `config/` and runs the validator. CI runs that script on every PR. Pack manifests are validated the same way via `scripts/validate_pack.py`. A PR that breaks the example configs cannot be merged.

@@ -21,6 +21,17 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+# Concrete imports — the rest of the backend may NOT do this.
+from openmimicry.avatar import (
+    AvatarDirector,
+    AvatarOrchestrator,
+    ExternalAvatarAdapter,
+    Live3DAvatarAdapter,
+    MockAvatarRuntimeAdapter,
+    Sprite2DAvatarAdapter,
+    ThreeJSAvatarAdapter,
+    UnityAvatarAdapter,
+)
 from openmimicry.core import (
     AppConfig,
     AvatarRuntimeAdapter,
@@ -32,18 +43,6 @@ from openmimicry.core import (
     TaskRequest,
     TaskRuntimeAdapter,
     TTSAdapter,
-)
-
-# Concrete imports — the rest of the backend may NOT do this.
-from openmimicry.avatar import (
-    AvatarDirector,
-    AvatarOrchestrator,
-    ExternalAvatarAdapter,
-    Live3DAvatarAdapter,
-    MockAvatarRuntimeAdapter,
-    Sprite2DAvatarAdapter,
-    ThreeJSAvatarAdapter,
-    UnityAvatarAdapter,
 )
 from openmimicry.llm import LiteLLMAdapter, LiteLLMSettings, MockLLMAdapter
 from openmimicry.tasks import (
@@ -59,6 +58,8 @@ from openmimicry.voice import (
     MockTTSAdapter,
     RealtimeSTTAdapter,
     RealtimeTTSAdapter,
+)
+from openmimicry.voice import (
     SpeechController as ConcreteSpeechController,
 )
 
@@ -100,6 +101,9 @@ class Wiring:
     adapters_by_family: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     bridge: Any = None
     intent: IntentClassifier = detect_task_intent
+    runtime_factories: Mapping[str, Callable[[], AvatarRuntimeAdapter]] = field(
+        default_factory=dict
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +141,13 @@ async def build_runtime(
 
     task_router = _build_task_router(config)
 
+    runtime_names = ("sprite2d", "threejs", "live3d", "unity", "external")
+    runtime_factories: dict[str, Callable[[], AvatarRuntimeAdapter]] = {}
+    for runtime_name in runtime_names:
+        runtime_factories[runtime_name] = lambda selected=runtime_name: _build_named_avatar_runtime(
+            selected, config, ws_bridge=ws_bridge
+        )
+
     return Wiring(
         runtime=runtime,
         bus=bus,
@@ -156,6 +167,7 @@ async def build_runtime(
             "tasks": dict(_describe_task_adapters(task_router)),
         },
         bridge=ws_bridge,
+        runtime_factories=runtime_factories,
     )
 
 
@@ -199,9 +211,7 @@ def _build_tts(config: AppConfig) -> TTSAdapter:
     raise WiringError(f"unknown voice.tts.adapter: {name!r}")
 
 
-def _build_avatar_runtime(
-    config: AppConfig, *, ws_bridge: Any | None
-) -> AvatarRuntimeAdapter:
+def _build_avatar_runtime(config: AppConfig, *, ws_bridge: Any | None) -> AvatarRuntimeAdapter:
     name = config.avatar.runtime
     if name == "mock":
         return MockAvatarRuntimeAdapter()
@@ -220,6 +230,33 @@ def _build_avatar_runtime(
         runtime_cfg = config.avatar.runtimes.get("external", {})
         return ExternalAvatarAdapter(runtime_cfg=runtime_cfg)
     raise WiringError(f"unknown avatar.runtime: {name!r}")
+
+
+def _build_named_avatar_runtime(
+    name: str,
+    config: AppConfig,
+    *,
+    ws_bridge: Any | None,
+) -> AvatarRuntimeAdapter:
+    """Build a runtime by explicit name for ``POST /runtime/swap``."""
+
+    if name == "sprite2d":
+        return Sprite2DAvatarAdapter(ws_bridge=ws_bridge)
+    if name == "threejs":
+        return ThreeJSAvatarAdapter(
+            ws_bridge=ws_bridge,
+            runtime_cfg=config.avatar.runtimes.get("threejs", {}),
+        )
+    if name == "live3d":
+        return Live3DAvatarAdapter(
+            ws_bridge=ws_bridge,
+            runtime_cfg=config.avatar.runtimes.get("live3d", {}),
+        )
+    if name == "unity":
+        return UnityAvatarAdapter(runtime_cfg=config.avatar.runtimes.get("unity", {}))
+    if name == "external":
+        return ExternalAvatarAdapter(runtime_cfg=config.avatar.runtimes.get("external", {}))
+    raise WiringError(f"unknown avatar runtime: {name!r}")
 
 
 def _build_task_router(config: AppConfig) -> TaskRouter:
@@ -248,9 +285,7 @@ def _build_task_adapter(name: str, adapter_kind: str) -> Any:
         return ClaudeCodeAdapter()
     if adapter_kind == "mcp_agent":
         return MCPAgentAdapter()
-    raise WiringError(
-        f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}"
-    )
+    raise WiringError(f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}")
 
 
 def _describe_task_adapters(router: TaskRouter) -> Mapping[str, Any]:

@@ -41,8 +41,6 @@ async def mode_toggle(req: ModeToggleRequest, request: Request) -> dict[str, obj
     bus: EventBus = wiring.bus
     speech: SpeechController = wiring.speech
 
-    bus.publish(ConfigUpdated(ts=_now(), diff={req.key: req.value}))
-
     try:
         if req.key == "live_wake":
             if req.value:
@@ -56,8 +54,12 @@ async def mode_toggle(req: ModeToggleRequest, request: Request) -> dict[str, obj
             raise HTTPException(status_code=400, detail=f"unknown mode key: {req.key!r}")
     except HTTPException:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.warning("mode_toggle apply failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    mode_state = getattr(request.app.state, "mode_state", None)
+    if isinstance(mode_state, dict):
+        mode_state[req.key] = req.value
+    bus.publish(ConfigUpdated(ts=_now(), diff={req.key: req.value}))
     return {"ok": True, "key": req.key, "value": req.value}

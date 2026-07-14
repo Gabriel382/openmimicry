@@ -1,0 +1,37 @@
+# OpenRouter LLM plus free, local microphone STT and operating-system TTS.
+schema_version: 1
+
+llm:
+  adapter: litellm
+  model: openrouter/openai/gpt-4o-mini
+  api_key_env: OPENROUTER_API_KEY
+  temperature: 0.6
+  request_timeout_s: 90
+
+voice:
+  stt:
+    adapter: realtimestt
+    language: en
+    vad: silero
+    wake:
+      enabled: true
+      names:
+        - Mimi
+        - Hey Mimi
+      sensitivity: 0.6
+  tts:
+    adapter: realtimetts
+    engine: system
+    voice: default
+    rate: 1.0
+    interruptible: true
+  modes:
+    text_always_on: true
+    live_wake: false
+    agent_voice: true
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

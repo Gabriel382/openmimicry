@@ -1,0 +1,25 @@
+# Explicit alias for the safe defaults in config/app.yaml.
+schema_version: 1
+
+llm:
+  adapter: mock
+  model: mock/test
+
+voice:
+  stt:
+    adapter: mock
+  tts:
+    adapter: mock
+  modes:
+    live_wake: false
+    agent_voice: false
+
+avatar:
+  runtime: sprite2d
+  pack: octomimic
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

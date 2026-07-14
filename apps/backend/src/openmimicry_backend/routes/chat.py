@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import datetime, timezone
-
-from collections.abc import AsyncIterator, Callable
 
 from fastapi import APIRouter, Request
 from openmimicry.core import (
+    AvatarCue,
     EventBus,
     LLMAdapter,
     LLMMessage,
@@ -41,10 +41,13 @@ from openmimicry.core import (
 )
 from pydantic import BaseModel
 
+from ..llm_response import load_personality, parse_assistant_reply
+
 __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
 
 _log = logging.getLogger(__name__)
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 
 def _now() -> datetime:
@@ -74,7 +77,7 @@ async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
     bus.publish(UserTextSubmitted(ts=_now(), text=req.text))
 
     # Background pipeline; the HTTP response returns immediately.
-    asyncio.create_task(
+    chat_task = asyncio.create_task(
         run_chat_turn(
             req.text,
             bus=bus,
@@ -85,6 +88,8 @@ async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
         ),
         name="openmimicry.backend.chat_turn",
     )
+    _BACKGROUND_TASKS.add(chat_task)
+    chat_task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"status": "accepted"}
 
 
@@ -118,7 +123,7 @@ def _lazy_intent_classifier() -> Callable[[str], TaskRequest | None]:
     Pushing the import out of module-load lets `routes.chat` stay clean
     of sibling-package imports at the top of the file.
     """
-    from openmimicry.tasks import detect_task_intent  # noqa: PLC0415
+    from openmimicry.tasks import detect_task_intent
 
     return detect_task_intent
 
@@ -137,14 +142,10 @@ async def _run_task_path(
     # `detect_task_intent` returns a fully-formed TaskRequest.
     try:
         handle = await tasks.submit(request_obj)  # type: ignore[arg-type]
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
-        bus.publish(
-            ErrorEvent(
-                ts=_now(), where="backend.chat.task", message=str(exc)
-            )
-        )
+        bus.publish(ErrorEvent(ts=_now(), where="backend.chat.task", message=str(exc)))
         return
 
     bus.publish(
@@ -159,7 +160,7 @@ async def _run_task_path(
     try:
         async for update in tasks.updates(handle):
             bus.publish(TaskUpdatedEvent(ts=_now(), update=update))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
         bus.publish(
@@ -172,7 +173,7 @@ async def _run_task_path(
 
     try:
         result = await tasks.result(handle)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
         bus.publish(
@@ -201,45 +202,50 @@ async def _run_llm_path(
 ) -> None:
     bus.publish(LLMStarted(ts=_now()))
 
-    # Per the M6 brief's chat-flow ordering (avatar.directive thinking ->
-    # bubble.text partials -> avatar.directive speaking -> bubble.text
-    # complete -> avatar.directive idle), we feed the speech controller
-    # an async generator that yields deltas as they stream. TTSStarted
-    # (published by SpeechController) drives the "speaking" transition.
-    captured: dict[str, str] = {"full_text": ""}
+    settings = load_personality()
+    messages = [
+        LLMMessage(role="system", content=settings.system_prompt),
+        LLMMessage(role="user", content=text),
+    ]
+    raw_parts: list[str] = []
+    try:
+        async for chunk in llm.generate(messages):
+            if chunk.delta:
+                raw_parts.append(chunk.delta)
+    except Exception as exc:
+        from openmimicry.core import ErrorEvent
 
-    async def _delta_stream() -> AsyncIterator[str]:
-        try:
-            stream = llm.generate([LLMMessage(role="user", content=text)])
-            async for chunk in stream:
-                if not chunk.delta:
-                    continue
-                captured["full_text"] += chunk.delta
-                bus.publish(LLMTokenStreamed(ts=_now(), delta=chunk.delta))
-                yield chunk.delta
-        except Exception as exc:  # noqa: BLE001
-            from openmimicry.core import ErrorEvent
+        bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
 
-            bus.publish(
-                ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc))
-            )
+    reply = parse_assistant_reply("".join(raw_parts), settings)
+    for delta in _display_chunks(reply.text):
+        bus.publish(LLMTokenStreamed(ts=_now(), delta=delta))
+        await asyncio.sleep(0)
 
-    if speech is not None:
-        # The speech controller cancels any previous utterance and runs
-        # the new one as a background task. We wait for it to finish so
-        # `LLMReplyComplete` is published only after the avatar has had
-        # a chance to leave the "speaking" state.
-        await speech.say(_delta_stream())
-        # Wait for the in-flight TTS task to complete (best-effort).
+    if speech is not None and reply.text:
+        await speech.say(reply.text)
         task = getattr(speech, "_current_tts_task", None)
         if task is not None:
             import contextlib
 
             with contextlib.suppress(Exception):
                 await task
-    else:
-        # No speech controller: just drain the generator to publish deltas.
-        async for _ in _delta_stream():
-            pass
 
-    bus.publish(LLMReplyComplete(ts=_now(), full_text=captured["full_text"]))
+    bus.publish(LLMReplyComplete(ts=_now(), full_text=reply.text))
+    bus.publish(
+        AvatarCue(
+            ts=_now(),
+            emotion=reply.emotion,
+            action=reply.action,
+            intensity=reply.intensity,
+            duration_ms=reply.duration_ms,
+        )
+    )
+
+
+def _display_chunks(text: str, size: int = 48) -> list[str]:
+    """Small UI chunks keep the existing bubble protocol deterministic."""
+
+    if not text:
+        return []
+    return [text[index : index + size] for index in range(0, len(text), size)]

@@ -34,10 +34,10 @@ router = APIRouter()
 async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]:
     wiring = request.app.state.wiring
     orchestrator = wiring.orchestrator
-    runtime = wiring.avatar_runtime
+    runtime = orchestrator.runtime
     try:
         await runtime.load_character(req.pack, {})
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Mirror the current directive so the new pack reflects state. The
     # orchestrator owns ``_current``; we ask it (best-effort, via getattr).
@@ -45,7 +45,7 @@ async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]
     if current is not None:
         try:
             await runtime.apply_directive(current)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("re-apply current directive after pack swap: %s", exc)
     return {"ok": True, "pack": req.pack}
 
@@ -68,6 +68,7 @@ async def runtime_swap(req: RuntimeSwapRequest, request: Request) -> dict[str, o
     new_runtime = factory()
     try:
         await orchestrator.swap_runtime(new_runtime)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    wiring.avatar_runtime = new_runtime
     return {"ok": True, "runtime": req.runtime}

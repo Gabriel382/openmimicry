@@ -1,5 +1,5 @@
 /**
- * `<SpeechBubble />` — incremental text + reset on listening.
+ * `<SpeechBubble />` — incremental text + configurable reading time.
  */
 
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -47,7 +47,7 @@ describe("<SpeechBubble />", () => {
     );
   });
 
-  it("clears on avatar.directive state=listening", async () => {
+  it("does not erase a completed reply merely because listening starts", async () => {
     const { factory, sockets } = mockSocketFactory();
     const { container } = render(
       <WSProvider url="ws://test/ws" socketFactory={factory}>
@@ -69,6 +69,21 @@ describe("<SpeechBubble />", () => {
         directive: { state: "listening" },
       }),
     );
+    expect(container.querySelector(".speech-bubble")?.textContent).toContain("stale");
+  });
+
+  it("clears after the configured reading-time formula", async () => {
+    const { factory, sockets } = mockSocketFactory();
+    const { container } = render(
+      <WSProvider url="ws://test/ws" socketFactory={factory}>
+        <SpeechBubble timing={{ base_ms: 10, ms_per_character: 0, max_ms: 20 }} />
+      </WSProvider>,
+    );
+    await waitFor(() => expect(sockets.length).toBe(1));
+    act(() =>
+      sockets[0]!._dispatchMessage({ type: "bubble.text", text: "read me", complete: true }),
+    );
+    await waitFor(() => expect(container.querySelector(".speech-bubble")).not.toBeNull());
     await waitFor(() => expect(container.querySelector(".speech-bubble")).toBeNull());
   });
 });

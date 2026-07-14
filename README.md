@@ -89,7 +89,17 @@ Visit `http://localhost:5173/#/panel`. Type a message, watch the avatar move, se
 make desktop
 ```
 
-Two windows open: a transparent overlay (always-on-top, click-through by default — `Ctrl+Shift+M` toggles) and the interactive panel (`Ctrl+Shift+O` toggles). `Ctrl+Space` is PTT.
+Three windows open: a transparent avatar overlay, its interactive drag/message
+strip, and the full panel (`Ctrl+Shift+O` toggles the panel). `Ctrl+Space` is
+push-to-talk.
+
+In v1.1.0 an additional interactive strip opens directly below the transparent
+avatar. Drag the strip to move the companion or send a message without opening
+the full panel. Window geometry, colors, avatar scale, and reply reading time
+are configured in `config/theme.yml`.
+
+For OpenRouter plus free local microphone STT and operating-system TTS on
+Windows, see [`docs/V1.1_WINDOWS_TESTING.md`](docs/V1.1_WINDOWS_TESTING.md).
 
 ### Docker (backend-only smoke)
 

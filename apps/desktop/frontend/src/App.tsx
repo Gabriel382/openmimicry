@@ -13,14 +13,18 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { OverlayRoute } from "./routes/OverlayRoute";
 import { PanelRoute } from "./routes/PanelRoute";
+import { ControlsRoute } from "./routes/ControlsRoute";
 import { WSProvider } from "./ws/WSProvider";
+import { TauriVoiceBridge } from "./components/TauriVoiceBridge";
 
 export function App(): JSX.Element {
   return (
     <WSProvider>
+      <TauriVoiceBridge />
       <HashRouter>
         <Routes>
           <Route path="/overlay" element={<OverlayRoute />} />
+          <Route path="/controls" element={<ControlsRoute />} />
           <Route path="/panel" element={<PanelRoute />} />
           <Route path="/" element={<Navigate to="/panel" replace />} />
           <Route path="*" element={<Navigate to="/panel" replace />} />

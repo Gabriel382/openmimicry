@@ -20,8 +20,8 @@ from .contracts import (
     GestureClassifier,
     HandDetector,
     HeadDetector,
-    LLMAdapter,
     LandmarkDetector,
+    LLMAdapter,
     MovementClassifier,
     SpeechController,
     STTAdapter,
@@ -37,6 +37,7 @@ from .schemas import (
     SCHEMA_VERSION,
     AppConfig,
     Artifact,
+    AvatarCue,
     AvatarDirective,
     BodyPose,
     CharacterPack,
@@ -53,13 +54,13 @@ from .schemas import (
     HandPoseEnded,
     HandPoseStarted,
     HeadPose,
+    Landmark,
     LLMChunk,
     LLMMessage,
     LLMReplyComplete,
     LLMStarted,
     LLMTokenStreamed,
     LLMUsage,
-    Landmark,
     MovementDetected,
     MovementDetection,
     RuntimeEvent,
@@ -104,6 +105,7 @@ __all__ = [
     # Schema data types
     "AppConfig",
     "Artifact",
+    "AvatarCue",
     "AvatarDirective",
     # Protocols
     "AvatarDirector",
@@ -163,4 +165,4 @@ __all__ = [
     "create_runtime",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

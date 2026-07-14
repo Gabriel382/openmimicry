@@ -92,6 +92,45 @@ pub fn panel_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWind
     app.get_webview_window("panel")
 }
 
+/// Return the interactive drag/input strip paired with the avatar window.
+pub fn controls_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWindow<R>> {
+    app.get_webview_window("avatar-controls")
+}
+
+/// Place the control strip immediately below the transparent avatar window.
+pub fn sync_controls_to_overlay<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    gap: i32,
+) -> Result<()> {
+    let avatar = overlay_window(app).ok_or_else(|| anyhow::anyhow!("overlay unavailable"))?;
+    let controls =
+        controls_window(app).ok_or_else(|| anyhow::anyhow!("avatar controls unavailable"))?;
+    let pos = avatar.outer_position()?;
+    let size = avatar.outer_size()?;
+    controls.set_position(PhysicalPosition::new(
+        pos.x,
+        pos.y + size.height as i32 + gap.max(0),
+    ))?;
+    Ok(())
+}
+
+/// Move the transparent avatar with its interactive control strip.
+pub fn sync_overlay_to_controls<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    gap: i32,
+) -> Result<()> {
+    let avatar = overlay_window(app).ok_or_else(|| anyhow::anyhow!("overlay unavailable"))?;
+    let controls =
+        controls_window(app).ok_or_else(|| anyhow::anyhow!("avatar controls unavailable"))?;
+    let pos = controls.outer_position()?;
+    let size = avatar.outer_size()?;
+    avatar.set_position(PhysicalPosition::new(
+        pos.x,
+        pos.y - size.height as i32 - gap.max(0),
+    ))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

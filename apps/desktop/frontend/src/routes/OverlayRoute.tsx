@@ -7,14 +7,28 @@
  * other windows.
  */
 
+import type { CSSProperties } from "react";
+
 import { AvatarHost } from "../components/AvatarHost";
 import { SpeechBubble } from "../components/SpeechBubble";
+import { useAppearance } from "../hooks/useAppearance";
+
+type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
 export function OverlayRoute(): JSX.Element {
+  const appearance = useAppearance();
+  const style: CustomStyle = {
+    "--om-font-family": appearance.theme.font_family,
+    "--om-bubble-bg": appearance.theme.bubble_bg,
+    "--om-bubble-text": appearance.theme.bubble_text,
+    "--om-bubble-max-width": `${appearance.layout.bubble_max_width}px`,
+    "--om-avatar-width": `${appearance.layout.avatar_width}px`,
+    "--om-avatar-scale": String(appearance.layout.avatar_scale),
+  };
   return (
-    <div className="overlay-route" data-route="overlay">
+    <div className="overlay-route" data-route="overlay" style={style}>
       <AvatarHost />
-      <SpeechBubble />
+      <SpeechBubble timing={appearance.behaviour.bubble} />
     </div>
   );
 }

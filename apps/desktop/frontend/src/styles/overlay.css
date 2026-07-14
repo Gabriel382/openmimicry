@@ -1,11 +1,11 @@
-/* Overlay route — full-bleed, transparent. */
+/* Transparent avatar window plus the separate interactive controls window. */
 
 .overlay-route {
   position: fixed;
   inset: 0;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  pointer-events: none; /* the Tauri shell flips this when interactive */
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--om-font-family, Inter, Arial, sans-serif);
 }
 
 .overlay-route > .avatar-host {
@@ -16,18 +16,43 @@
   justify-content: center;
 }
 
+.avatar--sprite2d {
+  display: flex;
+  width: min(100%, var(--om-avatar-width, 330px));
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-frame {
+  display: block;
+  width: 100%;
+  max-width: var(--om-avatar-width, 330px);
+  max-height: 100%;
+  object-fit: contain;
+  transform: scale(var(--om-avatar-scale, 1));
+  transform-origin: center bottom;
+  user-select: none;
+}
+
 .speech-bubble {
-  pointer-events: auto;
-  margin: 0 16px 16px;
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  z-index: 2;
+  max-width: var(--om-bubble-max-width, 330px);
+  max-height: 42%;
+  margin: auto;
+  overflow-y: auto;
   padding: 10px 14px;
-  background: rgba(20, 20, 22, 0.78);
-  color: #f4f4f6;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
+  background: var(--om-bubble-bg, rgba(20, 20, 22, 0.88));
+  color: var(--om-bubble-text, #f4f4f6);
   font-size: 14px;
   line-height: 1.4;
-  max-width: 480px;
-  align-self: end;
-  justify-self: center;
+  overflow-wrap: anywhere;
   backdrop-filter: blur(6px);
 }
 
@@ -35,6 +60,48 @@
   display: inline-block;
   margin-left: 4px;
   animation: openmimicry-caret 1s steps(2) infinite;
+}
+
+.controls-route {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--om-controls-border, rgba(255, 255, 255, 0.14));
+  border-radius: 13px;
+  background: var(--om-controls-bg, rgba(18, 22, 30, 0.82));
+  color: #f4f4f6;
+  font-family: var(--om-font-family, Inter, Arial, sans-serif);
+  backdrop-filter: blur(8px);
+}
+
+.avatar-drag-handle {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.avatar-drag-handle:active {
+  cursor: grabbing;
+}
+
+.avatar-text-input input {
+  min-width: 0;
+  background: var(--om-input-bg, rgba(255, 255, 255, 0.1));
+  border-color: var(--om-input-border, rgba(255, 255, 255, 0.18));
+}
+
+.avatar-text-input button {
+  background: var(--om-accent, #ff8a3d);
 }
 
 @keyframes openmimicry-caret {

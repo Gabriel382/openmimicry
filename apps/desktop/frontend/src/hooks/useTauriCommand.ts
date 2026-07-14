@@ -14,6 +14,17 @@ export interface TauriCommands {
   setOverlayInteractive(interactive: boolean): Promise<void>;
   /** Tell the Rust shell to swap the active avatar runtime. */
   swapAvatarRuntime(runtime: string): Promise<void>;
+  configureOverlayWindows(config: {
+    overlayWidth: number;
+    overlayHeight: number;
+    controlsWidth: number;
+    controlsHeight: number;
+    panelWidth: number;
+    panelHeight: number;
+    gap: number;
+    alwaysOnTop: boolean;
+    showControls: boolean;
+  }): Promise<void>;
 }
 
 async function tryInvoke<T = unknown>(
@@ -46,5 +57,21 @@ export function useTauriCommand(): TauriCommands {
     },
     [],
   );
-  return { setOverlayInteractive, swapAvatarRuntime };
+  const configureOverlayWindows = useCallback(
+    async (config: {
+      overlayWidth: number;
+      overlayHeight: number;
+      controlsWidth: number;
+      controlsHeight: number;
+      panelWidth: number;
+      panelHeight: number;
+      gap: number;
+      alwaysOnTop: boolean;
+      showControls: boolean;
+    }): Promise<void> => {
+      await tryInvoke("configure_overlay_windows", { config });
+    },
+    [],
+  );
+  return { setOverlayInteractive, swapAvatarRuntime, configureOverlayWindows };
 }

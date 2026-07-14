@@ -56,10 +56,10 @@ async def _safe_healthcheck(adapter: Any) -> bool:
         return False
     try:
         result = await asyncio.wait_for(fn(), timeout=HEALTHCHECK_TIMEOUT_S)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _log.warning("healthcheck timed out for adapter %r", getattr(adapter, "name", "?"))
         return False
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log.warning(
             "healthcheck raised for adapter %r: %s",
             getattr(adapter, "name", "?"),

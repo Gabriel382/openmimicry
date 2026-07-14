@@ -18,6 +18,7 @@ from .tasks import TaskHandle, TaskResult, TaskUpdate
 from .vision import GestureDetection, MovementDetection
 
 __all__ = [
+    "AvatarCue",
     "ConfigUpdated",
     "ConsentRequired",
     "ConsentResolved",
@@ -92,6 +93,21 @@ class LLMTokenStreamed(_Event):
 class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
+
+
+class AvatarCue(_Event):
+    """Validated affect/action selected from a structured LLM reply.
+
+    ``emotion`` and ``action`` remain strings at the event boundary so packs
+    and future runtimes may extend their vocabularies. The backend parser
+    allow-lists values before publishing this event.
+    """
+
+    kind: Literal["avatar_cue"] = "avatar_cue"
+    emotion: str = "neutral"
+    action: str = "idle"
+    intensity: float = 0.6
+    duration_ms: int = 1800
 
 
 class TTSStarted(_Event):
@@ -189,6 +205,7 @@ RuntimeEvent = Annotated[
     | LLMStarted
     | LLMTokenStreamed
     | LLMReplyComplete
+    | AvatarCue
     | TTSStarted
     | TTSChunkSpoken
     | TTSFinished

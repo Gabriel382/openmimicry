@@ -71,6 +71,13 @@ class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
 
+class AvatarCue(_Event):
+    kind: Literal["avatar_cue"] = "avatar_cue"
+    emotion: str = "neutral"   # backend allow-listed before publication
+    action: str = "idle"       # backend allow-listed before publication
+    intensity: float = 0.6
+    duration_ms: int = 1800
+
 class TTSStarted(_Event):
     kind: Literal["tts_start"] = "tts_start"
 
@@ -109,7 +116,7 @@ class ErrorEvent(_Event):
 
 RuntimeEvent = Union[
     UserTextSubmitted, UserSpeechStarted, UserSpeechFinal, TranscriptPreview,
-    WakeDetected, LLMStarted, LLMTokenStreamed, LLMReplyComplete,
+    WakeDetected, LLMStarted, LLMTokenStreamed, LLMReplyComplete, AvatarCue,
     TTSStarted, TTSChunkSpoken, TTSFinished, TTSInterrupted,
     TaskSubmitted, TaskUpdatedEvent, TaskCompleted, ConfigUpdated, ErrorEvent,
 ]

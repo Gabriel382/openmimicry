@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-tts"
-version = "1.0.0"
+version = "1.1.0"
 description = "OpenMimicry effector layer (TTS facade): RealtimeTTS adapter, mocks. Re-exports the TTS half of openmimicry-voice."
 readme = "README.md"
 requires-python = ">=3.11"

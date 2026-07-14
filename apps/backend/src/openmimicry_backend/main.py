@@ -15,16 +15,18 @@ import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from openmimicry.core import AppConfig
+from openmimicry.core import AppConfig, TaskHandle, UserSpeechFinal
 from openmimicry.core.config import load as load_config
 
+from .appearance import load_appearance
 from .routes import (
     admin_router,
+    appearance_router,
     chat_router,
     health_router,
     mode_router,
@@ -43,20 +45,22 @@ _log = logging.getLogger(__name__)
 def _load_app_config() -> tuple[AppConfig, str | None]:
     """Load :class:`AppConfig` from ``OPENMIMICRY_CONFIG_PATH`` or defaults."""
     path_env = os.environ.get("OPENMIMICRY_CONFIG_PATH")
-    if path_env:
-        return load_config(path_env), path_env
-    return AppConfig(), None
+    return load_config(path_env), path_env
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the runtime, start the orchestrator + speech, tear it all down."""
     config, config_path = _load_app_config()
+    appearance = load_appearance()
 
     bridge = BroadcastBridge()
-    wiring: Wiring = await build_runtime(
-        config, ws_bridge=bridge, config_path=config_path
-    )
+    wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
+
+    mode_state = {
+        "live_wake": config.voice.modes.live_wake,
+        "agent_voice": config.voice.modes.agent_voice,
+    }
 
     async def _handle_user_text(text: str) -> None:
         await run_chat_turn(
@@ -64,7 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             bus=wiring.bus,
             llm=wiring.llm,
             tasks=wiring.tasks,
-            speech=wiring.speech,
+            speech=wiring.speech if mode_state["agent_voice"] else None,
             intent_fn=wiring.intent,
         )
 
@@ -76,13 +80,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 await wiring.speech.disable_live_listening()
         elif key == "agent_voice" and not value:
             await wiring.speech.interrupt()
+        elif key not in mode_state:
+            raise ValueError(f"unknown mode key: {key!r}")
+        mode_state[key] = value
+
+    def _mode_status() -> dict[str, object]:
+        stt_name = getattr(wiring.stt, "name", "unknown")
+        tts_name = getattr(wiring.tts, "name", "unknown")
+        return {
+            **mode_state,
+            "stt_adapter": stt_name,
+            "tts_adapter": tts_name,
+            "real_input": stt_name != "mock",
+            "real_output": tts_name != "mock",
+        }
+
+    async def _cancel_task(raw_handle: dict[str, object]) -> None:
+        await wiring.tasks.cancel(TaskHandle.model_validate(raw_handle))
 
     app.state.wiring = wiring
     app.state.bridge = bridge
     app.state.handle_user_text = _handle_user_text
     app.state.apply_mode_toggle = _apply_mode_toggle
+    app.state.mode_state = mode_state
+    app.state.appearance = appearance
+    app.state.get_mode_status = _mode_status
+    app.state.cancel_task = _cancel_task
+
+    speech_subscription = wiring.bus.subscribe()
+
+    async def _consume_speech_turns() -> None:
+        async for event in speech_subscription:
+            if not isinstance(event, UserSpeechFinal):
+                continue
+            spoken = event.text.strip()
+            if not spoken or event.reason == "interrupted":
+                continue
+            await _handle_user_text(spoken)
+
+    speech_turn_task = asyncio.create_task(
+        _consume_speech_turns(), name="openmimicry.backend.speech_turns"
+    )
 
     await wiring.speech.start()
+    if mode_state["live_wake"]:
+        await wiring.speech.enable_live_listening(wake_names=None)
     await wiring.orchestrator.start()
 
     _mount_static_characters(app, config)
@@ -90,9 +132,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        speech_turn_task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await speech_turn_task
         try:
             await asyncio.wait_for(_graceful_shutdown(wiring), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _log.warning("backend lifespan: graceful shutdown exceeded 2s budget")
 
 
@@ -108,7 +153,7 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.0.0",
+        version="1.1.0",
         lifespan=lifespan,
     )
 
@@ -117,6 +162,7 @@ def create_app() -> FastAPI:
     app.include_router(mode_router)
     app.include_router(pack_router)
     app.include_router(admin_router)
+    app.include_router(appearance_router)
 
     @app.websocket("/ws")
     async def _ws(websocket: WebSocket) -> None:
@@ -124,6 +170,8 @@ def create_app() -> FastAPI:
         bridge: BroadcastBridge = websocket.app.state.bridge
         handle_user_text = websocket.app.state.handle_user_text
         apply_mode_toggle = websocket.app.state.apply_mode_toggle
+        get_mode_status = websocket.app.state.get_mode_status
+        cancel_task = websocket.app.state.cancel_task
         await ws_endpoint(
             websocket,
             bus=wiring.bus,
@@ -131,6 +179,8 @@ def create_app() -> FastAPI:
             bridge=bridge,
             handle_user_text=handle_user_text,
             apply_mode_toggle=apply_mode_toggle,
+            get_mode_status=get_mode_status,
+            cancel_task=cancel_task,
         )
 
     return app
@@ -150,7 +200,7 @@ def _mount_static_characters(app: FastAPI, config: AppConfig) -> None:
                     StaticFiles(directory=str(root)),
                     name="characters",
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("static-mount /static/characters failed: %s", exc)
             return
     _log.info("no avatar.pack_roots directory found; skipping static mount")

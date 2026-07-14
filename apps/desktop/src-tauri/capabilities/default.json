@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities exposed to the overlay and panel windows.",
-  "windows": ["overlay", "panel"],
+  "windows": ["overlay", "avatar-controls", "panel"],
   "permissions": [
     "core:default",
     "core:window:default",

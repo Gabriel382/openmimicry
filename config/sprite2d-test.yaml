@@ -1,0 +1,31 @@
+schema_version: 1
+
+llm:
+  adapter: mock
+  model: mock/test
+
+voice:
+  stt:
+    adapter: mock
+    wake:
+      enabled: false
+  tts:
+    adapter: mock
+  modes:
+    live_wake: false
+    agent_voice: false
+
+avatar:
+  runtime: sprite2d
+  pack: octomimic
+  pack_roots:
+    - ./characters
+  runtimes:
+    sprite2d:
+      pack_path: ./characters/octomimic
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

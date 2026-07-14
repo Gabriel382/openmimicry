@@ -4,13 +4,17 @@ The overlay is the part that makes OpenMimicry feel like a companion: a small, a
 
 This document explains how we achieve that without the most common trap: per-pixel hit-testing on a transparent window.
 
-## 1. Two windows, not one
+## 1. Three windows with separated responsibilities
 
 ```text
 overlay window  - frameless, transparent background, always-on-top,
-                  decorations: none, resizable: false (the OS owns no chrome)
-                  click-through: ON by default, toggleable
-                  size: small (e.g. 360x360), draggable by the character
+                  decorations: none, resizable: false
+                  permanently click-through in the standard v1.1 layout
+                  renders the avatar and speech bubble only
+
+controls window - frameless, always-on-top strip below the avatar
+                  interactive drag handle + compact text input
+                  moving it moves the avatar window and persists position
 
 panel window    - normal window with decorations
                   carries the text input, voice toggles, conversation history,
@@ -18,14 +22,20 @@ panel window    - normal window with decorations
                   hidden by default; tray icon + hotkey open it
 ```
 
-The split lets us keep the overlay logic simple — it does one thing: render the avatar and the speech bubble. Anything that requires keyboard focus or non-trivial mouse interaction lives in the panel, which is a normal window with normal click behaviour.
+This split works with Tauri's whole-window click-through behavior: the PNG can
+never steal clicks while the separate control strip remains draggable and can
+accept keyboard focus. The panel continues to host advanced controls.
 
 ## 2. Click-through strategy
 
-We do **not** read alpha values per pixel. Instead, Tauri's `setIgnoreCursorEvents(boolean)` is used at the *window* level. There are two states:
+We do **not** read alpha values per pixel. Tauri's
+`setIgnoreCursorEvents(boolean)` remains a whole-window operation. The v1.1
+standard layout keeps the avatar overlay passive and delegates interaction to
+the control strip:
 
-- **passive mode** (default): the overlay window has `ignoreCursorEvents(true)`. Every click falls through to whatever app is underneath. The avatar is purely visual.
-- **interact mode**: a configurable hotkey (default `Ctrl+Shift+M`) or a tray menu item flips the overlay to `ignoreCursorEvents(false)`. Now the whole overlay is clickable: drag to reposition, right-click for the context menu, click the speech bubble to copy text.
+- **avatar window:** `ignoreCursorEvents(true)`; all clicks fall through.
+- **controls window:** normal cursor events; only its drag handle starts a window
+  drag and its text field accepts input.
 
 Toggling is a single Tauri command:
 
@@ -38,7 +48,15 @@ fn set_overlay_interactive(window: tauri::Window, interactive: bool) {
 }
 ```
 
-The frontend in the overlay does *not* try to be clever about which subrects are interactive. The whole window is either click-through or not. This is the part that keeps the implementation small and cross-platform.
+The legacy interaction toggle remains available for debugging, but normal users
+move the companion through the dedicated strip.
+
+## 2.1 Appearance configuration
+
+`config/theme.yml` is the single non-secret appearance file. `GET /appearance`
+returns its validated projection to the three frontend routes; the controls
+route applies geometry to Tauri. It owns window sizes, colors, avatar scale,
+control visibility/gap, and the completed-bubble reading-time formula.
 
 A visual cue (subtle border or glow on the overlay) tells the user which mode they are in. The tray icon and the panel both show the current state.
 

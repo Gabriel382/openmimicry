@@ -31,7 +31,7 @@ pub const DEFAULT_TOGGLE_PANEL: &str = "ctrl+shift+o";
 static INTERACTIVE: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
 /// Live state of the panel's visibility.
-static PANEL_VISIBLE: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+static PANEL_VISIBLE: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(true));
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedShortcut {
@@ -99,10 +99,10 @@ pub fn register_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     plugin.on_shortcut(ptt, move |handle, _shortcut, event| {
         match event.state() {
             ShortcutState::Pressed => {
-                let _ = handle.emit("ptt:down", ());
+                let _ = handle.emit_to("panel", "ptt:down", ());
             }
             ShortcutState::Released => {
-                let _ = handle.emit("ptt:up", ());
+                let _ = handle.emit_to("panel", "ptt:up", ());
             }
         }
     })?;

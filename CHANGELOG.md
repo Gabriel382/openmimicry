@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — desktop companion stabilization
+
+### Added
+
+- Separate always-on-top `avatar-controls` window with a drag handle and compact
+  message field below the transparent avatar.
+- Validated `config/theme.yml` appearance pipeline and public `GET /appearance`.
+- Reading-time speech bubbles with configurable pad, per-character duration,
+  cap, scrolling, and late-window replay.
+- Allow-listed structured LLM reply envelope and additive `AvatarCue` event.
+- Safe default/basic configuration and an `openrouter-voice` profile using
+  local RealtimeSTT plus operating-system TTS.
+- Windows `.env` launcher for the OpenRouter/voice profile.
+- Voice adapter/status reporting and Tauri push-to-talk forwarding.
+
+### Fixed
+
+- Persisted drag movement, initial avatar replay, and always-on-top enforcement.
+- Agent voice now gates later TTS; live-wake/PTT finals now enter chat.
+- Runtime factories are registered and pack swap follows the current runtime.
+- Task cancellation reaches the task router; the empty task UI explains its
+  on-demand behavior.
+- Happy structured cues use the bundled distinct happy Sprite2D frames.
+
+### Versioning
+
+- Workspace applications and packages moved from `1.0.0` to `1.1.0`.
+
 ## [1.0.0] — first stable release
 
 The contract surface in [`docs/contracts.md`](docs/contracts.md) is frozen.
@@ -91,4 +119,5 @@ Every workspace package + app + Tauri shell is pinned to `1.0.0`. Cross-package
 - **M13 (vision, post-v0.2, optional):** new brief `docs/modules/M13_vision.md` for a camera-driven `MediaPipeVisionAdapter` + `GestureClassifier` registry that publishes `GestureDetected` events the avatar director maps to `AvatarDirective` overrides. Off by default, opt-in via `pip install openmimicry[vision]` and `vision.enabled: true`. Privacy-first: no upload, explicit consent dialog on first activation. `pyproject.toml` gains `vision` and `full-vision` extras; `Makefile` lists them under `make install PROFILE=…`. Implementation deferred — the contract surface (`VisionAdapter`, `GestureClassifier`, `HandLandmark`/`HandPose`/`GestureDetection`/`VisionConfig` schemas, three new `RuntimeEvent` variants) lands in a contracts-amendment PR before M13 begins.
 - Architecture, adapter, event-flow, voice-mode, task-delegation, character-pack, desktop-overlay, configuration, testing-and-ci, and migration docs.
 
-[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/ghenrique/openmimicry/compare/v1.0.0...v1.1.0

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry"
-version = "1.0.0"
+version = "1.1.0"
 description = "A modular avatar interface layer for LLMs, voice systems, and agentic task runtimes."
 readme = "README.md"
 requires-python = ">=3.11"

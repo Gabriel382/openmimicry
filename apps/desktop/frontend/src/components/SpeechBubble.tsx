@@ -10,10 +10,15 @@ import { useBubbleText } from "../hooks/useBubbleText";
 
 export interface SpeechBubbleProps {
   className?: string;
+  timing?: {
+    base_ms: number;
+    ms_per_character: number;
+    max_ms: number;
+  };
 }
 
 export function SpeechBubble(props: SpeechBubbleProps): JSX.Element | null {
-  const { text, complete } = useBubbleText();
+  const { text, complete } = useBubbleText(props.timing);
   if (!text) return null;
   return (
     <div

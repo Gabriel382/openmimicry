@@ -123,6 +123,14 @@ export interface SystemNoticeMessage {
   diff?: Record<string, unknown>;
   where?: string;
   recoverable?: boolean;
+  voice?: {
+    live_wake?: boolean;
+    agent_voice?: boolean;
+    stt_adapter?: string;
+    tts_adapter?: string;
+    real_input?: boolean;
+    real_output?: boolean;
+  };
   [extra: string]: unknown;
 }
 

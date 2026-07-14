@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 // Tauri 2.x: `emit` is a trait method on `Emitter`; the trait must be in
 // scope wherever `app.emit(...)` is called.
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Runtime};
 
 use crate::overlay::{self, Rect};
 use crate::state::AppState;
@@ -15,6 +15,62 @@ use crate::state::AppState;
 pub struct OverlayInfo {
     pub interactive: bool,
     pub position: Option<(i32, i32)>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayWindowConfig {
+    pub overlay_width: f64,
+    pub overlay_height: f64,
+    pub controls_width: f64,
+    pub controls_height: f64,
+    pub panel_width: f64,
+    pub panel_height: f64,
+    pub gap: i32,
+    pub always_on_top: bool,
+    pub show_controls: bool,
+}
+
+/// Apply ``config/theme.yml`` geometry after the frontend fetches it.
+#[tauri::command]
+pub fn configure_overlay_windows<R: Runtime>(
+    app: AppHandle<R>,
+    config: OverlayWindowConfig,
+) -> Result<(), String> {
+    let avatar = overlay::overlay_window(&app)
+        .ok_or_else(|| "overlay window not available".to_string())?;
+    let controls = overlay::controls_window(&app)
+        .ok_or_else(|| "avatar controls window not available".to_string())?;
+    let panel =
+        overlay::panel_window(&app).ok_or_else(|| "panel window not available".to_string())?;
+
+    avatar
+        .set_size(LogicalSize::new(config.overlay_width, config.overlay_height))
+        .map_err(|e| e.to_string())?;
+    controls
+        .set_size(LogicalSize::new(config.controls_width, config.controls_height))
+        .map_err(|e| e.to_string())?;
+    panel
+        .set_size(LogicalSize::new(config.panel_width, config.panel_height))
+        .map_err(|e| e.to_string())?;
+    avatar
+        .set_always_on_top(config.always_on_top)
+        .map_err(|e| e.to_string())?;
+    controls
+        .set_always_on_top(config.always_on_top)
+        .map_err(|e| e.to_string())?;
+    overlay::set_interactive(&avatar, false).map_err(|e| e.to_string())?;
+    if config.show_controls {
+        controls.show().map_err(|e| e.to_string())?;
+    } else {
+        controls.hide().map_err(|e| e.to_string())?;
+    }
+    if let Some(state) = app.try_state::<AppState>() {
+        let gap = config.gap;
+        let _ = state.mutate(|s| s.controls_gap = Some(gap));
+    }
+    overlay::sync_controls_to_overlay(&app, config.gap).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Toggle whole-window click-through on the overlay.
@@ -107,6 +163,11 @@ pub fn move_overlay_to_saved_position<R: Runtime>(app: AppHandle<R>) -> Result<(
         None => PhysicalPosition::new(saved.0, saved.1),
     };
     window.set_position(target).map_err(|e| e.to_string())?;
+    let gap = app
+        .try_state::<AppState>()
+        .and_then(|state| state.snapshot().controls_gap)
+        .unwrap_or(6);
+    let _ = overlay::sync_controls_to_overlay(&app, gap);
     Ok(())
 }
 
