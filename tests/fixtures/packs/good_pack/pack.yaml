@@ -1,0 +1,22 @@
+schema_version: 1
+id: good_pack
+name: Good Test Pack
+author: openmimicry-tests
+license: CC0-1.0
+default_state: idle
+default_emotion: neutral
+transition_ms: 120
+
+emotions:
+  idle:
+    frames: states/idle
+    speaking_frames: states/idle_speaking
+    fps: 8
+    loop: true
+  happy:
+    frames: states/happy
+    speaking_frames: states/happy_speaking
+    fps: 12
+    loop: false
+    return_to: idle
+    hold_ms: 1200

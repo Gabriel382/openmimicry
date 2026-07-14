@@ -1,0 +1,82 @@
+# OpenMimicry backend image.
+#
+# Multi-stage build: a builder layer installs every workspace package
+# in editable mode, and a slim runtime layer ships just Python + the
+# resolved virtualenv. The image runs the M6 FastAPI process on
+# port 8000 by default.
+#
+# Build:   docker build -f docker/Dockerfile.backend -t openmimicry-backend:1.0.0 .
+# Run:     docker run --rm -p 8000:8000 openmimicry-backend:1.0.0
+# Compose: docker compose up backend
+
+# --- builder ------------------------------------------------------------
+FROM python:3.12-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Build deps for any optional native wheels (RealtimeTTS, mediapipe).
+# Kept on the builder so the runtime layer stays small.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Install workspace packages in dependency order so editable installs
+# resolve cleanly. Layer order maximises cache reuse: copy pyprojects
+# first, then sources.
+COPY packages/openmimicry-core/pyproject.toml /workspace/packages/openmimicry-core/
+COPY packages/openmimicry-llm/pyproject.toml /workspace/packages/openmimicry-llm/
+COPY packages/openmimicry-voice/pyproject.toml /workspace/packages/openmimicry-voice/
+COPY packages/openmimicry-avatar/pyproject.toml /workspace/packages/openmimicry-avatar/
+COPY packages/openmimicry-tasks/pyproject.toml /workspace/packages/openmimicry-tasks/
+COPY packages/openmimicry-vision/pyproject.toml /workspace/packages/openmimicry-vision/
+COPY apps/backend/pyproject.toml /workspace/apps/backend/
+
+COPY packages /workspace/packages
+COPY apps/backend /workspace/apps/backend
+
+RUN python -m venv /opt/om && /opt/om/bin/pip install --upgrade pip wheel \
+ && /opt/om/bin/pip install -e packages/openmimicry-core \
+ && /opt/om/bin/pip install -e packages/openmimicry-llm \
+ && /opt/om/bin/pip install -e packages/openmimicry-voice \
+ && /opt/om/bin/pip install -e packages/openmimicry-avatar \
+ && /opt/om/bin/pip install -e packages/openmimicry-tasks \
+ && /opt/om/bin/pip install -e packages/openmimicry-vision \
+ && /opt/om/bin/pip install -e apps/backend
+
+# --- runtime ------------------------------------------------------------
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/om/bin:${PATH}" \
+    OPENMIMICRY_HOST=0.0.0.0 \
+    OPENMIMICRY_PORT=8000
+
+# Minimal runtime deps (curl is handy for the healthcheck).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 openmimicry
+
+WORKDIR /workspace
+COPY --from=builder /opt/om /opt/om
+COPY --from=builder /workspace /workspace
+COPY characters /workspace/characters
+COPY config /workspace/config
+RUN chown -R openmimicry:openmimicry /workspace
+
+USER openmimicry
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl --fail --silent http://127.0.0.1:8000/health || exit 1
+
+CMD ["openmimicry-backend"]

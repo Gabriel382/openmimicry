@@ -1,0 +1,40 @@
+schema_version: 1
+
+app:
+  log_level: INFO
+  log_format: text
+  data_dir: /tmp/openmimicry-tests
+  telemetry: false
+
+llm:
+  adapter: mock
+  model: mock/test
+
+voice:
+  stt:
+    adapter: mock
+    language: en
+    wake:
+      enabled: false
+      names: []
+  tts:
+    adapter: mock
+    engine: mock
+    voice: mock_voice
+  modes:
+    text_always_on: true
+    push_to_talk_hotkey: "Ctrl+Space"
+    live_wake: false
+    agent_voice: false
+
+avatar:
+  runtime: mock
+  pack: octomimic
+  default_state: idle
+  default_emotion: neutral
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

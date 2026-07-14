@@ -1,9 +1,0 @@
-{
-  "name": "voice-core",
-  "version": "0.1.0",
-  "description": "Voice input/output core package.",
-  "category": "voice",
-  "python_extra": "extended",
-  "dependencies": ["core-base"],
-  "runtime_enabled_by_default": false
-}

@@ -4,32 +4,209 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry"
-version = "0.1.0"
-description = "Open embodied avatar interfaces for LLMs and agentic systems."
+version = "1.0.0"
+description = "A modular avatar interface layer for LLMs, voice systems, and agentic task runtimes."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
 dependencies = []
 
+# Profile-based optional dependency sets, mirrored 1:1 with the YAML profiles
+# in `config/profiles/`.
+#
+# IMPORTANT: workspace packages (`openmimicry-core`, `openmimicry-llm`, …)
+# are NOT listed here. Until the project ships to PyPI, they have to be
+# installed locally with `pip install -e packages/openmimicry-<x>` — which
+# the Makefile target `install-workspace` does for you. Listing them as
+# distribution requirements here would break editable installs because pip
+# would try to resolve them from PyPI.
+#
+# These extras therefore list third-party deps only. The Makefile is the
+# single source of truth for "which workspace packages to install for
+# PROFILE=foo".
+
 [project.optional-dependencies]
-basic = [
-    "requests>=2.32",
-    "pillow>=10.0"
-]
-extended = [
-    "requests>=2.32",
-    "pillow>=10.0"
-]
-studio = [
-    "requests>=2.32",
-    "pillow>=10.0"
-]
-full = [
-    "requests>=2.32",
-    "pillow>=10.0"
+basic = []
+voice = []
+threejs = []
+live3d = []
+unity = []
+agent = []
+vision = []
+full = []
+full-vision = []
+studio = []
+dev = [
+    "ruff>=0.6",
+    "pyright[nodejs]>=1.1.380",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "pytest-xdist>=3",
+    "pre-commit>=3",
+    "watchfiles>=0.24",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
 ]
 
+# Legacy prototype packages (core/, backends/). They will be removed as the
+# migration proceeds (see docs/migration.md). They stay here so `pip install -e .`
+# keeps working during the transition.
 [tool.setuptools]
 py-modules = []
 
 [tool.setuptools.packages.find]
 include = ["core*", "backends*"]
+
+# --- Ruff -------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    ".venv",
+    "frontend/node_modules",
+    "src-tauri/target",
+    "packages/*/build",
+    "packages/*/dist",
+    # ---------------------------------------------------------------
+    # Legacy prototype directories (scheduled for removal during the
+    # migration to packages/openmimicry-*). They predate the modular
+    # ruff config; touching them is a migration concern, not a lint
+    # concern.
+    # ---------------------------------------------------------------
+    "core",
+    "backends",
+    "backend",
+    "avatar",
+    "tts",
+    "frontend",
+    "src-tauri",
+    # `apps/` is selectively included — apps/backend/src is linted,
+    # apps/desktop (Tauri shell) is excluded.
+    "apps/desktop",
+    "openmimicry.egg-info",
+    # Legacy scripts that import from the prototype `core`/`backends`
+    # trees. The new scripts (check_imports.py, doctor.py, m1_demo.py)
+    # are linted normally.
+    "scripts/backend_health.py",
+    "scripts/install_profile.py",
+    "scripts/run.py",
+    "scripts/run_avatar_demo.py",
+    "scripts/run_character_demo.py",
+    "scripts/test_backend_switch.py",
+    "scripts/test_ollama_connection.py",
+    "scripts/validate_avatar.py",
+    "scripts/validate_character.py",
+    "scripts/validate_config.py",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # function-call-in-default (FastAPI/typer pattern)
+    "RUF002", # en-dash in docstrings is intentional project-wide style
+    "RUF003", # ditto for noqa comments
+    "UP017",  # datetime.UTC alias is Python 3.11+ only; keep timezone.utc
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B011", "SIM117"]
+"scripts/**/*.py" = ["SIM117"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --- Pytest -----------------------------------------------------------------
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "contract: parametrised contract tests for adapter Protocols",
+    "integration: cross-module integration tests",
+    "e2e: end-to-end smoke tests",
+    "slow: tests that take more than a second",
+]
+filterwarnings = [
+    "error::DeprecationWarning:openmimicry.*",
+]
+
+# --- Coverage ---------------------------------------------------------------
+
+[tool.coverage.run]
+branch = true
+source = ["packages", "apps/backend/src"]
+omit = [
+    "*/tests/*",
+    "*/_version.py",
+    "*/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+fail_under = 70
+show_missing = true
+skip_covered = false
+
+# --- Pyright ----------------------------------------------------------------
+
+[tool.pyright]
+reportArgumentType = "none"
+reportOptionalMemberAccess = "none"
+reportOptionalCall = "none"
+include = [
+    "packages",
+    "apps/backend/src",
+    "tests",
+    "scripts/check_imports.py",
+    "scripts/doctor.py",
+    "scripts/m1_demo.py",
+]
+exclude = [
+    "**/__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    "frontend",
+    "src-tauri",
+    "apps/desktop",
+    "core",
+    "backend",
+    "backends",
+    "avatar",
+    "tts",
+    "openmimicry.egg-info",
+]
+
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+# Keep Pyright useful without making the early modular migration fail on
+# partially typed dictionaries, dynamic config loading, and third-party stubs.
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportMissingTypeArgument = "none"
+reportUnusedFunction = "none"
+reportDeprecated = "none"

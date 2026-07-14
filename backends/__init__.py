@@ -1,1 +1,0 @@
-# OpenMimicry backend helpers.

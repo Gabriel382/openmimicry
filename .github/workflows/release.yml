@@ -1,0 +1,57 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-wheels:
+    name: build python wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: pip install --upgrade build
+      - name: Build each package
+        run: |
+          for pkg in packages/openmimicry-*; do
+            echo "::group::Building $pkg"
+            (cd "$pkg" && python -m build)
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-wheels
+          path: |
+            packages/*/dist/*.whl
+            packages/*/dist/*.tar.gz
+
+  github-release:
+    name: github release
+    needs: [build-wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-wheels
+          path: artifacts/
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # TODO: replace with git-cliff or release-please when those land
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.changelog.outputs.tag }}
+          files: artifacts/**/*
+          generate_release_notes: true
+          draft: true

@@ -1,0 +1,63 @@
+# OpenMimicry docker-compose for local + CI smoke runs.
+#
+# Spins up:
+#   - backend       : FastAPI process (M6) on :8000
+#   - frontend-dev  : Vite dev server (M7) on :5173, with /ws proxied
+#                     to the backend service
+#
+# The Tauri desktop shell (M8) lives outside compose because it needs
+# a real display; run it directly with `make desktop` after the
+# backend is healthy.
+#
+# Usage:
+#   docker compose up backend                # backend only (mocks-only)
+#   docker compose up backend frontend-dev   # browser frontend at :5173
+#   docker compose down
+
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: openmimicry-backend:1.0.0
+    container_name: openmimicry-backend
+    ports:
+      - "${OPENMIMICRY_BACKEND_PORT:-8000}:8000"
+    environment:
+      OPENMIMICRY_HOST: 0.0.0.0
+      OPENMIMICRY_PORT: 8000
+      # Override to point at a YAML config inside the container.
+      OPENMIMICRY_CONFIG_PATH: ${OPENMIMICRY_CONFIG_PATH:-}
+      # Mocks-only by default; set OPENMIMICRY_PROFILE=full to flip on
+      # the real-provider profile (also set the relevant API keys).
+      OPENMIMICRY_PROFILE: ${OPENMIMICRY_PROFILE:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - ./characters:/workspace/characters:ro
+      - ./config:/workspace/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend-dev
+    image: openmimicry-frontend-dev:1.0.0
+    container_name: openmimicry-frontend-dev
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${OPENMIMICRY_FRONTEND_PORT:-5173}:5173"
+    environment:
+      OPENMIMICRY_BACKEND_HOST: http://backend:8000
+    profiles:
+      - dev

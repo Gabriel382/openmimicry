@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-stt"
+version = "1.0.0"
+description = "OpenMimicry sensor layer (STT facade): RealtimeSTT adapter, WakeController, mocks. Re-exports the STT half of openmimicry-voice."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openmimicry-core>=1.0.0",
+    "openmimicry-voice>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Heavy STT deps are still lazy-imported via the voice package. Installing
+# the `realtimestt` extra here is equivalent to installing it on
+# openmimicry-voice — kept for ergonomic parity.
+realtimestt = ["openmimicry-voice[realtimestt]>=1.0.0"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+# Entry points intentionally NOT redeclared here. openmimicry-voice already
+# registers the STT factories under `openmimicry.contracts.stt`; declaring
+# them again from this facade would create duplicate registrations.
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.stt" = ["py.typed"]

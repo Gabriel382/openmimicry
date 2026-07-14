@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Architecture / RFC discussion
+    url: https://github.com/ghenrique/openmimicry/discussions/categories/rfc
+    about: Cross-module design questions. Open a discussion before a PR.
+  - name: Security report
+    url: https://github.com/ghenrique/openmimicry/security/advisories/new
+    about: Private security disclosure. Please do NOT open a public issue.
+  - name: Architecture reading order
+    url: https://github.com/ghenrique/openmimicry/blob/main/docs/modules/README.md
+    about: How modules compose, the interface stability policy, and how to consume a brief.

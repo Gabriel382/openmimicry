@@ -1,9 +1,58 @@
+# --- Python -------------------------------------------------------------
 __pycache__/
-*.pyc
-.env
-.venv/
-dist/
-build/
+*.py[cod]
 *.egg-info/
-frontend/node_modules/
-src-tauri/target/debug/
+.eggs/
+build/
+dist/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+pytest-cache-files-*/
+htmlcov/
+
+# --- Virtualenvs ---------------------------------------------------------
+.venv/
+venv/
+env/
+backend/.venv/
+
+# --- Node / JS -----------------------------------------------------------
+node_modules/
+dist/
+.vite/
+.next/
+coverage/
+.eslintcache
+
+# --- Rust / Tauri --------------------------------------------------------
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/schemas/
+src-tauri/target/
+
+# --- Logs + tmp ----------------------------------------------------------
+*.log
+*.log.*
+*.tmp
+.tmp/
+
+# --- Env + secrets -------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- IDE / OS noise ------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- OpenMimicry-specific ------------------------------------------------
+characters/octomimic_vrm/*.vrm
+~$*

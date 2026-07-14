@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-avatar"
+version = "1.0.0"
+description = "OpenMimicry avatar core: pack loader, director, orchestrator, mock runtime."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openmimicry-core>=1.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Optional `websockets` for the Unity bridge transport. Lazy-imported
+# by `WSUnityTransport`; the adapter still works with the bundled
+# `MockUnityTransport` without this extra.
+unity = [
+    "websockets>=12",
+]
+# Optional `websockets` for the generic external bridge (M12). Same
+# rule as `unity` — lazy import, mock client works without it.
+external = [
+    "websockets>=12",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+[project.entry-points."openmimicry.contracts.avatar_runtime"]
+mock = "openmimicry.avatar.mocks:make_mock_avatar_runtime_adapter"
+sprite2d = "openmimicry.avatar.runtimes.sprite2d.adapter:make_sprite2d_avatar_adapter"
+threejs = "openmimicry.avatar.runtimes.threejs.adapter:make_threejs_avatar_adapter"
+live3d = "openmimicry.avatar.runtimes.live3d.adapter:make_live3d_avatar_adapter"
+unity = "openmimicry.avatar.runtimes.unity.adapter:make_unity_avatar_adapter"
+external = "openmimicry.avatar.runtimes.external.adapter:make_external_avatar_adapter"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.avatar" = ["py.typed"]

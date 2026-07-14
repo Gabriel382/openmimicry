@@ -1,0 +1,151 @@
+/* Panel route — interactive UI. */
+
+.panel-route {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  width: 100%;
+  height: 100%;
+  background: #16161a;
+  color: #ddd;
+}
+
+.panel-route__header {
+  padding: 8px 16px;
+  border-bottom: 1px solid #2a2a30;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.panel-route__main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.text-input {
+  display: flex;
+  gap: 8px;
+}
+
+.text-input input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #2a2a30;
+  background: #1d1d22;
+  color: #f4f4f6;
+}
+
+.text-input button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #5b8def;
+  color: #fff;
+  cursor: pointer;
+}
+
+.text-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.voice-toggle button {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a2a30;
+  background: #1d1d22;
+  color: #ddd;
+  cursor: pointer;
+}
+
+.voice-toggle button[aria-pressed="true"] {
+  background: #2e7d32;
+  border-color: #2e7d32;
+  color: #fff;
+}
+
+.task-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-card__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1d1d22;
+  border-radius: 8px;
+}
+
+.task-card__row--succeeded,
+.task-card__row--cancelled,
+.task-card__row--failed {
+  opacity: 0.65;
+}
+
+.task-card__error {
+  grid-column: 1 / -1;
+  color: #ff9aa2;
+}
+
+.task-card--empty {
+  font-style: italic;
+  color: #888;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-panel__field {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-panel__error {
+  color: #ff9aa2;
+}
+
+.mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.mode-indicator__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+}
+
+.mode-indicator__dot[data-status="open"] {
+  background: #4caf50;
+}
+
+.mode-indicator__dot[data-status="connecting"] {
+  background: #f9a825;
+}
+
+.mode-indicator__dot[data-status="closed"] {
+  background: #d32f2f;
+}

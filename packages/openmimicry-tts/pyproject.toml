@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-tts"
+version = "1.0.0"
+description = "OpenMimicry effector layer (TTS facade): RealtimeTTS adapter, mocks. Re-exports the TTS half of openmimicry-voice."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Typing :: Typed",
+]
+dependencies = [
+    "openmimicry-core>=1.0.0",
+    "openmimicry-voice>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Heavy TTS deps remain in the source package and are lazy-imported.
+# Installing the `realtimetts` extra here is equivalent to installing
+# it on openmimicry-voice — kept for ergonomic parity.
+realtimetts = ["openmimicry-voice[realtimetts]>=1.0.0"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+]
+
+# Entry points intentionally NOT redeclared here. openmimicry-voice already
+# registers the TTS factories under `openmimicry.contracts.tts`; declaring
+# them again from this facade would create duplicate registrations.
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry*"]
+
+[tool.setuptools.package-data]
+"openmimicry.tts" = ["py.typed"]
