@@ -6,6 +6,9 @@ from openmimicry_backend.appearance import AppearanceConfig, load_appearance
 def test_missing_appearance_file_uses_safe_defaults(tmp_path) -> None:
     config = load_appearance(tmp_path / "missing.yml")
     assert config.windows.overlay.always_on_top is True
+    assert config.windows.controls.height == 46
+    assert config.windows.composer.height == 54
+    assert config.layout.composer_gap == 6
     assert config.behaviour.bubble.ms_per_character == 55
 
 

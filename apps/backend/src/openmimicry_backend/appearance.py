@@ -31,7 +31,15 @@ class ControlsWindowAppearance(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     width: int = Field(default=360, ge=240, le=1600)
-    height: int = Field(default=92, ge=44, le=320)
+    height: int = Field(default=46, ge=44, le=320)
+    always_on_top: bool = True
+
+
+class ComposerWindowAppearance(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    width: int = Field(default=360, ge=240, le=1600)
+    height: int = Field(default=54, ge=44, le=320)
     always_on_top: bool = True
 
 
@@ -47,6 +55,7 @@ class WindowAppearance(BaseModel):
 
     overlay: OverlayWindowAppearance = Field(default_factory=OverlayWindowAppearance)
     controls: ControlsWindowAppearance = Field(default_factory=ControlsWindowAppearance)
+    composer: ComposerWindowAppearance = Field(default_factory=ComposerWindowAppearance)
     panel: PanelWindowAppearance = Field(default_factory=PanelWindowAppearance)
 
 
@@ -72,6 +81,7 @@ class LayoutAppearance(BaseModel):
     avatar_width: int = Field(default=330, ge=120, le=1400)
     avatar_scale: float = Field(default=1.0, ge=0.25, le=3.0)
     controls_gap: int = Field(default=6, ge=0, le=80)
+    composer_gap: int = Field(default=6, ge=0, le=80)
 
 
 class BubbleBehaviour(BaseModel):

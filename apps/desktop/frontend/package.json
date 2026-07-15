@@ -1,9 +1,9 @@
 {
   "name": "@openmimicry/desktop-frontend",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.3.0",
   "type": "module",
-  "description": "OpenMimicry desktop frontend (M7): overlay + panel routes, WS client, runtime registry.",
+  "description": "OpenMimicry desktop frontend: transparent avatar, compact toolbar, WS client, and runtime registry.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

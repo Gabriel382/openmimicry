@@ -11,6 +11,7 @@ Engine selection is keyed off ``TTSConfig.engine`` (e.g. ``coqui``,
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -117,10 +118,8 @@ class RealtimeTTSAdapter:
         stream = self._stream
         if stream is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             stream.stop()
-        except Exception:  # noqa: BLE001 — shutdown race
-            pass
 
 
 def _import_stream_class() -> Any:
@@ -128,7 +127,8 @@ def _import_stream_class() -> Any:
         from RealtimeTTS import TextToAudioStream  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RealtimeTTSUnavailable(
-            'RealtimeTTS is not installed. Install with `pip install "openmimicry-voice[realtimetts]"`.'
+            "RealtimeTTS is not installed in OpenMimicry's .venv. Run "
+            "`.\\scripts\\win\\install.bat openrouter-voice` from the repository root."
         ) from exc
     return TextToAudioStream
 

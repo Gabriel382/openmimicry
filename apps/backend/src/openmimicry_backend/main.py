@@ -12,6 +12,7 @@ Run with::
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -28,6 +29,7 @@ from .routes import (
     admin_router,
     appearance_router,
     chat_router,
+    dashboard_router,
     health_router,
     mode_router,
     pack_router,
@@ -40,6 +42,13 @@ __all__ = ["app", "create_app", "run_uvicorn"]
 
 
 _log = logging.getLogger(__name__)
+
+
+def _module_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
 
 
 def _load_app_config() -> tuple[AppConfig, str | None]:
@@ -58,8 +67,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
 
     mode_state = {
+        "continuous_listening": config.voice.modes.continuous_listening,
         "live_wake": config.voice.modes.live_wake,
         "agent_voice": config.voice.modes.agent_voice,
+        "wake_names": list(wiring.speech.wake_names),
     }
 
     async def _handle_user_text(text: str) -> None:
@@ -73,9 +84,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     async def _apply_mode_toggle(key: str, value: bool) -> None:
-        if key == "live_wake":
+        if key == "continuous_listening":
+            if value:
+                await wiring.speech.enable_continuous_listening()
+                mode_state["live_wake"] = False
+            else:
+                await wiring.speech.disable_live_listening()
+        elif key == "live_wake":
             if value:
                 await wiring.speech.enable_live_listening(wake_names=None)
+                mode_state["continuous_listening"] = False
             else:
                 await wiring.speech.disable_live_listening()
         elif key == "agent_voice" and not value:
@@ -87,12 +105,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     def _mode_status() -> dict[str, object]:
         stt_name = getattr(wiring.stt, "name", "unknown")
         tts_name = getattr(wiring.tts, "name", "unknown")
+        real_input = not stt_name.startswith("mock")
+        real_output = not tts_name.startswith("mock")
+        if stt_name == "realtimestt":
+            real_input = _module_available("RealtimeSTT")
+        if tts_name == "realtimetts":
+            real_output = _module_available("RealtimeTTS")
         return {
             **mode_state,
+            "listening_mode": getattr(wiring.speech, "listening_mode", "off"),
+            "ptt_active": getattr(wiring.speech, "ptt_active", False),
+            "wake_names": list(getattr(wiring.speech, "wake_names", ["Mimi"])),
             "stt_adapter": stt_name,
             "tts_adapter": tts_name,
-            "real_input": stt_name != "mock",
-            "real_output": tts_name != "mock",
+            "real_input": real_input,
+            "real_output": real_output,
+            "input_install_hint": (
+                None
+                if real_input or stt_name.startswith("mock")
+                else r"Run .\scripts\win\install.bat openrouter-voice"
+            ),
+            "output_install_hint": (
+                None
+                if real_output or tts_name.startswith("mock")
+                else r"Run .\scripts\win\install.bat openrouter-voice"
+            ),
         }
 
     async def _cancel_task(raw_handle: dict[str, object]) -> None:
@@ -123,7 +160,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     await wiring.speech.start()
-    if mode_state["live_wake"]:
+    if mode_state["continuous_listening"]:
+        await wiring.speech.enable_continuous_listening()
+    elif mode_state["live_wake"]:
         await wiring.speech.enable_live_listening(wake_names=None)
     await wiring.orchestrator.start()
 
@@ -153,12 +192,13 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.1.0",
+        version="1.3.0",
         lifespan=lifespan,
     )
 
     app.include_router(health_router)
     app.include_router(chat_router)
+    app.include_router(dashboard_router)
     app.include_router(mode_router)
     app.include_router(pack_router)
     app.include_router(admin_router)

@@ -16,7 +16,7 @@ In scope:
 - A small, typed Python core that owns state, events, and configuration.
 - Clean adapter contracts for LLMs, speech-to-text, text-to-speech, external task runtimes, **and avatar runtimes**.
 - A pluggable avatar layer: Sprite2D (default), Advanced 2D, lightweight 3D (Three.js / VRM / glTF), Live 3D, Unity (via protocol), and external renderers — all behind one `AvatarRuntimeAdapter` interface.
-- A Tauri + React desktop shell with a transparent overlay and a separate panel window.
+- A Tauri + React desktop shell with a transparent avatar and a compact top toolbar, plus a localhost browser dashboard for settings and tasks.
 - YAML-driven configuration, validated by Pydantic.
 - Reproducible installs, type-checked Python, linted code, tested adapters, and tagged releases.
 
@@ -64,7 +64,7 @@ openmimicry/
   apps/
     backend/                        # FastAPI process: HTTP + WebSocket transport
     desktop/
-      frontend/                     # React/Vite UI (overlay + panel routes)
+      frontend/                     # React/Vite UI (avatar + top-toolbar routes)
         src/runtimes/
           sprite2d/                 # frame renderer
           threejs/                  # Three.js scene + VRM viewer
@@ -207,7 +207,8 @@ voice:
   modes:
     text_always_on: true
     push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true
+    continuous_listening: false
+    live_wake: false
     agent_voice: true
 
 avatar:
@@ -303,9 +304,10 @@ Detail in [`voice_modes.md`](./voice_modes.md). The short version:
 
 Detail in [`desktop_overlay.md`](./desktop_overlay.md). The strategy is deliberately simple:
 
-- Two windows. The overlay window is decoration-less, transparent, always-on-top, click-through by default. The panel window is normal.
-- Click-through is toggled at the OS level via Tauri (`setIgnoreCursorEvents(true|false)`), not by reading pixel alpha. A configurable hotkey and a tray menu item flip it. While "interact mode" is on, the entire overlay is clickable; while off, all clicks fall through.
-- Visual interaction with the avatar (drag to reposition, right-click for menu) is opt-in via a small interactive zone — a normal HTML element inside the overlay that grabs focus only when interact mode is on.
+- Three visually docked implementation windows. The avatar is decoration-less, transparent, always-on-top, and click-through; the compact toolbar above and message composer below it are interactive. There is no native side panel.
+- Click-through is toggled at the OS level via Tauri (`setIgnoreCursorEvents(true|false)`), not by reading pixel alpha. A configurable hotkey flips it. While "interact mode" is on, the entire avatar window is clickable; while off, clicks on the avatar area fall through.
+- Drag, lock, PTT, wake-name listening, agent voice, browser settings, and exit remain clickable in the toolbar while the PNG area passes clicks through. The lower composer keeps text independent of voice state. Dragging the unlocked toolbar moves and persists the complete companion.
+- Settings, diagnostics, chat, and tasks are served by FastAPI at `/dashboard` and open in the operating system's default browser.
 - We never attempt per-pixel hit testing. It is platform-fragile, expensive, and unnecessary for a companion overlay.
 
 ## 14. Configuration, observability, and lifecycle

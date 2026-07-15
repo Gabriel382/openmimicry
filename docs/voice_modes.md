@@ -1,28 +1,45 @@
 # Voice modes, interruptible TTS, and barge-in
 
-OpenMimicry supports four orthogonal voice toggles. They are configured under `voice.modes` and can be flipped at runtime through the panel UI.
+OpenMimicry supports text, push-to-talk, name-gated hands-free input, optional
+ungated continuous input, and agent voice. The everyday controls live on the avatar's
+top toolbar and in the local browser dashboard.
 
 ```yaml
 voice:
   modes:
     text_always_on: true     # /chat input box always usable; never disables
     push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true          # passive wake-word listening
+    continuous_listening: false  # advanced: submit every final utterance
+    live_wake: false         # toolbar: require a configured name prefix
     agent_voice: true        # speak LLM replies via TTS
     barge_in_grace_ms: 600
 ```
 
-## 1. The four modes
+## 1. Input and output modes
 
-**Text always on.** The panel's text input is always wired straight to `Runtime.handle_user_text(text)`. It does not depend on the voice subsystem being healthy. If STT/TTS are broken, text still works.
+**Text always on.** The toolbar and browser-dashboard inputs do not depend on
+the voice subsystem. If STT/TTS are broken, text still works.
 
-**Push-to-talk.** A global hotkey (Tauri-registered for cross-window capture) opens the mic for the duration of the keypress. While held, all running TTS is cancelled. On release, the final transcript is dispatched as if the user had typed it. PTT works regardless of `live_wake`.
+**Push-to-talk.** Hold the toolbar microphone or `Ctrl+Space`. The microphone
+is open only for the press duration. On release, the final transcript is sent
+as a chat turn. If passive listening is active, it pauses for PTT and is restored
+after release so only one consumer reads the STT stream.
 
-**Live wake.** STT runs continuously in low-cost wake-listening mode. On a wake word, the controller switches the STT to dictation mode, the avatar enters `listening`, and the flow proceeds as PTT. Wake names are configurable; multiple are supported.
+**Wake listen (`live_wake`).** RealtimeSTT stays in dictation mode and uses
+voice activity detection to wait for speech. `SpeechController` submits a final
+utterance only when it begins with a configured name such as “Mimi” or “Hey
+Mimi”; the matching prefix and punctuation are removed from the command. The
+toolbar exposes this as the safe hands-free option. Change the name in the
+local dashboard; it is saved to `config/user.yaml`.
+
+**Continuous listening (`continuous_listening`).** This advanced API/config
+mode submits every final utterance without requiring a name. It remains useful
+for controlled environments but is not the normal toolbar control.
 
 **Agent voice.** When on, LLM replies are streamed into TTS (token-by-token, low-latency). When off, replies are only displayed in the speech bubble. Off does not impose any cost: the TTS adapter is not started.
 
-These toggles compose. The user can run pure-text, voice-out only, voice-in only via PTT, or fully hands-free.
+The user can run pure text, voice-out only, PTT input, or name-gated hands-free
+listening. PTT and passive listening coordinate atomically around one microphone.
 
 ## 2. Interruptible TTS
 
@@ -97,6 +114,8 @@ If TTS is interrupted mid-reply, the frontend sees `TTSInterrupted` -> `AvatarDi
 - `WakeDetected` while TTS plays causes `TTSInterrupted` then `listening`.
 - VAD bounces shorter than `barge_in_grace_ms` do not cancel TTS.
 - Disabling `agent_voice` mid-reply stops at the next chunk boundary and emits `TTSFinished`, not `TTSInterrupted`.
-- Disabling `live_wake` while listening shuts STT cleanly.
+- Disabling continuous or wake listening shuts STT cleanly.
+- PTT pauses and restores continuous listening without leaving stale queue
+  sentinels or competing transcript consumers.
 
 All of those use the mock adapters; no audio hardware is required in CI.

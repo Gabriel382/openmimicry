@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenMimicry Dashboard</title>
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LOCAL CONTROL BOARD</p>
+        <h1>OpenMimicry</h1>
+      </div>
+      <div class="connection"><span id="connection-dot"></span><span id="connection">Connecting</span></div>
+    </header>
+
+    <main class="dashboard">
+      <section class="card conversation-card">
+        <div class="card-heading"><h2>Conversation</h2><span id="avatar-state" class="badge">idle</span></div>
+        <div id="reply" class="reply" aria-live="polite">The latest reply appears here.</div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" autocomplete="off" placeholder="Message OpenMimicry…" aria-label="Message" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Voice</h2><span id="voice-health" class="badge">checking</span></div>
+        <div class="voice-actions">
+          <button id="ptt" class="mode-button" type="button">Hold to talk</button>
+          <button id="wake-listen" class="mode-button" type="button" aria-pressed="false">Wake listen: off</button>
+          <button id="agent-voice" class="mode-button" type="button" aria-pressed="true">Agent voice: on</button>
+        </div>
+        <form id="wake-name-form" class="wake-name-form">
+          <label for="wake-name">Wake name</label>
+          <input id="wake-name" maxlength="40" value="Mimi" autocomplete="off" aria-label="Wake name" />
+          <button type="submit">Save name</button>
+        </form>
+        <p id="voice-adapters" class="muted">Input: unknown · Output: unknown</p>
+        <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the configured name, for example “Mimi, what time is it?”. <strong>Push-to-talk</strong> listens only while the toolbar microphone or Ctrl+Space is held and does not require the name.</p>
+        <p id="voice-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Avatar settings</h2><span class="badge">live</span></div>
+        <form id="settings-form" class="settings-form">
+          <label><span>Character pack</span><select id="pack"><option value="octomimic">octomimic</option></select></label>
+          <button id="swap-pack" type="button">Apply pack</button>
+          <label><span>Runtime</span><select id="runtime"><option>sprite2d</option><option>threejs</option><option>live3d</option><option>unity</option><option>external</option></select></label>
+          <button id="swap-runtime" type="button">Apply runtime</button>
+        </form>
+        <p id="settings-error" class="error" role="alert"></p>
+        <p class="muted">Window geometry, colors, toolbar visibility, and bubble timing remain in <code>config/theme.yml</code>.</p>
+      </section>
+
+      <section class="card tasks-card">
+        <div class="card-heading"><h2>Tasks</h2><span id="task-count" class="badge">0 active</span></div>
+        <div id="tasks" class="tasks" role="list">
+          <p class="empty">No tasks running. Tasks appear only after an explicit delegation request.</p>
+        </div>
+      </section>
+
+      <section class="card diagnostics-card">
+        <div class="card-heading"><h2>Diagnostics</h2><button id="refresh-health" class="quiet" type="button">Refresh</button></div>
+        <pre id="health">Loading adapter health…</pre>
+      </section>
+    </main>
+    <script src="/dashboard.js" defer></script>
+  </body>
+</html>

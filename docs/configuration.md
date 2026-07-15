@@ -1,7 +1,8 @@
 # Configuration
 
 OpenMimicry runtime behavior is configured by `config/app.yaml` plus an optional
-profile. Non-secret desktop appearance is configured separately in
+profile. The browser dashboard stores non-secret user overrides such as the
+wake name in ignored `config/user.yaml`. Desktop appearance is configured in
 `config/theme.yml`, and assistant tone/cue vocabulary in
 `config/personality.yml`.
 
@@ -14,7 +15,10 @@ profile. Non-secret desktop appearance is configured separately in
    - `./config/app.yaml`.
    - `~/.config/openmimicry/app.yaml`.
 3. A profile file, if `OPENMIMICRY_PROFILE` is set: `./config/profiles/<name>.yaml`, merged over the active file.
-4. Environment variables of the form `OPENMIMICRY__<SECTION>__<KEY>=...`, applied last.
+4. The optional user overlay at `config/user.yaml`, or the path named by
+   `OPENMIMICRY_USER_CONFIG`, merged over the profile.
+5. Environment variables of the form `OPENMIMICRY__<SECTION>__<KEY>=...`,
+   applied last.
 
 The merge is deep for nested dicts and replacement for scalars/lists. The final tree is validated; on failure, the process exits with a structured error pointing at the offending path.
 
@@ -63,7 +67,8 @@ voice:
   modes:
     text_always_on: true
     push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true
+    continuous_listening: false  # advanced: submit every final utterance
+    live_wake: false             # toolbar: require configured name prefix
     agent_voice: true
     barge_in_grace_ms: 600
 
@@ -132,15 +137,11 @@ ui:
     click_through_default: true
     always_on_top: true
     save_position: true
-  panel:
-    width: 480
-    height: 720
-    open_on_startup: false
   tray:
     enabled: true
   hotkeys:
     toggle_interact: "Ctrl+Shift+M"
-    show_panel: "Ctrl+Shift+O"
+    show_panel: "Ctrl+Shift+O"  # legacy name; opens the browser dashboard
 ```
 
 Every section maps 1:1 to a Pydantic model in `openmimicry.core.schemas.app`. Models are frozen; the runtime gets read-only views.
@@ -175,7 +176,7 @@ Some changes are safe to apply without restarting:
 | `llm.adapter`, `voice.*.adapter`, `tasks.runtimes.*.adapter` | **no** (restart required) |
 | `tasks.runtimes.*` add/remove | **no** |
 
-`make doctor` and the panel's "Settings" page mark adapter-level changes as "needs restart".
+`make doctor` and the browser dashboard's Settings card mark adapter-level changes as "needs restart".
 
 The reloader watches the active config file with `watchfiles`, re-merges env overrides, re-validates, and `EventBus.publish(ConfigUpdated(diff))`. Each module decides whether the diff requires action.
 
@@ -214,4 +215,8 @@ and actions for structured avatar cues. Override its location with
 
 ## 8. Validation in CI
 
-`scripts/validate_config.py` loads every YAML in `config/` and runs the validator. CI runs that script on every PR. Pack manifests are validated the same way via `scripts/validate_pack.py`. A PR that breaks the example configs cannot be merged.
+`scripts/validate_config.py` validates `config/app.yaml` alone and merged with
+every profile in `config/profiles/`. Appearance and personality schemas have
+their own backend tests. Pack manifests are validated through
+`scripts/validate_pack.py`. A PR that breaks a shipped example cannot be
+merged.

@@ -14,12 +14,14 @@ get us full M6 chat-flow coverage anyway:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from openmimicry.core import (
     LLMReplyComplete,
+    LLMStarted,
     LLMTokenStreamed,
     RuntimeEvent,
 )
@@ -38,10 +40,8 @@ async def _collect_events(bus, n_max: int, *, timeout: float = 2.0) -> list[Runt
             if len(collected) >= n_max:
                 return
 
-    try:
+    with contextlib.suppress(TimeoutError):
         await asyncio.wait_for(_drain(), timeout=timeout)
-    except asyncio.TimeoutError:
-        pass
     return collected
 
 
@@ -62,11 +62,15 @@ async def test_chat_pipeline_publishes_llm_stream_then_complete(wiring: Any) -> 
 
     events = await collector
     kinds = [e.kind for e in events]
+    assert any(isinstance(event, LLMStarted) for event in events)
     assert "llm_token" in kinds
     assert "llm_done" in kinds
 
+    first_start = kinds.index("llm_start")
+    first_token = kinds.index("llm_token")
     last_token = max(i for i, k in enumerate(kinds) if k == "llm_token")
     first_done = kinds.index("llm_done")
+    assert first_start < first_token
     assert last_token < first_done
 
     deltas = [e.delta for e in events if isinstance(e, LLMTokenStreamed)]

@@ -11,6 +11,7 @@ voice:
   tts:
     adapter: mock
   modes:
+    continuous_listening: false
     live_wake: false
     agent_voice: false
 

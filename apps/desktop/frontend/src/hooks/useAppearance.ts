@@ -4,6 +4,7 @@ export interface AppearanceConfig {
   windows: {
     overlay: { width: number; height: number; always_on_top: boolean; movable: boolean };
     controls: { width: number; height: number; always_on_top: boolean };
+    composer: { width: number; height: number; always_on_top: boolean };
     panel: { width: number; height: number };
   };
   theme: {
@@ -23,6 +24,7 @@ export interface AppearanceConfig {
     avatar_width: number;
     avatar_scale: number;
     controls_gap: number;
+    composer_gap: number;
   };
   behaviour: {
     bubble: { base_ms: number; ms_per_character: number; max_ms: number };
@@ -38,7 +40,8 @@ export interface AppearanceConfig {
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   windows: {
     overlay: { width: 360, height: 420, always_on_top: true, movable: true },
-    controls: { width: 360, height: 92, always_on_top: true },
+    controls: { width: 360, height: 46, always_on_top: true },
+    composer: { width: 360, height: 54, always_on_top: true },
     panel: { width: 480, height: 720 },
   },
   theme: {
@@ -53,7 +56,13 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     panel_bg: "#16161a",
     panel_text: "#dddddd",
   },
-  layout: { bubble_max_width: 330, avatar_width: 330, avatar_scale: 1, controls_gap: 6 },
+  layout: {
+    bubble_max_width: 330,
+    avatar_width: 330,
+    avatar_scale: 1,
+    controls_gap: 6,
+    composer_gap: 6,
+  },
   behaviour: {
     bubble: { base_ms: 2500, ms_per_character: 55, max_ms: 30000 },
     controls: {

@@ -19,12 +19,18 @@ export interface TauriCommands {
     overlayHeight: number;
     controlsWidth: number;
     controlsHeight: number;
-    panelWidth: number;
-    panelHeight: number;
+    composerWidth: number;
+    composerHeight: number;
     gap: number;
+    composerGap: number;
     alwaysOnTop: boolean;
     showControls: boolean;
+    showComposer: boolean;
   }): Promise<void>;
+  setPositionLocked(locked: boolean): Promise<void>;
+  overlayInfo(): Promise<{ position_locked: boolean } | undefined>;
+  openBackendDashboard(): Promise<void>;
+  quitApp(): Promise<void>;
 }
 
 async function tryInvoke<T = unknown>(
@@ -63,15 +69,37 @@ export function useTauriCommand(): TauriCommands {
       overlayHeight: number;
       controlsWidth: number;
       controlsHeight: number;
-      panelWidth: number;
-      panelHeight: number;
+      composerWidth: number;
+      composerHeight: number;
       gap: number;
+      composerGap: number;
       alwaysOnTop: boolean;
       showControls: boolean;
+      showComposer: boolean;
     }): Promise<void> => {
       await tryInvoke("configure_overlay_windows", { config });
     },
     [],
   );
-  return { setOverlayInteractive, swapAvatarRuntime, configureOverlayWindows };
+  const setPositionLocked = useCallback(async (locked: boolean): Promise<void> => {
+    await tryInvoke("set_position_locked", { locked });
+  }, []);
+  const overlayInfo = useCallback(async (): Promise<{ position_locked: boolean } | undefined> => {
+    return tryInvoke<{ position_locked: boolean }>("overlay_info");
+  }, []);
+  const openBackendDashboard = useCallback(async (): Promise<void> => {
+    await tryInvoke("open_backend_dashboard");
+  }, []);
+  const quitApp = useCallback(async (): Promise<void> => {
+    await tryInvoke("quit_app");
+  }, []);
+  return {
+    setOverlayInteractive,
+    swapAvatarRuntime,
+    configureOverlayWindows,
+    setPositionLocked,
+    overlayInfo,
+    openBackendDashboard,
+    quitApp,
+  };
 }

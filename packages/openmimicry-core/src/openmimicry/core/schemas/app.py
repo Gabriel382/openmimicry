@@ -143,7 +143,11 @@ class VoiceModesConfig(BaseModel):
 
     text_always_on: bool = True
     push_to_talk_hotkey: str = "Ctrl+Space"
-    live_wake: bool = True
+    # ``continuous_listening`` is ordinary VAD-driven dictation: the user
+    # starts speaking without first saying a wake name. ``live_wake`` remains
+    # as a backwards-compatible, advanced wake-word mode.
+    continuous_listening: bool = False
+    live_wake: bool = False
     agent_voice: bool = True
     barge_in_grace_ms: int = 600
 

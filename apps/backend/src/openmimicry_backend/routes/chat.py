@@ -48,6 +48,7 @@ __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
 _log = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+_MIN_THINKING_SECONDS = 0.65
 
 
 def _now() -> datetime:
@@ -201,6 +202,7 @@ async def _run_llm_path(
     speech: SpeechController | None,
 ) -> None:
     bus.publish(LLMStarted(ts=_now()))
+    thinking_started = asyncio.get_running_loop().time()
 
     settings = load_personality()
     messages = [
@@ -218,6 +220,12 @@ async def _run_llm_path(
         bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
 
     reply = parse_assistant_reply("".join(raw_parts), settings)
+    # Fast local/mock models can otherwise advance from thinking to the reply
+    # inside one paint frame. Keep the thinking animation perceptible without
+    # adding latency to ordinary network LLM calls that already exceed it.
+    thinking_elapsed = asyncio.get_running_loop().time() - thinking_started
+    if reply.text and thinking_elapsed < _MIN_THINKING_SECONDS:
+        await asyncio.sleep(_MIN_THINKING_SECONDS - thinking_elapsed)
     for delta in _display_chunks(reply.text):
         bus.publish(LLMTokenStreamed(ts=_now(), delta=delta))
         await asyncio.sleep(0)

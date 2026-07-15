@@ -10,6 +10,7 @@ from __future__ import annotations
 from .admin import router as admin_router
 from .appearance import router as appearance_router
 from .chat import router as chat_router
+from .dashboard import router as dashboard_router
 from .health import router as health_router
 from .mode import router as mode_router
 from .pack import router as pack_router
@@ -18,6 +19,7 @@ __all__ = [
     "admin_router",
     "appearance_router",
     "chat_router",
+    "dashboard_router",
     "health_router",
     "mode_router",
     "pack_router",

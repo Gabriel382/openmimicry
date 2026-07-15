@@ -105,6 +105,35 @@ def test_profile_overlay_merges_on_top_of_base(tmp_path: Path) -> None:
     assert cfg.app.log_level == "INFO"
 
 
+def test_user_overlay_wins_over_profile_but_env_still_wins(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    profile_dir = config_dir / "profiles"
+    profile_dir.mkdir(parents=True)
+    (config_dir / "app.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (profile_dir / "voice.yaml").write_text(
+        "voice: { stt: { wake: { names: [ProfileName] } } }\n",
+        encoding="utf-8",
+    )
+    (config_dir / "user.yaml").write_text(
+        "voice: { stt: { wake: { names: [UserName] } } }\n",
+        encoding="utf-8",
+    )
+    cwd_before = Path.cwd()
+    import os
+
+    os.chdir(tmp_path)
+    try:
+        cfg = load(
+            env={
+                "OPENMIMICRY_PROFILE": "voice",
+                "OPENMIMICRY__VOICE__STT__WAKE__NAMES": '["EnvName"]',
+            }
+        )
+    finally:
+        os.chdir(cwd_before)
+    assert cfg.voice.stt.wake.names == ["EnvName"]
+
+
 def test_missing_profile_raises(tmp_path: Path) -> None:
     cwd_before = Path.cwd()
     import os

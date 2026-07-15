@@ -1,7 +1,8 @@
 /**
  * `/overlay` — transparent host. Renders the avatar runtime + speech bubble.
  *
- * No text input or settings live on this route; the panel route owns those.
+ * No controls live on this route; the docked toolbar and browser dashboard
+ * own interaction.
  * The overlay is intentionally minimal so it can be made click-through by
  * the Tauri shell (M8) without interfering with the keyboard focus of
  * other windows.

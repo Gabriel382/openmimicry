@@ -27,6 +27,7 @@ voice:
     interruptible: true
   modes:
     text_always_on: true
+    continuous_listening: false
     live_wake: false
     agent_voice: true
 

@@ -70,6 +70,7 @@ class BroadcastBridge:
         self._lock = asyncio.Lock()
         self._latest_avatar: dict[str, Any] | None = None
         self._latest_bubble: dict[str, Any] | None = None
+        self._latest_tasks: dict[str, dict[str, Any]] = {}
 
     async def add_socket(self, ws: WebSocket) -> None:
         async with self._lock:
@@ -79,6 +80,7 @@ class BroadcastBridge:
                 for message in (self._latest_avatar, self._latest_bubble)
                 if message is not None
             ]
+            replay.extend(self._latest_tasks.values())
         for message in replay:
             try:
                 await ws.send_json(message)
@@ -122,6 +124,12 @@ class BroadcastBridge:
             self._latest_avatar = dict(message)
         elif message.get("type") == "bubble.text" and message.get("complete") is True:
             self._latest_bubble = dict(message)
+        elif message.get("type") == "task.card":
+            update = message.get("update")
+            handle = update.get("handle") if isinstance(update, dict) else None
+            task_id = handle.get("id") if isinstance(handle, dict) else None
+            if isinstance(task_id, str) and task_id:
+                self._latest_tasks[task_id] = dict(message)
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +180,11 @@ async def ws_endpoint(
         while True:
             try:
                 payload = await websocket.receive_json()
-            except WebSocketDisconnect:
+            except (WebSocketDisconnect, RuntimeError):
+                # Starlette can raise RuntimeError instead of
+                # WebSocketDisconnect when an application shutdown races a
+                # pending receive. It is a normal terminal state, not an ASGI
+                # application failure.
                 break
 
             await _dispatch_inbound(
@@ -235,11 +247,24 @@ async def _dispatch_inbound(
         return
 
     if msg_type == "ptt.down":
-        await speech.ptt_down()
+        try:
+            await speech.ptt_down()
+        except Exception as exc:
+            _log.warning("ptt.down failed: %s", exc)
+            bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
+            return
+        bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": True}))
         return
 
     if msg_type == "ptt.up":
-        await speech.ptt_up()
+        try:
+            await speech.ptt_up()
+        except Exception as exc:
+            _log.warning("ptt.up failed: %s", exc)
+            bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
+            bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": False}))
+            return
+        bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": False}))
         return
 
     if msg_type == "mode.toggle":

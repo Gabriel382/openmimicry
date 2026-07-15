@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from openmimicry_backend.routes.dashboard import dashboard, dashboard_css, dashboard_js
+from openmimicry_backend.ws import BroadcastBridge
+
+
+class _Socket:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, Any]] = []
+
+    async def send_json(self, message: dict[str, Any]) -> None:
+        self.messages.append(message)
+
+
+async def test_dashboard_assets_exist_and_are_served_with_expected_types() -> None:
+    html = await dashboard()
+    css = await dashboard_css()
+    js = await dashboard_js()
+
+    assert Path(html.path).is_file()
+    assert Path(css.path).is_file()
+    assert Path(js.path).is_file()
+    assert html.media_type == "text/html"
+    assert css.media_type == "text/css"
+    assert js.media_type == "text/javascript"
+
+
+def test_dashboard_exposes_configurable_name_gated_wake_listening() -> None:
+    html_path = (
+        Path(__file__).resolve().parents[3]
+        / "apps/backend/src/openmimicry_backend/static/dashboard.html"
+    )
+    text = html_path.read_text(encoding="utf-8")
+    assert "Wake listen" in text
+    assert 'id="wake-name"' in text
+    assert "begins with the configured name" in text
+
+
+async def test_late_dashboard_receives_the_latest_task_card() -> None:
+    bridge = BroadcastBridge()
+    await bridge.publish(
+        {
+            "type": "task.card",
+            "update": {
+                "handle": {"id": "task-1", "runtime": "mock"},
+                "status": "running",
+                "note": "working",
+            },
+        }
+    )
+    await bridge.publish(
+        {
+            "type": "task.card",
+            "update": {
+                "handle": {"id": "task-1", "runtime": "mock"},
+                "status": "succeeded",
+                "note": "done",
+            },
+        }
+    )
+
+    socket = _Socket()
+    await bridge.add_socket(socket)  # type: ignore[arg-type]
+
+    assert len(socket.messages) == 1
+    assert socket.messages[0]["update"]["status"] == "succeeded"

@@ -7,20 +7,26 @@ Ships:
 - `MockSTTAdapter` / `MockTTSAdapter` — programmable, deterministic mocks.
 - `RealtimeSTTAdapter` — wraps `RealtimeSTT.AudioToTextRecorder` (lazy-imported).
 - `RealtimeTTSAdapter` — wraps `RealtimeTTS.TextToAudioStream` (lazy-imported).
-- `SpeechController` — owns the single active TTS task, the barge-in policy, and the PTT / live-wake state machine.
+- `SpeechController` — owns the single active TTS task, the barge-in policy, and the PTT / continuous-listening / wake-name state machine.
 - `WakeController` — thin enable/disable wrapper for callers that don't want the full SpeechController.
 
 ## Install
 
 ```bash
-# Just the mocks + controllers (no audio device touched).
-pip install openmimicry-voice
+# From this repository on Windows: install the complete tested voice profile.
+.\scripts\win\install.bat openrouter-voice
 
-# Plus a real STT or TTS provider.
-pip install "openmimicry-voice[realtimestt]"
-pip install "openmimicry-voice[realtimetts]"
-pip install "openmimicry-voice[voice]"           # both
+# Package-development equivalent, using this checkout rather than a registry release.
+python -m pip install -e "packages/openmimicry-voice[voice]"
 ```
+
+The Windows profile installs `RealtimeSTT[faster-whisper]` and
+`RealtimeTTS[system]` into the repository's `.venv`. The launcher checks the
+concrete recorder, stream, and system-engine imports before it starts, so a
+different global Python installation—or an engine-less base distribution—
+cannot accidentally look healthy. Python 3.13+ installs `audioop-lts`
+automatically because the standard-library `audioop` module was removed in
+that Python release while RealtimeTTS/pydub still imports its API.
 
 ## Usage
 
@@ -46,6 +52,12 @@ async def main():
     await ctl.ptt_up()
     # ... UserSpeechStarted, UserSpeechFinal published on the bus ...
 
+    # Or listen hands-free, accepting only name-prefixed commands:
+    await ctl.enable_live_listening(wake_names=["Mimi", "Hey Mimi"])
+    await stt.push_transcript("Mimi, hands-free hello", is_final=True)
+    # Publishes UserSpeechFinal(text="hands-free hello", ...)
+    await ctl.disable_live_listening()
+
     await ctl.stop()
 
 asyncio.run(main())
@@ -61,4 +73,4 @@ asyncio.run(main())
 
 - [`docs/contracts.md`](../../docs/contracts.md) §4 — frozen `STTAdapter` / `TTSAdapter` / `SpeechController` / `WakeController`.
 - [`docs/modules/M2_voice.md`](../../docs/modules/M2_voice.md) — module brief.
-- [`docs/voice_modes.md`](../../docs/voice_modes.md) — PTT, wake-name, barge-in policy.
+- [`docs/voice_modes.md`](../../docs/voice_modes.md) — PTT, continuous listening, wake-name, and barge-in policy.

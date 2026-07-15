@@ -12,8 +12,9 @@ make install PROFILE=dev
 uvicorn openmimicry_backend.main:app --reload --port 8000
 ```
 
-That brings up `/health`, `/chat`, `/mode/toggle`, `/pack/swap`,
-`/runtime/swap`, `/admin/reload`, `/config`, and the WebSocket at `/ws`.
+That brings up the browser dashboard at `/dashboard`, plus `/health`, `/chat`,
+`/mode/toggle`, `/pack/swap`, `/runtime/swap`, `/admin/reload`, `/config`, and
+the WebSocket at `/ws`.
 With the default config (every adapter is a mock), `POST /chat` runs
 the mock LLM end-to-end and the WS streams the projected events.
 

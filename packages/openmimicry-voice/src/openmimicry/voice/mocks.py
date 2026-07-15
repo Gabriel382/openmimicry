@@ -46,6 +46,11 @@ class MockSTTAdapter:
         self.stop_calls: int = 0
 
     async def start(self, config: STTConfig) -> None:
+        # A real recorder starts with a fresh transcript stream. Mirror that
+        # behavior so continuous-listening -> PTT -> continuous transitions
+        # cannot consume a sentinel left by the previous stop.
+        while not self._queue.empty():
+            self._queue.get_nowait()
         self.last_config = config
         self.start_calls += 1
         self._started = True

@@ -120,11 +120,25 @@ async def test_vad_active_tracks_recording_callbacks(monkeypatch: pytest.MonkeyP
     await adapter.stop()
 
 
-async def test_wake_mode_sets_wake_words(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_wake_mode_leaves_prefix_gating_to_speech_controller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     recorder = _FakeRecorder()
     captured = _install_fake_realtimestt(monkeypatch, recorder)
 
     adapter = RealtimeSTTAdapter()
     await adapter.start(STTConfig(mode="wake", wake_names=["Mimi", "Hey Mimi"]))
-    assert captured["kwargs"]["wake_words"] == "Mimi,Hey Mimi"
+    assert "wake_words" not in captured["kwargs"]
+    await adapter.stop()
+
+
+async def test_portable_default_uses_cpu_int8(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorder = _FakeRecorder()
+    captured = _install_fake_realtimestt(monkeypatch, recorder)
+
+    adapter = RealtimeSTTAdapter()
+    await adapter.start(STTConfig())
+
+    assert captured["kwargs"]["device"] == "cpu"
+    assert captured["kwargs"]["compute_type"] == "int8"
     await adapter.stop()

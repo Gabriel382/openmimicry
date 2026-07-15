@@ -1,4 +1,4 @@
-/* Transparent avatar window plus the separate interactive controls window. */
+/* Transparent avatar plus an interactive toolbar visually docked above it. */
 
 .overlay-route {
   position: fixed;
@@ -65,10 +65,26 @@
 .controls-route {
   box-sizing: border-box;
   display: flex;
+  position: relative;
   width: 100%;
   height: 100%;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+  padding: 5px;
+  border: 1px solid var(--om-controls-border, rgba(255, 255, 255, 0.14));
+  border-radius: 13px;
+  background: var(--om-controls-bg, rgba(18, 22, 30, 0.82));
+  color: #f4f4f6;
+  font-family: var(--om-font-family, Inter, Arial, sans-serif);
+  backdrop-filter: blur(8px);
+}
+
+.composer-route {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: stretch;
   padding: 6px;
   border: 1px solid var(--om-controls-border, rgba(255, 255, 255, 0.14));
   border-radius: 13px;
@@ -78,20 +94,74 @@
   backdrop-filter: blur(8px);
 }
 
-.avatar-drag-handle {
+.composer-route .avatar-text-input {
+  width: 100%;
+}
+
+.avatar-toolbar {
   display: flex;
-  min-height: 24px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.avatar-toolbar__button {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 38px;
+  height: 34px;
+  flex: 0 0 38px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+}
+
+.avatar-toolbar__button:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.avatar-toolbar__button[aria-pressed="true"] {
+  border-color: var(--om-accent, #ff8a3d);
+  background: color-mix(in srgb, var(--om-accent, #ff8a3d) 72%, #172017);
+  color: #fff;
+}
+
+.avatar-toolbar__button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.avatar-toolbar__drag {
   cursor: grab;
   user-select: none;
 }
 
-.avatar-drag-handle:active {
+.avatar-toolbar__drag:active {
   cursor: grabbing;
+}
+
+.avatar-toolbar__close:hover {
+  border-color: #ff6b72;
+  background: rgba(181, 38, 48, 0.78);
+}
+
+.toolbar-icon {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .avatar-text-input input {
@@ -102,6 +172,30 @@
 
 .avatar-text-input button {
   background: var(--om-accent, #ff8a3d);
+}
+
+.avatar-text-input input,
+.avatar-text-input button {
+  min-height: 38px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.avatar-toolbar__error {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  z-index: 3;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 120, 128, 0.6);
+  border-radius: 7px;
+  background: rgba(78, 16, 22, 0.96);
+  color: #ffd7da;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes openmimicry-caret {

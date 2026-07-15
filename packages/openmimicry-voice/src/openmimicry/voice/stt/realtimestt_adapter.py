@@ -45,6 +45,10 @@ class RealtimeSTTSettings:
 
     model: str = "base.en"
     language: str = "en"
+    # CPU/int8 is the portable default. RealtimeSTT currently defaults to
+    # CUDA, which fails on ordinary Windows machines without a CUDA runtime.
+    device: str = "cpu"
+    compute_type: str = "int8"
     sample_rate: int = 16000
     use_microphone: bool = True
     enable_realtime_transcription: bool = True
@@ -89,13 +93,11 @@ class RealtimeSTTAdapter:
         elif config.vad == "webrtc":
             vad_kwargs["webrtc_sensitivity"] = self._settings.webrtc_sensitivity
 
-        wake_kwargs: dict[str, Any] = {}
-        if config.mode == "wake" and config.wake_names:
-            wake_kwargs["wake_words"] = ",".join(config.wake_names)
-
         kwargs: dict[str, Any] = {
             "model": self._settings.model,
             "language": config.language or self._settings.language,
+            "device": self._settings.device,
+            "compute_type": self._settings.compute_type,
             "sample_rate": config.sample_rate or self._settings.sample_rate,
             "use_microphone": self._settings.use_microphone,
             "enable_realtime_transcription": self._settings.enable_realtime_transcription,
@@ -103,9 +105,11 @@ class RealtimeSTTAdapter:
             "on_recording_start": self._on_recording_start,
             "on_recording_stop": self._on_recording_stop,
             **vad_kwargs,
-            **wake_kwargs,
             **self._settings.extra,
         }
+        # Wake-name matching intentionally happens on normalized transcripts
+        # in SpeechController. RealtimeSTT's native wake-word vocabulary is
+        # backend-specific and cannot reliably support arbitrary user names.
         self._recorder = recorder_cls(**kwargs)
         # AudioToTextRecorder.text() is blocking + callback-driven. We
         # background a thread that pumps final transcripts via the recorder.
@@ -198,7 +202,8 @@ def _import_recorder_class() -> Any:
         from RealtimeSTT import AudioToTextRecorder  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RealtimeSTTUnavailable(
-            'RealtimeSTT is not installed. Install with `pip install "openmimicry-voice[realtimestt]"`.'
+            "RealtimeSTT is not installed in OpenMimicry's .venv. Run "
+            "`.\\scripts\\win\\install.bat openrouter-voice` from the repository root."
         ) from exc
     return AudioToTextRecorder
 

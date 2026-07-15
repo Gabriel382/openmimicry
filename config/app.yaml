@@ -18,6 +18,7 @@ voice:
     adapter: mock
   modes:
     text_always_on: true
+    continuous_listening: false
     live_wake: false
     agent_voice: false
 

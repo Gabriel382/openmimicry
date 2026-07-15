@@ -35,7 +35,7 @@ The result is a portfolio-quality reference for the pattern: contracts as the sp
 - **3 voice paths.** Mock · RealtimeSTT/TTS for real audio · SpeechController owns the single TTS task + barge-in.
 - **3 task runtimes + router.** Mock · LocalShell (allowlist-or-reject, audit log) · ClaudeCodeAdapter · MCPAgentAdapter, all behind a capability-based `TaskRouter`.
 - **Vision (optional, off by default).** MediaPipe Hands / Pose / Face → gesture + movement classifiers → `AvatarDirective` overrides. Consent-gated. Frames never leave the process.
-- **Transparent desktop overlay.** Tauri 2 shell with two windows (overlay, panel), global hotkeys, mood-pixel tray icon, no per-pixel hit testing.
+- **Transparent desktop companion.** Tauri 2 shell with a click-through avatar, top controls, bottom message composer, global hotkeys, mood-pixel tray icon, and a localhost browser dashboard.
 - **Hermetic tests.** Every adapter has a mock that runs with zero optional dependencies. Contract tests parametrise across every registered implementation. ~250 Python tests + Vitest frontend tests + Rust shell tests.
 
 <table>
@@ -79,7 +79,8 @@ make backend
 make frontend
 ```
 
-Visit `http://localhost:5173/#/panel`. Type a message, watch the avatar move, see task cards stream. Every adapter is mocked by default.
+Visit `http://127.0.0.1:8000/dashboard` for chat, settings, voice diagnostics,
+and task cards. Every adapter is mocked by default.
 
 ### Run the native desktop shell
 
@@ -89,17 +90,21 @@ Visit `http://localhost:5173/#/panel`. Type a message, watch the avatar move, se
 make desktop
 ```
 
-Three windows open: a transparent avatar overlay, its interactive drag/message
-strip, and the full panel (`Ctrl+Shift+O` toggles the panel). `Ctrl+Space` is
-push-to-talk.
+The desktop appears as one companion: a transparent avatar, a top-docked
+interactive toolbar, and a message composer underneath. The toolbar provides
+drag, position lock, hold-to-talk, wake-name listening, agent voice, browser
+settings, and exit. The three surfaces are separate internally only because
+click-through is a whole-window operating-system feature. No native settings
+panel opens.
 
-In v1.1.0 an additional interactive strip opens directly below the transparent
-avatar. Drag the strip to move the companion or send a message without opening
-the full panel. Window geometry, colors, avatar scale, and reply reading time
-are configured in `config/theme.yml`.
+`Ctrl+Space` is hold-to-talk and does not require a name. `Ctrl+Shift+O` opens
+the local browser dashboard. Wake listen stays ready but accepts a command only
+when its transcript begins with the configured name, `Mimi` by default. Change
+the name in the dashboard; window geometry, colors, avatar scale, and reply
+reading time remain in `config/theme.yml`.
 
 For OpenRouter plus free local microphone STT and operating-system TTS on
-Windows, see [`docs/V1.1_WINDOWS_TESTING.md`](docs/V1.1_WINDOWS_TESTING.md).
+Windows, see [`docs/V1.3_WINDOWS_TESTING.md`](docs/V1.3_WINDOWS_TESTING.md).
 
 ### Docker (backend-only smoke)
 
@@ -145,7 +150,8 @@ Profile YAML lives in [`config/profiles/`](config/profiles).
                             ┌────────────────────────────┐
                             │   apps/desktop/src-tauri   │
                             │   ─ overlay (transparent)  │
-                            │   ─ panel                  │
+                            │   ─ top toolbar            │
+                            │   ─ bottom composer        │
                             │   ─ tray + hotkeys         │
                             └─────────────┬──────────────┘
                                           │  Tauri IPC
@@ -153,7 +159,8 @@ Profile YAML lives in [`config/profiles/`](config/profiles).
                             │   apps/desktop/frontend    │
                             │   ─ React + Vite           │
                             │   ─ runtime registry       │
-                            │   ─ /overlay  /panel       │
+                            │   ─ /overlay /controls     │
+                            │   ─ /composer              │
                             └────────┬──────────┬────────┘
                                      │ /ws      │ /api
                                      │          │
@@ -190,7 +197,7 @@ The single immutable interface is [`docs/contracts.md`](docs/contracts.md). Any 
 // frontend → server
 { "type": "user.text", "text": "..." }
 { "type": "ptt.down" } | { "type": "ptt.up" }
-{ "type": "mode.toggle", "key": "live_wake|agent_voice", "value": true }
+{ "type": "mode.toggle", "key": "continuous_listening|live_wake|agent_voice", "value": true }
 { "type": "task.cancel", "handle": { "id": "...", "runtime": "..." } }
 ```
 

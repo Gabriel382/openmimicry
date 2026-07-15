@@ -87,17 +87,17 @@ pub fn overlay_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWi
     app.get_webview_window("overlay")
 }
 
-/// Return the panel window (`"panel"`) if it exists.
-pub fn panel_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWindow<R>> {
-    app.get_webview_window("panel")
-}
-
 /// Return the interactive drag/input strip paired with the avatar window.
 pub fn controls_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWindow<R>> {
     app.get_webview_window("avatar-controls")
 }
 
-/// Place the control strip immediately below the transparent avatar window.
+/// Return the interactive message composer paired with the avatar window.
+pub fn composer_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWindow<R>> {
+    app.get_webview_window("avatar-composer")
+}
+
+/// Place the interactive toolbar immediately above the transparent avatar.
 pub fn sync_controls_to_overlay<R: Runtime>(
     app: &tauri::AppHandle<R>,
     gap: i32,
@@ -106,28 +106,47 @@ pub fn sync_controls_to_overlay<R: Runtime>(
     let controls =
         controls_window(app).ok_or_else(|| anyhow::anyhow!("avatar controls unavailable"))?;
     let pos = avatar.outer_position()?;
-    let size = avatar.outer_size()?;
+    let controls_size = controls.outer_size()?;
     controls.set_position(PhysicalPosition::new(
         pos.x,
-        pos.y + size.height as i32 + gap.max(0),
+        pos.y - controls_size.height as i32 - gap.max(0),
     ))?;
     Ok(())
 }
 
-/// Move the transparent avatar with its interactive control strip.
+/// Place the interactive message composer immediately below the avatar.
+pub fn sync_composer_to_overlay<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    gap: i32,
+) -> Result<()> {
+    let avatar = overlay_window(app).ok_or_else(|| anyhow::anyhow!("overlay unavailable"))?;
+    let composer =
+        composer_window(app).ok_or_else(|| anyhow::anyhow!("avatar composer unavailable"))?;
+    let pos = avatar.outer_position()?;
+    let avatar_size = avatar.outer_size()?;
+    composer.set_position(PhysicalPosition::new(
+        pos.x,
+        pos.y + avatar_size.height as i32 + gap.max(0),
+    ))?;
+    Ok(())
+}
+
+/// Move the transparent avatar with its top toolbar.
 pub fn sync_overlay_to_controls<R: Runtime>(
     app: &tauri::AppHandle<R>,
     gap: i32,
+    composer_gap: i32,
 ) -> Result<()> {
     let avatar = overlay_window(app).ok_or_else(|| anyhow::anyhow!("overlay unavailable"))?;
     let controls =
         controls_window(app).ok_or_else(|| anyhow::anyhow!("avatar controls unavailable"))?;
     let pos = controls.outer_position()?;
-    let size = avatar.outer_size()?;
+    let controls_size = controls.outer_size()?;
     avatar.set_position(PhysicalPosition::new(
         pos.x,
-        pos.y - size.height as i32 - gap.max(0),
+        pos.y + controls_size.height as i32 + gap.max(0),
     ))?;
+    sync_composer_to_overlay(app, composer_gap)?;
     Ok(())
 }
 

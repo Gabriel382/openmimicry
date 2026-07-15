@@ -4,38 +4,39 @@ The overlay is the part that makes OpenMimicry feel like a companion: a small, a
 
 This document explains how we achieve that without the most common trap: per-pixel hit-testing on a transparent window.
 
-## 1. Three windows with separated responsibilities
+## 1. One visible companion, three implementation windows
 
 ```text
 overlay window  - frameless, transparent background, always-on-top,
                   decorations: none, resizable: false
-                  permanently click-through in the standard v1.1 layout
+                  permanently click-through
                   renders the avatar and speech bubble only
 
-controls window - frameless, always-on-top strip below the avatar
-                  interactive drag handle + compact text input
+controls window - frameless, always-on-top toolbar docked above the avatar
+                  drag, lock, PTT, wake listen, voice, settings, exit
                   moving it moves the avatar window and persists position
 
-panel window    - normal window with decorations
-                  carries the text input, voice toggles, conversation history,
-                  task cards, settings, debug info
-                  hidden by default; tray icon + hotkey open it
+composer window - frameless, always-on-top message input below the avatar
+                  remains usable regardless of voice input/output state
 ```
 
 This split works with Tauri's whole-window click-through behavior: the PNG can
-never steal clicks while the separate control strip remains draggable and can
-accept keyboard focus. The panel continues to host advanced controls.
+never steal clicks while the separate control surfaces remain draggable and
+can accept keyboard focus. The three implementation windows are visually docked and
+behave as one unit. There is no native settings panel; the gear button opens
+`http://127.0.0.1:8000/dashboard` in the default browser.
 
 ## 2. Click-through strategy
 
 We do **not** read alpha values per pixel. Tauri's
 `setIgnoreCursorEvents(boolean)` remains a whole-window operation. The v1.1
 standard layout keeps the avatar overlay passive and delegates interaction to
-the control strip:
+the two control surfaces:
 
 - **avatar window:** `ignoreCursorEvents(true)`; all clicks fall through.
-- **controls window:** normal cursor events; only its drag handle starts a window
-  drag and its text field accepts input.
+- **controls window:** normal cursor events; its drag handle moves the companion
+  and its buttons remain clickable.
+- **composer window:** normal cursor and keyboard events; owns text input only.
 
 Toggling is a single Tauri command:
 
@@ -54,11 +55,12 @@ move the companion through the dedicated strip.
 ## 2.1 Appearance configuration
 
 `config/theme.yml` is the single non-secret appearance file. `GET /appearance`
-returns its validated projection to the three frontend routes; the controls
-route applies geometry to Tauri. It owns window sizes, colors, avatar scale,
-control visibility/gap, and the completed-bubble reading-time formula.
+returns its validated projection to the frontend routes; the controls route
+applies geometry to Tauri. It owns all three window sizes, top/bottom gaps,
+colors, avatar scale, control visibility, and the completed-bubble reading-time
+formula.
 
-A visual cue (subtle border or glow on the overlay) tells the user which mode they are in. The tray icon and the panel both show the current state.
+A visual cue (subtle border or glow on the overlay) tells the user which mode they are in. The toolbar and browser dashboard show the current state.
 
 ## 3. Optional "halo" pattern for advanced users
 
@@ -75,18 +77,19 @@ The overlay loader resizes the window to `avatar_size + 2 * interactive_padding_
 
 ## 4. Always-on-top and multi-monitor
 
-- The overlay is created with `alwaysOnTop: true`. The panel is not (so it doesn't fight with focused apps).
+- The avatar, top toolbar, and bottom composer are created with
+  `alwaysOnTop: true`.
 - On startup, the overlay window is moved to the *active* monitor and saved-position. If the saved position is off-screen (display unplugged), it snaps back to a default corner.
 - Multi-monitor changes (DPI change, monitor disconnect) are handled by listening to Tauri's monitor events and re-clamping the window position.
 
 ## 5. Tray and hotkeys
 
 - The tray icon shows a small mood pixel that follows the current `AvatarDirective.emotion`.
-- Tray menu: Show panel, Toggle interact, Mute mic, Mute voice, Pause live wake, Quit.
+- Tray menu: Open dashboard, Quit.
 - Global hotkeys (Tauri's `globalShortcut`) are registered for:
   - PTT (configurable, default `Ctrl+Space`).
   - Toggle interact mode (default `Ctrl+Shift+M`).
-  - Show/hide panel (default `Ctrl+Shift+O`).
+  - Open browser dashboard (default `Ctrl+Shift+O`).
 
 ## 6. Renderer is pluggable
 
@@ -96,7 +99,8 @@ What the shell guarantees, regardless of runtime:
 
 - The mount node is fixed-size, transparent-background, absolutely positioned.
 - WebSocket events arrive filtered (`AvatarDirective`, `SpeechBubbleText`, `TranscriptPreview`, `TaskCardEvent`, `SystemNotice`) — the renderer never sees raw bus traffic.
-- `AvatarOrchestrator.swap_runtime(...)` is exposed as a Tauri command, so the panel's "Settings → Modality" picker can flip Sprite2D ↔ Three.js without restart.
+- `AvatarOrchestrator.swap_runtime(...)` is exposed through the backend dashboard,
+  so the runtime picker can flip Sprite2D ↔ Three.js without restart.
 
 ## 7. Performance posture
 
@@ -121,4 +125,5 @@ These limitations are listed in the README rather than swept under the rug; the 
 
 - `apps/desktop/src-tauri/tests/` (Rust): unit tests for the Tauri commands (`set_overlay_interactive`, `move_to_saved_position`, `swap_avatar_runtime`).
 - `apps/desktop/frontend/tests/` (Vitest): per-runtime tests for `Sprite2DAvatarAdapter` and `ThreeJSAvatarAdapter`, plus shell tests for the speech bubble and mount swap, all driven by mock WebSocket events.
-- Playwright (optional, gated): smoke-test the panel window with `tauri-driver` if the contributor has it installed.
+- Browser smoke: verify `/dashboard`; Tauri smoke: verify toolbar docking, lock,
+  browser opening, and global PTT on Windows.

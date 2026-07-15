@@ -10,7 +10,11 @@ windows:
     movable: true
   controls:
     width: 360
-    height: 92
+    height: 46
+    always_on_top: true
+  composer:
+    width: 360
+    height: 54
     always_on_top: true
   panel:
     width: 480
@@ -32,7 +36,10 @@ layout:
   bubble_max_width: 330
   avatar_width: 330
   avatar_scale: 1.0
+  # Pixel gap between the toolbar and the top edge of the avatar.
   controls_gap: 6
+  # Pixel gap between the avatar and the message composer underneath it.
+  composer_gap: 6
 
 behaviour:
   bubble:

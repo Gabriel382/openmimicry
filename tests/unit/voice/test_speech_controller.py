@@ -20,6 +20,7 @@ from openmimicry.core.schemas import (
     TTSInterrupted,
     UserSpeechFinal,
     UserSpeechStarted,
+    WakeDetected,
 )
 from openmimicry.core.schemas.app import (
     STTConfigSection,
@@ -200,3 +201,82 @@ async def test_enable_live_listening_starts_stt_in_wake_mode(controller) -> None
     assert stt.last_config.wake_names == ["Mimi"]
     await ctl.disable_live_listening()
     assert ctl.live_listening is False
+
+
+async def test_wake_listener_ignores_speech_without_name(controller) -> None:
+    ctl, bus, stt, _tts = controller
+    await ctl.enable_live_listening()
+    sub = bus.subscribe()
+
+    await stt.push_transcript("what time is it", is_final=True)
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(anext(sub), timeout=0.05)
+
+
+async def test_wake_listener_strips_name_and_publishes_command(controller) -> None:
+    ctl, bus, stt, _tts = controller
+    await ctl.enable_live_listening()
+    sub = bus.subscribe()
+
+    await stt.push_transcript("Mimi, what time is it?", is_final=True)
+    first = await asyncio.wait_for(anext(sub), timeout=0.5)
+    second = await asyncio.wait_for(anext(sub), timeout=0.5)
+
+    assert isinstance(first, WakeDetected)
+    assert first.name == "Mimi"
+    assert isinstance(second, UserSpeechFinal)
+    assert second.text == "what time is it?"
+
+
+async def test_updating_wake_name_restarts_active_listener(controller) -> None:
+    ctl, bus, stt, _tts = controller
+    await ctl.enable_live_listening()
+    starts_before = stt.start_calls
+    await ctl.set_wake_names(["Octo", "Hey Octo", "octo"])
+
+    assert ctl.wake_names == ["Hey Octo", "Octo"]
+    assert stt.start_calls == starts_before + 1
+    sub = bus.subscribe()
+    await stt.push_transcript("Octo: say hello", is_final=True)
+    await asyncio.wait_for(anext(sub), timeout=0.5)
+    final = await asyncio.wait_for(anext(sub), timeout=0.5)
+    assert isinstance(final, UserSpeechFinal)
+    assert final.text == "say hello"
+
+
+async def test_enable_continuous_listening_uses_plain_dictation(controller) -> None:
+    ctl, _bus, stt, _tts = controller
+    await ctl.enable_continuous_listening()
+    assert ctl.continuous_listening is True
+    assert ctl.listening_mode == "continuous"
+    assert stt.last_config is not None
+    assert stt.last_config.mode == "dictation"
+    assert stt.last_config.wake_names == []
+    await ctl.disable_live_listening()
+
+
+async def test_ptt_temporarily_pauses_and_restores_continuous_listening(controller) -> None:
+    ctl, bus, stt, _tts = controller
+    await ctl.enable_continuous_listening()
+    assert ctl.continuous_listening is True
+
+    sub = bus.subscribe()
+
+    async def wait_for_final() -> UserSpeechFinal:
+        async for event in sub:
+            if isinstance(event, UserSpeechFinal):
+                return event
+        raise AssertionError("event bus closed before speech final")
+
+    final_task = asyncio.create_task(wait_for_final())
+    await ctl.ptt_down()
+    assert ctl.ptt_active is True
+    assert ctl.listening_mode == "push_to_talk"
+    await stt.push_transcript("toolbar push to talk", is_final=True)
+    await ctl.ptt_up()
+
+    final = await asyncio.wait_for(final_task, timeout=1.0)
+    assert final.text == "toolbar push to talk"
+    assert ctl.ptt_active is False
+    assert ctl.continuous_listening is True
+    assert ctl.listening_mode == "continuous"

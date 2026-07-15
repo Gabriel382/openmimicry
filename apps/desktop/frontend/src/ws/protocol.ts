@@ -124,12 +124,18 @@ export interface SystemNoticeMessage {
   where?: string;
   recoverable?: boolean;
   voice?: {
+    continuous_listening?: boolean;
     live_wake?: boolean;
+    wake_names?: string[];
     agent_voice?: boolean;
+    ptt_active?: boolean;
+    listening_mode?: string;
     stt_adapter?: string;
     tts_adapter?: string;
     real_input?: boolean;
     real_output?: boolean;
+    input_install_hint?: string | null;
+    output_install_hint?: string | null;
   };
   [extra: string]: unknown;
 }
@@ -161,7 +167,7 @@ export interface PttUpMessage {
   type: "ptt.up";
 }
 
-export type ModeKey = "live_wake" | "agent_voice";
+export type ModeKey = "continuous_listening" | "live_wake" | "agent_voice";
 
 export interface ModeToggleMessage {
   type: "mode.toggle";

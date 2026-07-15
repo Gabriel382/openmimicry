@@ -5,7 +5,7 @@
 //! * `Ctrl+Space` press   -> emit `ptt.down` (frontend forwards over WS).
 //! * `Ctrl+Space` release -> emit `ptt.up`.
 //! * `Ctrl+Shift+M`        -> toggle overlay click-through.
-//! * `Ctrl+Shift+O`        -> toggle panel visibility.
+//! * `Ctrl+Shift+O`        -> open the backend dashboard in a browser.
 //!
 //! These work even when neither Tauri window has focus.
 
@@ -24,14 +24,11 @@ use crate::overlay;
 
 pub const DEFAULT_PTT: &str = "ctrl+space";
 pub const DEFAULT_TOGGLE_INTERACT: &str = "ctrl+shift+m";
-pub const DEFAULT_TOGGLE_PANEL: &str = "ctrl+shift+o";
+pub const DEFAULT_OPEN_DASHBOARD: &str = "ctrl+shift+o";
 
 /// Live state of the overlay's interactive-vs-click-through mode. The
 /// hotkey handler reads + flips it.
 static INTERACTIVE: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
-
-/// Live state of the panel's visibility.
-static PANEL_VISIBLE: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(true));
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedShortcut {
@@ -94,15 +91,15 @@ pub fn register_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 
     let ptt = parse_shortcut(DEFAULT_PTT)?.to_tauri();
     let toggle_interact = parse_shortcut(DEFAULT_TOGGLE_INTERACT)?.to_tauri();
-    let toggle_panel = parse_shortcut(DEFAULT_TOGGLE_PANEL)?.to_tauri();
+    let open_dashboard = parse_shortcut(DEFAULT_OPEN_DASHBOARD)?.to_tauri();
 
     plugin.on_shortcut(ptt, move |handle, _shortcut, event| {
         match event.state() {
             ShortcutState::Pressed => {
-                let _ = handle.emit_to("panel", "ptt:down", ());
+                let _ = handle.emit_to("avatar-controls", "ptt:down", ());
             }
             ShortcutState::Released => {
-                let _ = handle.emit_to("panel", "ptt:up", ());
+                let _ = handle.emit_to("avatar-controls", "ptt:up", ());
             }
         }
     })?;
@@ -119,17 +116,11 @@ pub fn register_defaults<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
         }
     })?;
 
-    plugin.on_shortcut(toggle_panel, move |handle, _shortcut, event| {
+    plugin.on_shortcut(open_dashboard, move |_handle, _shortcut, event| {
         if event.state() != ShortcutState::Pressed {
             return;
         }
-        let next = !PANEL_VISIBLE.load(Ordering::SeqCst);
-        PANEL_VISIBLE.store(next, Ordering::SeqCst);
-        if next {
-            let _ = commands::show_panel(handle.clone());
-        } else {
-            let _ = commands::hide_panel(handle.clone());
-        }
+        let _ = commands::open_backend_dashboard();
     })?;
     Ok(())
 }

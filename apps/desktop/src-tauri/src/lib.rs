@@ -42,8 +42,8 @@ pub fn run() {
             commands::set_overlay_interactive,
             commands::configure_overlay_windows,
             commands::swap_avatar_runtime,
-            commands::show_panel,
-            commands::hide_panel,
+            commands::set_position_locked,
+            commands::open_backend_dashboard,
             commands::move_overlay_to_saved_position,
             commands::save_overlay_position,
             commands::overlay_info,
@@ -61,7 +61,7 @@ pub fn run() {
             tray::build_tray(&app.handle())
                 .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
 
-            // Register global hotkeys (PTT + interact toggle + panel toggle).
+            // Register global hotkeys (PTT + interact toggle + dashboard).
             hotkeys::register_defaults(&app.handle())
                 .map_err(|e| Box::new(std::io::Error::other(e.to_string())))?;
 
@@ -76,7 +76,11 @@ pub fn run() {
             if let Some(window) = overlay::controls_window(&app.handle()) {
                 let _ = window.set_always_on_top(true);
             }
+            if let Some(window) = overlay::composer_window(&app.handle()) {
+                let _ = window.set_always_on_top(true);
+            }
             let _ = overlay::sync_controls_to_overlay(&app.handle(), 6);
+            let _ = overlay::sync_composer_to_overlay(&app.handle(), 6);
 
             // The overlay starts click-through by default per UX spec;
             // the user toggles via the global hotkey or the tray.
@@ -89,18 +93,30 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Moved(pos) = event {
                 if window.label() == "avatar-controls" {
-                    let gap = window
+                    let snapshot = window
                         .app_handle()
                         .try_state::<AppState>()
-                        .and_then(|state| state.snapshot().controls_gap)
-                        .unwrap_or(6);
-                    let _ = overlay::sync_overlay_to_controls(window.app_handle(), gap);
-                    if let Some(avatar) = overlay::overlay_window(window.app_handle()) {
-                        if let Ok(avatar_pos) = avatar.outer_position() {
-                            if let Some(state) = window.app_handle().try_state::<AppState>() {
-                                let _ = state.mutate(|s| {
-                                    s.overlay_position = Some((avatar_pos.x, avatar_pos.y))
-                                });
+                        .map(|state| state.snapshot())
+                        .unwrap_or_default();
+                    let gap = snapshot.controls_gap.unwrap_or(6);
+                    let composer_gap = snapshot.composer_gap.unwrap_or(6);
+                    if snapshot.position_locked {
+                        let _ = overlay::sync_controls_to_overlay(window.app_handle(), gap);
+                        let _ =
+                            overlay::sync_composer_to_overlay(window.app_handle(), composer_gap);
+                    } else {
+                        let _ = overlay::sync_overlay_to_controls(
+                            window.app_handle(),
+                            gap,
+                            composer_gap,
+                        );
+                        if let Some(avatar) = overlay::overlay_window(window.app_handle()) {
+                            if let Ok(avatar_pos) = avatar.outer_position() {
+                                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                                    let _ = state.mutate(|s| {
+                                        s.overlay_position = Some((avatar_pos.x, avatar_pos.y))
+                                    });
+                                }
                             }
                         }
                     }
@@ -108,6 +124,19 @@ pub fn run() {
                     if let Some(state) = window.app_handle().try_state::<AppState>() {
                         let _ = state.mutate(|s| s.overlay_position = Some((pos.x, pos.y)));
                     }
+                    let snapshot = window
+                        .app_handle()
+                        .try_state::<AppState>()
+                        .map(|state| state.snapshot())
+                        .unwrap_or_default();
+                    let _ = overlay::sync_controls_to_overlay(
+                        window.app_handle(),
+                        snapshot.controls_gap.unwrap_or(6),
+                    );
+                    let _ = overlay::sync_composer_to_overlay(
+                        window.app_handle(),
+                        snapshot.composer_gap.unwrap_or(6),
+                    );
                 }
             }
         })

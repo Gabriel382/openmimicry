@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import AsyncIterable
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ from openmimicry.core.schemas import (
     TTSStarted,
     UserSpeechFinal,
     UserSpeechStarted,
+    WakeDetected,
 )
 from openmimicry.core.schemas.app import VoiceConfig
 
@@ -42,6 +44,7 @@ __all__ = ["SpeechController", "make_speech_controller"]
 
 
 _log = logging.getLogger(__name__)
+_PTT_FINAL_TIMEOUT_SECONDS = 8.0
 
 
 def _now() -> datetime:
@@ -74,6 +77,10 @@ class SpeechController:
         self._barge_in_task: asyncio.Task[None] | None = None
         self._ptt_active: bool = False
         self._live_listening: bool = False
+        self._listening_mode: str | None = None
+        self._configured_wake_names: list[str] = _normalise_wake_names(self._cfg.stt.wake.names)
+        self._live_wake_names: list[str] = []
+        self._resume_listening_after_ptt: tuple[str, list[str]] | None = None
         self._started: bool = False
 
     @property
@@ -83,6 +90,26 @@ class SpeechController:
     @property
     def live_listening(self) -> bool:
         return self._live_listening
+
+    @property
+    def continuous_listening(self) -> bool:
+        return self._live_listening and self._listening_mode == "continuous"
+
+    @property
+    def listening_mode(self) -> str:
+        if self._ptt_active:
+            return "push_to_talk"
+        return self._listening_mode or "off"
+
+    @property
+    def ptt_active(self) -> bool:
+        return self._ptt_active
+
+    @property
+    def wake_names(self) -> list[str]:
+        """Configured wake-name prefixes, returned as a defensive copy."""
+
+        return list(self._configured_wake_names)
 
     @property
     def stt(self) -> STTAdapter:
@@ -198,15 +225,17 @@ class SpeechController:
         if self._ptt_active:
             return
         await self.interrupt()
-        await self._stt.start(
-            STTConfig(
-                language=self._cfg.stt.language,
-                mode="dictation",
-                wake_names=[],
-                sample_rate=self._cfg.stt.sample_rate,
-                vad=self._cfg.stt.vad,
-            )
-        )
+        resume: tuple[str, list[str]] | None = None
+        if self._live_listening and self._listening_mode is not None:
+            resume = (self._listening_mode, list(self._live_wake_names))
+            await self._stop_passive_listening()
+        try:
+            await self._stt.start(self._dictation_config())
+        except Exception:
+            if resume is not None:
+                await self._restore_passive_listening(resume)
+            raise
+        self._resume_listening_after_ptt = resume
         self._ptt_active = True
         self._bus.publish(UserSpeechStarted(ts=_now()))
 
@@ -216,11 +245,27 @@ class SpeechController:
             return
         # Read the next final transcript (with a short timeout so a noisy
         # tail doesn't deadlock the caller).
-        text, reason = await self._await_final_transcript(timeout_s=2.0)
+        resume = self._resume_listening_after_ptt
+        self._resume_listening_after_ptt = None
+        try:
+            # First-run Whisper model initialization and ordinary Windows CPU
+            # transcription can exceed two seconds after the button is
+            # released. Keep the microphone turn alive long enough to receive
+            # the final transcript instead of silently submitting no speech.
+            text, reason = await self._await_final_transcript(timeout_s=_PTT_FINAL_TIMEOUT_SECONDS)
+        except Exception:
+            with suppress(Exception):
+                await self._stt.stop()
+            self._ptt_active = False
+            if resume is not None:
+                await self._restore_passive_listening(resume)
+            raise
         with suppress(Exception):
             await self._stt.stop()
         self._ptt_active = False
         self._bus.publish(UserSpeechFinal(ts=_now(), text=text, reason=reason))
+        if resume is not None:
+            await self._restore_passive_listening(resume)
 
     async def _await_final_transcript(self, *, timeout_s: float) -> tuple[str, str]:
         """Drain the STT stream until a final transcript arrives or we time out.
@@ -245,30 +290,111 @@ class SpeechController:
             return last_partial, "no_speech" if not last_partial else "normal"
         return last_partial, "no_speech" if not last_partial else "normal"
 
-    # --------------------------------------------------------- live wake mode
+    # --------------------------------------------- continuous / wake listening
+
+    def _dictation_config(self) -> STTConfig:
+        return STTConfig(
+            language=self._cfg.stt.language,
+            mode="dictation",
+            wake_names=[],
+            sample_rate=self._cfg.stt.sample_rate,
+            vad=self._cfg.stt.vad,
+        )
+
+    async def enable_continuous_listening(self) -> None:
+        """Continuously wait for normal speech; no wake phrase is required."""
+
+        if self._ptt_active:
+            self._resume_listening_after_ptt = ("continuous", [])
+            return
+        if self.continuous_listening:
+            return
+        if self._live_listening:
+            await self._stop_passive_listening()
+        await self._start_passive_listening(
+            mode="continuous",
+            config=self._dictation_config(),
+            wake_names=[],
+        )
 
     async def enable_live_listening(self, *, wake_names: list[str] | None = None) -> None:
-        if self._live_listening:
+        """Continuously listen, accepting only commands prefixed by a wake name."""
+
+        names = _normalise_wake_names(
+            wake_names if wake_names is not None else self._configured_wake_names
+        )
+        if not names:
+            raise ValueError("wake-name listening requires at least one configured name")
+        if self._live_listening and self._listening_mode == "wake":
             return
-        names = wake_names if wake_names is not None else self._cfg.stt.wake.names
-        await self._stt.start(
-            STTConfig(
+        if self._ptt_active:
+            self._resume_listening_after_ptt = ("wake", list(names))
+            return
+        if self._live_listening:
+            await self._stop_passive_listening()
+        await self._start_passive_listening(
+            mode="wake",
+            wake_names=list(names),
+            config=STTConfig(
                 language=self._cfg.stt.language,
                 mode="wake",
                 wake_names=list(names),
                 sample_rate=self._cfg.stt.sample_rate,
                 vad=self._cfg.stt.vad,
-            )
-        )
-        self._live_listening = True
-        self._live_listener_task = asyncio.create_task(
-            self._live_listener(), name="openmimicry.voice.live_listener"
+            ),
         )
 
+    async def set_wake_names(self, names: list[str]) -> None:
+        """Update wake prefixes and restart an active wake listener safely."""
+
+        normalised = _normalise_wake_names(names)
+        if not normalised:
+            raise ValueError("at least one non-empty wake name is required")
+        self._configured_wake_names = normalised
+        if self._resume_listening_after_ptt is not None:
+            mode, _old_names = self._resume_listening_after_ptt
+            if mode == "wake":
+                self._resume_listening_after_ptt = (mode, list(normalised))
+        if self._live_listening and self._listening_mode == "wake":
+            await self._stop_passive_listening()
+            await self.enable_live_listening(wake_names=normalised)
+
+    async def _start_passive_listening(
+        self,
+        *,
+        mode: str,
+        config: STTConfig,
+        wake_names: list[str],
+    ) -> None:
+        await self._stt.start(config)
+        self._listening_mode = mode
+        self._live_wake_names = list(wake_names)
+        self._live_listening = True
+        self._live_listener_task = asyncio.create_task(
+            self._live_listener(), name=f"openmimicry.voice.{mode}_listener"
+        )
+
+    async def _restore_passive_listening(self, state: tuple[str, list[str]]) -> None:
+        mode, names = state
+        if mode == "continuous":
+            await self.enable_continuous_listening()
+        elif mode == "wake":
+            await self.enable_live_listening(wake_names=names)
+
     async def disable_live_listening(self) -> None:
+        """Disable either passive listening mode and cancel any PTT resume."""
+
+        self._resume_listening_after_ptt = None
+        await self._stop_passive_listening()
+
+    async def _stop_passive_listening(self) -> None:
         if not self._live_listening:
+            self._listening_mode = None
+            self._live_wake_names = []
             return
         self._live_listening = False
+        self._listening_mode = None
+        self._live_wake_names = []
         task = self._live_listener_task
         self._live_listener_task = None
         if task is not None:
@@ -279,21 +405,64 @@ class SpeechController:
             await self._stt.stop()
 
     async def _live_listener(self) -> None:
-        """Project STT transcripts onto the bus while live-wake is on."""
+        """Project transcripts while continuous or wake listening is active."""
+        wake_announced = False
         try:
             async for transcript in self._stt.transcripts:
-                if transcript.is_final:
-                    self._bus.publish(
-                        UserSpeechFinal(ts=_now(), text=transcript.text, reason="normal")
-                    )
+                wake_match: tuple[str, str] | None = None
+                if self._listening_mode == "wake":
+                    wake_match = _extract_wake_command(transcript.text, self._live_wake_names)
+                    if wake_match is None:
+                        if transcript.is_final:
+                            wake_announced = False
+                        continue
+                    wake_name, command = wake_match
+                    if not wake_announced:
+                        self._bus.publish(WakeDetected(ts=_now(), name=wake_name))
+                        wake_announced = True
                 else:
-                    self._bus.publish(
-                        TranscriptPreview(ts=_now(), text=transcript.text, is_final=False)
-                    )
+                    command = transcript.text.strip()
+
+                if transcript.is_final:
+                    wake_announced = False
+                    if command:
+                        self._bus.publish(UserSpeechFinal(ts=_now(), text=command, reason="normal"))
+                else:
+                    if command:
+                        self._bus.publish(
+                            TranscriptPreview(ts=_now(), text=command, is_final=False)
+                        )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             _log.warning("SpeechController._live_listener: %s", exc, exc_info=True)
+
+
+def _normalise_wake_names(names: list[str]) -> list[str]:
+    """Trim, de-duplicate, and prefer the longest prefix during matching."""
+
+    unique: dict[str, str] = {}
+    for raw in names:
+        name = " ".join(str(raw).split()).strip(" ,.:;!?-")
+        if name:
+            unique.setdefault(name.casefold(), name)
+    return sorted(unique.values(), key=len, reverse=True)
+
+
+def _extract_wake_command(text: str, names: list[str]) -> tuple[str, str] | None:
+    """Return ``(matched_name, command)`` only when ``text`` begins with a name."""
+
+    for name in names:
+        match = re.match(
+            rf"^\s*{re.escape(name)}(?=$|[\s,.:;!?-])",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match is None:
+            continue
+        command = text[match.end() :].lstrip(" \t,.:;!?-")
+        return name, command
+    return None
 
 
 def make_speech_controller(*_args: Any, **_kwargs: Any) -> SpeechController:

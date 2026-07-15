@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] — stable Windows voice and name-gated companion controls
+
+### Added
+
+- Configurable wake-name listening: the hands-free mode accepts only final
+  utterances beginning with the configured name (default `Mimi`) and strips
+  that prefix before submitting the command.
+- Local-dashboard wake-name editor backed by an ignored `config/user.yaml`
+  overlay, with environment variables retaining highest precedence.
+- A dedicated below-avatar message composer while drag, lock, PTT, wake
+  listening, agent voice, settings, and exit stay in the top toolbar.
+- A perceptible thinking-animation interval for both typed and spoken turns.
+
+### Fixed
+
+- Disabled Uvicorn reload in the Windows voice launcher so first-run
+  `comtypes` file generation cannot restart FastAPI during TTS and disconnect
+  every desktop WebSocket.
+- Treated Starlette's shutdown-time disconnected-socket `RuntimeError` as a
+  normal WebSocket close.
+- Increased the PTT final-transcript allowance for Windows CPU/first-run
+  Whisper latency.
+- Preserved text input independently of agent-voice state and kept
+  dashboard adapter diagnostics intact after saving a wake name.
+
+### Changed
+
+- The companion is implemented as three docked native windows: click-through
+  avatar, interactive top toolbar, and interactive bottom composer.
+- RealtimeSTT performs dictation; provider-independent wake-prefix matching is
+  owned by `SpeechController`, allowing arbitrary user-selected names.
+
+## [1.2.2] — Windows Python 3.13 voice compatibility hotfix
+
+### Fixed
+
+- Replaced the launcher's multiline `python -c` preflight with a checked-in
+  Python script so Windows PowerShell cannot strip quotes from the command.
+- Added `audioop-lts` automatically on Python 3.13 and newer, restoring the
+  `RealtimeTTS` → `pydub` import path after Python removed the standard
+  `audioop` module.
+- Kept full stderr capture and automatic `.venv` repair while making the same
+  file-based import check run both before and after installation.
+
+## [1.2.1] — Windows voice preflight hotfix
+
+### Fixed
+
+- Prevented Windows PowerShell's `ErrorActionPreference=Stop` from terminating
+  the launcher when Python writes an import traceback to stderr.
+- Captured and displayed complete RealtimeSTT/RealtimeTTS diagnostics after a
+  failed repair instead of reporting only `NativeCommandError`.
+- Installed the upstream-recommended `faster-whisper` STT extra and `system`
+  TTS engine extra for the `openrouter-voice` profile.
+- Verified the concrete `AudioToTextRecorder`, `TextToAudioStream`, and
+  `SystemEngine` imports before starting the backend.
+- Selected CPU/int8 as the portable RealtimeSTT default instead of inheriting
+  upstream's CUDA default on Windows machines without a CUDA runtime.
+
+## [1.2.0] — avatar toolbar and continuous voice
+
+### Added
+
+- Top-docked avatar toolbar with drag, persistent lock, hold-to-talk, Auto
+  listen, agent voice, browser-dashboard, exit, and text controls.
+- VAD-driven `continuous_listening` mode with no wake phrase.
+- FastAPI `/dashboard` for chat, settings, diagnostics, and replayed task cards.
+- Windows voice-launcher preflight that repairs missing RealtimeSTT/RealtimeTTS
+  in the backend's actual project virtual environment.
+
+### Changed
+
+- Removed the native startup panel; gear, tray, and `Ctrl+Shift+O` open the
+  local browser dashboard.
+- Docked the interactive toolbar above the transparent avatar.
+- Global PTT now targets the toolbar and temporarily pauses/restores continuous
+  listening so a single STT stream never has competing consumers.
+- Voice status distinguishes selected adapters from importable audio backends
+  and no longer labels mock adapters as real microphone/audio devices.
+
+### Versioning
+
+- Workspace applications and packages moved from `1.1.0` to `1.2.0`.
+
 ## [1.1.0] — desktop companion stabilization
 
 ### Added
@@ -119,5 +203,9 @@ Every workspace package + app + Tauri shell is pinned to `1.0.0`. Cross-package
 - **M13 (vision, post-v0.2, optional):** new brief `docs/modules/M13_vision.md` for a camera-driven `MediaPipeVisionAdapter` + `GestureClassifier` registry that publishes `GestureDetected` events the avatar director maps to `AvatarDirective` overrides. Off by default, opt-in via `pip install openmimicry[vision]` and `vision.enabled: true`. Privacy-first: no upload, explicit consent dialog on first activation. `pyproject.toml` gains `vision` and `full-vision` extras; `Makefile` lists them under `make install PROFILE=…`. Implementation deferred — the contract surface (`VisionAdapter`, `GestureClassifier`, `HandLandmark`/`HandPose`/`GestureDetection`/`VisionConfig` schemas, three new `RuntimeEvent` variants) lands in a contracts-amendment PR before M13 begins.
 - Architecture, adapter, event-flow, voice-mode, task-delegation, character-pack, desktop-overlay, configuration, testing-and-ci, and migration docs.
 
-[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/ghenrique/openmimicry/compare/v1.2.2...v1.3.0
+[1.2.2]: https://github.com/ghenrique/openmimicry/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/ghenrique/openmimicry/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/ghenrique/openmimicry/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ghenrique/openmimicry/compare/v1.0.0...v1.1.0

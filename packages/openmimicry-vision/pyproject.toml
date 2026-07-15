@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-vision"
-version = "1.1.0"
+version = "1.3.0"
 description = "OpenMimicry vision (M13): optional, opt-in webcam → hand/body/head landmarks + gesture/movement detection."
 readme = "README.md"
 requires-python = ">=3.11"

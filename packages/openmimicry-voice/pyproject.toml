@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-voice"
-version = "1.1.0"
+version = "1.3.0"
 description = "OpenMimicry voice: RealtimeSTT/RealtimeTTS adapters, SpeechController, WakeController, mocks."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,9 +26,16 @@ dependencies = [
 # RealtimeSTT/RealtimeTTS are heavy and audio-device-bound. They are lazy-
 # imported inside the adapter, so pure-mock installs (tests, CI, dev
 # workstations without a microphone) don't need them.
-realtimestt = ["RealtimeSTT>=0.3"]
-realtimetts = ["RealtimeTTS>=0.4"]
-voice = ["RealtimeSTT>=0.3", "RealtimeTTS>=0.4"]
+realtimestt = ["RealtimeSTT[faster-whisper]>=0.3"]
+realtimetts = [
+    "RealtimeTTS[system]>=0.4",
+    "audioop-lts>=0.2.2; python_version >= '3.13'",
+]
+voice = [
+    "RealtimeSTT[faster-whisper]>=0.3",
+    "RealtimeTTS[system]>=0.4",
+    "audioop-lts>=0.2.2; python_version >= '3.13'",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
