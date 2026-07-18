@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .avatar import Emotion, State
 from .vision import VisionConfig
@@ -28,6 +28,7 @@ __all__ = [
     "AvatarConfig",
     "HotkeysConfig",
     "LLMConfig",
+    "LLMBackendConfig",
     "LLMFallbackConfig",
     "LLMRetryConfig",
     "OverlayConfig",
@@ -85,6 +86,20 @@ class LLMFallbackConfig(BaseModel):
     model: str = "ollama/llama3.1"
 
 
+class LLMBackendConfig(BaseModel):
+    """One named, dashboard-selectable LLM backend."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    adapter: str = "litellm"
+    model: str
+    temperature: float = 0.7
+    max_tokens: int | None = None
+    api_base: str | None = None
+    api_key_env: str | None = None
+    request_timeout_s: int = 60
+
+
 class LLMConfig(BaseModel):
     """``llm:`` section.
 
@@ -103,6 +118,24 @@ class LLMConfig(BaseModel):
     request_timeout_s: int = 60
     retry: LLMRetryConfig = Field(default_factory=LLMRetryConfig)
     fallback: LLMFallbackConfig | None = Field(default_factory=LLMFallbackConfig)
+    # If ``backends`` is populated, the active named backend replaces the
+    # legacy single-adapter fields above.  Keeping both shapes makes v1.4 an
+    # additive configuration change for existing collaborators.
+    active_backend: str | None = None
+    backends: dict[str, LLMBackendConfig] = {}
+    history_turns: int = Field(default=4, ge=0, le=10)
+
+    @model_validator(mode="after")
+    def active_backend_is_configured(self) -> LLMConfig:
+        if (
+            self.backends
+            and self.active_backend is not None
+            and self.active_backend not in self.backends
+        ):
+            raise ValueError(
+                f"llm.active_backend {self.active_backend!r} is not present in llm.backends"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -115,25 +148,37 @@ class STTWakeConfig(BaseModel):
 
     enabled: bool = True
     names: list[str] = ["Mimi", "Hey Mimi"]
+    aliases: list[str] = ["Me me"]
     sensitivity: float = 0.6
 
 
 class STTConfigSection(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    adapter: str = "realtimestt"
+    adapter: str = "isolated-faster-whisper"
     language: str = "en"
+    model: str = "medium.en"
+    realtime_model_type: str = "medium.en"
+    use_main_model_for_realtime: bool = True
+    device: Literal["auto", "cpu", "cuda"] = "auto"
+    compute_type: str = "auto"
+    beam_size: int = Field(default=5, ge=1, le=10)
+    speech_threshold: float = Field(default=0.015, gt=0.0, le=1.0)
     vad: Literal["silero", "webrtc", "none"] = "silero"
     sample_rate: int = 16000
+    # Require this much silence before finalising a phrase. RealtimeSTT's
+    # upstream 0.2 s default is too eager for ordinary conversational pauses.
+    post_speech_silence_duration: float = Field(default=1.0, ge=0.2, le=3.0)
     wake: STTWakeConfig = Field(default_factory=STTWakeConfig)
 
 
 class TTSConfigSection(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    adapter: str = "realtimetts"
-    engine: str = "coqui"
-    voice: str = "en_female_1"
+    adapter: str = "isolated-piper"
+    engine: str = "piper"
+    voice: str = "en_US-lessac-medium"
+    data_dir: str = "~/.openmimicry/voices"
     rate: float = 1.0
     interruptible: bool = True
 
@@ -149,6 +194,9 @@ class VoiceModesConfig(BaseModel):
     continuous_listening: bool = False
     live_wake: bool = False
     agent_voice: bool = True
+    # Speaker output commonly re-enters laptop microphones. Keep automatic
+    # VAD barge-in opt-in; PTT always interrupts TTS explicitly and safely.
+    barge_in_enabled: bool = False
     barge_in_grace_ms: int = 600
 
 

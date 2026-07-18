@@ -45,6 +45,9 @@
   max-height: 42%;
   margin: auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  scrollbar-gutter: stable;
   padding: 10px 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
@@ -109,6 +112,7 @@
 .avatar-toolbar__button {
   box-sizing: border-box;
   display: inline-flex;
+  position: relative;
   width: 38px;
   height: 34px;
   flex: 0 0 38px;
@@ -132,6 +136,35 @@
   border-color: var(--om-accent, #ff8a3d);
   background: color-mix(in srgb, var(--om-accent, #ff8a3d) 72%, #172017);
   color: #fff;
+}
+
+.avatar-toolbar__ptt[data-stage="listening"] {
+  animation: openmimicry-listening-pulse 1s ease-in-out infinite;
+}
+
+.avatar-toolbar__ptt[data-stage="transcribing"] {
+  border-color: transparent;
+}
+
+.avatar-toolbar__ptt[data-stage="transcribing"]::after {
+  position: absolute;
+  inset: -2px;
+  border: 2px dashed var(--om-accent, #ff8a3d);
+  border-radius: 10px;
+  animation: openmimicry-transcribing-spin 1.1s linear infinite;
+  content: "";
+  pointer-events: none;
+}
+
+.avatar-toolbar__ptt[data-stage="recognized"] {
+  border-color: #5bd78a;
+  color: #8ff0b2;
+}
+
+.avatar-toolbar__ptt[data-stage="no_speech"],
+.avatar-toolbar__ptt[data-stage="error"] {
+  border-color: #ff6b72;
+  color: #ffadb2;
 }
 
 .avatar-toolbar__button:disabled {
@@ -200,4 +233,12 @@
 
 @keyframes openmimicry-caret {
   to { opacity: 0; }
+}
+
+@keyframes openmimicry-listening-pulse {
+  50% { box-shadow: 0 0 0 4px rgba(255, 138, 61, 0.22); }
+}
+
+@keyframes openmimicry-transcribing-spin {
+  to { transform: rotate(360deg); }
 }

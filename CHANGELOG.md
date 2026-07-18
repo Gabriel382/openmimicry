@@ -7,6 +7,186 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] — verified CUDA auto-selection fallback
+
+### Fixed
+
+- Treated CTranslate2 GPU enumeration as a hint instead of proof that the CUDA
+  runtime is usable. `device: auto` now retries `medium.en` on CPU/INT8 when
+  CUDA model loading or first inference fails, including a missing
+  `cublas64_12.dll`.
+- Reported the hardware and compute type that actually passed the voice
+  preflight, together with the CUDA fallback reason.
+- Kept `device: cuda` strict so an explicitly requested GPU configuration still
+  fails with the original actionable dependency error.
+
+### Added
+
+- Regression coverage for CUDA model-load failure, lazy CUDA inference failure,
+  and strict explicit-CUDA behavior.
+
+## [1.5.0] — isolated, repeatable Windows voice runtime
+
+### Changed
+
+- Replaced RealtimeSTT/RealtimeTTS as the Windows default with a preloaded,
+  supervised Faster-Whisper input process and disposable Piper output jobs.
+- Raised the CPU recognition default from `small.en` to `medium.en`; added
+  `distil-large-v3` and `large-v3` dashboard selections.
+- Published assistant text and history before queuing audio, so TTS failure can
+  no longer hide an OpenRouter response or block another conversation turn.
+- Started the speaking animation only after the playback process reports that
+  audio actually began. Stale synthesis events cannot replace listening.
+
+### Added
+
+- `scripts/voice_doctor.py`, exercised automatically by the Windows launcher,
+  validates audio devices, several sequential Piper jobs, WAV integrity, and
+  a real Faster-Whisper transcription before voice is enabled.
+- Process-boundary regressions for two STT turns, two TTS turns, and recovery
+  after forcibly terminating a hung playback job.
+
+### Deprecated
+
+- `realtimestt` and `realtimetts` remain available through the
+  `legacy-realtime` extra but are no longer used by the supported Windows
+  profile.
+
+## [1.4.2] — non-blocking audio stop and live-final priority
+
+### Fixed
+
+- Moved RealtimeTTS `stream.stop()` off the asyncio event loop and bounded the
+  wait, preventing Windows/SystemEngine shutdown from freezing PTT, WebSockets,
+  typed chat, and passive-listener recovery after the first spoken answer.
+- Replaced a wedged TTS worker with a fresh daemon COM lane, so the next answer
+  can speak even when the previous third-party playback worker never exits.
+- Bounded `SpeechController.interrupt()` so hold-to-talk opens promptly while
+  slow audio cleanup finishes independently.
+- Coalesced obsolete realtime STT previews and prioritized final transcripts,
+  preventing live-wake commands from sitting behind an unbounded partial-text
+  backlog until the mode was disabled.
+
+### Added
+
+- Lifecycle logs showing passive-listener consumption, final dequeue, bounded
+  stop failures, and TTS worker-lane replacement.
+- Regressions for a permanently blocking RealtimeTTS stop, recovery of the
+  second spoken answer, PTT responsiveness during stuck cleanup, and a 500-item
+  realtime-preview flood ahead of a final wake transcript.
+
+## [1.4.1] — repeat-turn voice lifecycle recovery
+
+### Fixed
+
+- Drained cancelled RealtimeTTS executor work before accepting the next reply,
+  preventing an interrupted first playback from permanently occupying the
+  single Windows COM worker and silencing every later answer.
+- Added per-reply readiness ownership and a bounded playback watchdog so stale
+  TTS readiness cannot leak into the next turn and a broken audio stream
+  restores passive voice input instead of freezing it indefinitely.
+- Kept the prewarmed RealtimeSTT recorder reusable across ordinary pauses,
+  removed non-operational wake metadata from its rebuild signature, and made
+  stop sentinels synchronous on the owning event loop so they cannot terminate
+  the next listening session.
+- Decoupled accepted UI input from LLM/TTS completion while retaining ordered
+  conversation execution, so a stuck audio operation cannot block later typed
+  messages from appearing or prevent the WebSocket receive loop from running.
+- Serialized all outbound writes per WebSocket and treated status/replay sends
+  racing with a client close as clean disconnects instead of ASGI exceptions.
+
+### Added
+
+- Numbered conversation, STT-session, TTS-playback, and WebSocket lifecycle
+  logging to a rotating per-process file under `~/.openmimicry/logs`.
+- A dashboard **Download bundle** action and Windows fallback collector that
+  package logs, relevant dependency versions, and sanitized runtime settings
+  without reading `.env` or including API-key values.
+- Repeat-turn regressions for cancelled/sequential TTS, recorder pause/restart,
+  stale STT sentinels, closed-socket status sends, serialized socket writes,
+  and non-blocking background conversations.
+
+## [1.4.0] — ordered multimodal conversations and configurable local AI
+
+### Fixed
+
+- Serialized accepted text/PTT/wake turns so an older LLM response cannot
+  arrive after a newer question and appear to answer the wrong prompt.
+- Reused a prewarmed RealtimeTTS engine on one dedicated worker, fixing the
+  Windows failure where only the first assistant reply produced audio.
+- Preloaded RealtimeSTT at startup and finalized PTT on release, removing the
+  first-press model load and making the hold/release boundary deterministic.
+- Suppressed repeated wake finals inside a 2.5-second window while preserving
+  every heard transcript in the dashboard for diagnosis.
+- Delayed reply display until TTS reports playback start (with an explicit
+  text fallback if audio cannot start), aligning visible and audible output.
+
+### Added
+
+- Four-pair successful conversation memory; ignored wake audio and failed
+  turns are displayed but never added to future LLM context.
+- Accurate `small.en` speech recognition by default, selectable
+  `tiny.en`/`base.en`/`small.en` quality, wake-name transcription prompts,
+  and editable aliases such as `Me me` for `Mimi`.
+- Dashboard-visible model identity and live switching between configured
+  OpenRouter and Ollama backends. The voice profile includes
+  `ollama_chat/gpt-oss:20b` as its local option.
+- Validated character-pack ZIP import with traversal, symlink, file-count,
+  compressed-size, and expanded-size protections.
+- Regression coverage for ordering, memory, wake rejection/deduplication,
+  TTS engine reuse, STT model selection, backend switching, and ZIP import.
+
+## [1.3.2] — reliable multi-turn voice and desktop event lifecycle
+
+### Fixed
+
+- Replaced RealtimeTTS's racy `play_async()`/`is_playing()` completion poll
+  with blocking playback on a worker thread, so every reply waits for actual
+  audio completion and subsequent replies speak reliably.
+- Isolated stale React StrictMode WebSockets by connection generation and
+  connected desktop windows directly to the backend, preventing duplicated
+  bubble deltas and Vite `ws proxy socket error: ECONNABORTED` noise.
+- Published each already-complete structured LLM reply as one display update
+  while TTS starts, so text and voice become available together without
+  artificial append-only chunks.
+- Explicitly closed the three Tauri webview windows before process exit to
+  reduce WebView2 `Chrome_WidgetWin_0` class-unregistration errors on Windows.
+
+### Added
+
+- Configurable `voice.stt.post_speech_silence_duration` endpointing (default
+  `1.0`, range `0.2`–`3.0` seconds), passed through to RealtimeSTT and editable
+  from the local dashboard without a restart.
+- A toolbar reply-interaction toggle that temporarily changes the avatar from
+  click-through to interactive, plus auto-following and keyboard-focusable
+  speech-bubble scrolling.
+- Regression coverage for repeat TTS playback, speech-pause propagation and
+  persistence, passive-listener restart, and stale StrictMode sockets.
+
+## [1.3.1] — voice turn completion and observable transcription
+
+### Fixed
+
+- Prevented passive RealtimeSTT from transcribing system TTS by pausing
+  listening during playback in the safe default configuration and restoring it
+  afterward.
+- Contained intentional `asyncio.CancelledError` from interrupted TTS so every
+  chat turn still emits its final reply and avatar cue instead of disconnecting
+  the originating WebSocket and leaving the avatar in `speaking`.
+- Reset incomplete bubble text at the start of every LLM turn, eliminating
+  concatenated replies after an interrupted turn.
+- Added an actionable Windows launcher error when another process already owns
+  port 8000.
+
+### Added
+
+- Explicit PTT `listening` and `transcribing` stages plus recognized/no-speech
+  results in both the toolbar and browser dashboard.
+- Replayable in-memory conversation history for the latest 100 typed, voice,
+  and assistant turns in the dashboard.
+- `voice.modes.barge_in_enabled`, disabled by default for ordinary speaker and
+  laptop-microphone setups; PTT interruption remains available at all times.
+
 ## [1.3.0] — stable Windows voice and name-gated companion controls
 
 ### Added
@@ -203,7 +383,9 @@ Every workspace package + app + Tauri shell is pinned to `1.0.0`. Cross-package
 - **M13 (vision, post-v0.2, optional):** new brief `docs/modules/M13_vision.md` for a camera-driven `MediaPipeVisionAdapter` + `GestureClassifier` registry that publishes `GestureDetected` events the avatar director maps to `AvatarDirective` overrides. Off by default, opt-in via `pip install openmimicry[vision]` and `vision.enabled: true`. Privacy-first: no upload, explicit consent dialog on first activation. `pyproject.toml` gains `vision` and `full-vision` extras; `Makefile` lists them under `make install PROFILE=…`. Implementation deferred — the contract surface (`VisionAdapter`, `GestureClassifier`, `HandLandmark`/`HandPose`/`GestureDetection`/`VisionConfig` schemas, three new `RuntimeEvent` variants) lands in a contracts-amendment PR before M13 begins.
 - Architecture, adapter, event-flow, voice-mode, task-delegation, character-pack, desktop-overlay, configuration, testing-and-ci, and migration docs.
 
-[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/ghenrique/openmimicry/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/ghenrique/openmimicry/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/ghenrique/openmimicry/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/ghenrique/openmimicry/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/ghenrique/openmimicry/compare/v1.2.0...v1.2.1

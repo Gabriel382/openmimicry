@@ -14,6 +14,7 @@ voice:
     continuous_listening: false
     live_wake: false
     agent_voice: false
+    barge_in_enabled: false
 
 avatar:
   runtime: sprite2d

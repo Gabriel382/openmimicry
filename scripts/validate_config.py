@@ -45,7 +45,13 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "profile": label,
                 "valid": True,
-                "llm_adapter": config.llm.adapter,
+                "llm_adapter": ("switchboard" if config.llm.backends else config.llm.adapter),
+                "llm_backend": config.llm.active_backend,
+                "llm_model": (
+                    config.llm.backends[config.llm.active_backend].model
+                    if config.llm.backends and config.llm.active_backend
+                    else config.llm.model
+                ),
                 "stt_adapter": config.voice.stt.adapter,
                 "tts_adapter": config.voice.tts.adapter,
                 "avatar_runtime": config.avatar.runtime,

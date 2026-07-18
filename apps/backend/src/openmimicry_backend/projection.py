@@ -1,6 +1,6 @@
 """``project(event) -> dict | None``: RuntimeEvent -> frontend wire-protocol.
 
-The wire protocol is defined in ``docs/contracts.md`` §9. There are five
+The wire protocol is defined in ``docs/contracts.md`` §9. There are six
 inbound message shapes (server -> frontend):
 
 * ``avatar.directive`` — emitted by the avatar runtime via its WSBridge,
@@ -12,6 +12,7 @@ inbound message shapes (server -> frontend):
   …) — duplication would let the same state flip twice on the wire.
 * ``transcript.preview`` — partial STT projection.
 * ``bubble.text`` — LLM token stream and final reply.
+* ``conversation.turn`` — replayable user/assistant history for the dashboard.
 * ``task.card`` — TaskSubmitted / TaskUpdatedEvent / TaskCompleted.
 * ``system.notice`` — wake detection, config updates, errors,
   TTSInterrupted user-facing warnings.
@@ -49,7 +50,7 @@ from openmimicry.core.schemas import (
     WakeDetected,
 )
 
-__all__ = ["project"]
+__all__ = ["project", "project_messages"]
 
 
 _log = logging.getLogger(__name__)
@@ -165,3 +166,84 @@ def project(event: RuntimeEvent) -> dict[str, Any] | None:
         getattr(event, "kind", type(event).__name__),
     )
     return None
+
+
+def project_messages(event: RuntimeEvent) -> list[dict[str, Any]]:
+    """Return every wire message represented by one runtime event.
+
+    ``project`` remains the frozen one-event/one-message compatibility surface.
+    This additive wrapper supplies UI-only turn boundaries, conversation
+    history, and speech-result diagnostics without changing runtime events.
+    """
+
+    event_id = f"{event.kind}:{event.ts.isoformat()}"
+
+    if isinstance(event, LLMStarted):
+        return [
+            {
+                "type": "bubble.text",
+                "text": "",
+                "complete": False,
+                "reset": True,
+            }
+        ]
+
+    if isinstance(event, UserTextSubmitted):
+        return [
+            {
+                "type": "conversation.turn",
+                "id": event_id,
+                "role": "user",
+                "source": "text",
+                "text": event.text,
+                "ts": event.ts.isoformat(),
+            }
+        ]
+
+    if isinstance(event, UserSpeechFinal):
+        displayed = (event.raw_text or event.text).strip()
+        messages: list[dict[str, Any]] = [
+            {
+                "type": "system.notice",
+                "level": "info" if event.accepted else "warn",
+                "message": "speech_result",
+                "voice_result": {
+                    "text": displayed,
+                    "command": event.text,
+                    "reason": event.reason,
+                    "accepted": event.accepted,
+                    "input_mode": event.input_mode,
+                    "rejection_reason": event.rejection_reason,
+                },
+            }
+        ]
+        if displayed:
+            messages.append(
+                {
+                    "type": "conversation.turn",
+                    "id": event_id,
+                    "role": "user",
+                    "source": "voice",
+                    "text": displayed,
+                    "ts": event.ts.isoformat(),
+                    "accepted": event.accepted,
+                    "rejection_reason": event.rejection_reason,
+                    "command": event.text,
+                }
+            )
+        return messages
+
+    base = project(event)
+    messages = [base] if base is not None else []
+    if isinstance(event, LLMReplyComplete) and event.full_text:
+        messages.append(
+            {
+                "type": "conversation.turn",
+                "id": event_id,
+                "role": "assistant",
+                "source": "assistant",
+                "text": event.full_text,
+                "ts": event.ts.isoformat(),
+            }
+        )
+    return messages

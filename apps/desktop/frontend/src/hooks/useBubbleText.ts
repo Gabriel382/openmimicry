@@ -41,6 +41,7 @@ export function useBubbleText(timing: BubbleTiming = DEFAULT_TIMING): BubbleStat
   useEffect(() => {
     const offText = ws.subscribe("bubble.text", (msg) => {
       setState((prev) => {
+        if (msg.reset) return EMPTY;
         if (msg.complete) return { text: msg.text, complete: true };
         return {
           text: (prev.complete ? "" : prev.text) + msg.text,

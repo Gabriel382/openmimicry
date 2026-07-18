@@ -44,7 +44,12 @@ from openmimicry.core import (
     TaskRuntimeAdapter,
     TTSAdapter,
 )
-from openmimicry.llm import LiteLLMAdapter, LiteLLMSettings, MockLLMAdapter
+from openmimicry.llm import (
+    LiteLLMAdapter,
+    LiteLLMSettings,
+    LLMSwitchboard,
+    MockLLMAdapter,
+)
 from openmimicry.tasks import (
     ClaudeCodeAdapter,
     LocalShellAdapter,
@@ -54,6 +59,10 @@ from openmimicry.tasks import (
     detect_task_intent,
 )
 from openmimicry.voice import (
+    IsolatedFasterWhisperAdapter,
+    IsolatedFasterWhisperSettings,
+    IsolatedPiperSettings,
+    IsolatedPiperTTSAdapter,
     MockSTTAdapter,
     MockTTSAdapter,
     RealtimeSTTAdapter,
@@ -177,6 +186,32 @@ async def build_runtime(
 
 
 def _build_llm(config: AppConfig) -> LLMAdapter:
+    if config.llm.backends:
+        backends: dict[str, LLMAdapter] = {}
+        models: dict[str, str] = {}
+        for backend_name, backend in config.llm.backends.items():
+            if backend.adapter == "mock":
+                adapter: LLMAdapter = MockLLMAdapter()
+            elif backend.adapter == "litellm":
+                adapter = LiteLLMAdapter(
+                    settings=LiteLLMSettings(
+                        model=backend.model,
+                        api_base=backend.api_base,
+                        api_key_env=backend.api_key_env,
+                        request_timeout_s=backend.request_timeout_s,
+                        temperature=backend.temperature,
+                        max_tokens=backend.max_tokens,
+                    )
+                )
+            else:
+                raise WiringError(
+                    f"unknown llm.backends.{backend_name}.adapter: {backend.adapter!r}"
+                )
+            backends[backend_name] = adapter
+            models[backend_name] = backend.model
+        active = config.llm.active_backend or next(iter(backends))
+        return LLMSwitchboard(backends=backends, models=models, active=active)
+
     name = config.llm.adapter
     if name == "mock":
         return MockLLMAdapter()
@@ -197,8 +232,27 @@ def _build_stt(config: AppConfig) -> STTAdapter:
     name = config.voice.stt.adapter
     if name == "mock":
         return MockSTTAdapter()
+    if name == "isolated-faster-whisper":
+        return IsolatedFasterWhisperAdapter(
+            settings=IsolatedFasterWhisperSettings(
+                device=config.voice.stt.device,
+                compute_type=config.voice.stt.compute_type,
+                beam_size=config.voice.stt.beam_size,
+                speech_threshold=config.voice.stt.speech_threshold,
+            )
+        )
     if name == "realtimestt":
-        return RealtimeSTTAdapter()
+        from openmimicry.voice import RealtimeSTTSettings
+
+        return RealtimeSTTAdapter(
+            settings=RealtimeSTTSettings(
+                model=config.voice.stt.model,
+                realtime_model_type=config.voice.stt.realtime_model_type,
+                use_main_model_for_realtime=config.voice.stt.use_main_model_for_realtime,
+                language=config.voice.stt.language,
+                sample_rate=config.voice.stt.sample_rate,
+            )
+        )
     raise WiringError(f"unknown voice.stt.adapter: {name!r}")
 
 
@@ -206,6 +260,10 @@ def _build_tts(config: AppConfig) -> TTSAdapter:
     name = config.voice.tts.adapter
     if name == "mock":
         return MockTTSAdapter()
+    if name == "isolated-piper":
+        return IsolatedPiperTTSAdapter(
+            settings=IsolatedPiperSettings(data_dir=config.voice.tts.data_dir)
+        )
     if name == "realtimetts":
         return RealtimeTTSAdapter()
     raise WiringError(f"unknown voice.tts.adapter: {name!r}")

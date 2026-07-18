@@ -1,6 +1,6 @@
 [package]
 name = "openmimicry-desktop"
-version = "1.3.0"
+version = "1.5.1"
 description = "OpenMimicry desktop shell: transparent avatar, top toolbar, IPC commands, tray, and global hotkeys."
 edition = "2021"
 license = "MIT"

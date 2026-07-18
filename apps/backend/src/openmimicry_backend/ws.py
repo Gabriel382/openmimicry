@@ -12,6 +12,7 @@ accept these inbound messages:
 * ``ptt.down`` / ``ptt.up`` -> ``SpeechController.ptt_down/up``
 * ``mode.toggle`` -> publish :class:`ConfigUpdated` + apply on the
   speech controller for the two keys it understands.
+* ``task.cancel`` -> cancel a running task when its adapter supports it.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from openmimicry.core import (
     UserTextSubmitted,
 )
 
-from .projection import project
+from .projection import project_messages
 
 __all__ = [
     "BroadcastBridge",
@@ -67,30 +68,33 @@ class BroadcastBridge:
 
     def __init__(self) -> None:
         self._sockets: set[WebSocket] = set()
+        self._send_locks: dict[WebSocket, asyncio.Lock] = {}
         self._lock = asyncio.Lock()
         self._latest_avatar: dict[str, Any] | None = None
         self._latest_bubble: dict[str, Any] | None = None
         self._latest_tasks: dict[str, dict[str, Any]] = {}
+        self._conversation: dict[str, dict[str, Any]] = {}
 
-    async def add_socket(self, ws: WebSocket) -> None:
+    async def add_socket(self, ws: WebSocket) -> bool:
         async with self._lock:
             self._sockets.add(ws)
+            self._send_locks.setdefault(ws, asyncio.Lock())
             replay = [
                 message
                 for message in (self._latest_avatar, self._latest_bubble)
                 if message is not None
             ]
+            replay.extend(self._conversation.values())
             replay.extend(self._latest_tasks.values())
         for message in replay:
-            try:
-                await ws.send_json(message)
-            except Exception:
-                await self.remove_socket(ws)
-                return
+            if not await self.send(ws, message):
+                return False
+        return True
 
     async def remove_socket(self, ws: WebSocket) -> None:
         async with self._lock:
             self._sockets.discard(ws)
+            self._send_locks.pop(ws, None)
 
     @property
     def socket_count(self) -> int:
@@ -103,15 +107,36 @@ class BroadcastBridge:
             self._remember_unlocked(message)
             sockets = list(self._sockets)
         for ws in sockets:
-            try:
-                await ws.send_json(message)
-            except Exception as exc:
-                _log.info("BroadcastBridge: socket dropped (%s)", exc)
+            if not await self.send(ws, message, remove_on_failure=False):
                 dead.append(ws)
         if dead:
             async with self._lock:
                 for ws in dead:
                     self._sockets.discard(ws)
+                    self._send_locks.pop(ws, None)
+
+    async def send(
+        self,
+        ws: WebSocket,
+        message: dict[str, Any],
+        *,
+        remove_on_failure: bool = True,
+    ) -> bool:
+        """Serialize all writes to one socket and absorb close/send races."""
+
+        async with self._lock:
+            if ws not in self._sockets:
+                return False
+            send_lock = self._send_locks.setdefault(ws, asyncio.Lock())
+        try:
+            async with send_lock:
+                await ws.send_json(message)
+        except Exception as exc:
+            _log.info("WebSocket send dropped: type=%s error=%s", message.get("type"), exc)
+            if remove_on_failure:
+                await self.remove_socket(ws)
+            return False
+        return True
 
     async def remember(self, message: dict[str, Any]) -> None:
         """Retain UI state so windows opened later receive a coherent view."""
@@ -122,8 +147,17 @@ class BroadcastBridge:
     def _remember_unlocked(self, message: dict[str, Any]) -> None:
         if message.get("type") == "avatar.directive":
             self._latest_avatar = dict(message)
-        elif message.get("type") == "bubble.text" and message.get("complete") is True:
-            self._latest_bubble = dict(message)
+        elif message.get("type") == "bubble.text":
+            if message.get("reset") is True:
+                self._latest_bubble = None
+            elif message.get("complete") is True:
+                self._latest_bubble = dict(message)
+        elif message.get("type") == "conversation.turn":
+            turn_id = message.get("id")
+            if isinstance(turn_id, str) and turn_id:
+                self._conversation[turn_id] = dict(message)
+                while len(self._conversation) > 100:
+                    self._conversation.pop(next(iter(self._conversation)))
         elif message.get("type") == "task.card":
             update = message.get("update")
             handle = update.get("handle") if isinstance(update, dict) else None
@@ -159,16 +193,20 @@ async def ws_endpoint(
     reads inbound JSON. Either ending tears both down cleanly.
     """
     await websocket.accept()
-    await bridge.add_socket(websocket)
+    if not await bridge.add_socket(websocket):
+        return
     if get_mode_status is not None:
-        await websocket.send_json(
+        sent = await bridge.send(
+            websocket,
             {
                 "type": "system.notice",
                 "level": "info",
                 "message": "voice_status",
                 "voice": get_mode_status(),
-            }
+            },
         )
+        if not sent:
+            return
     _log.info("WS connected; total=%d", bridge.socket_count)
 
     pump_task = asyncio.create_task(
@@ -213,15 +251,10 @@ async def _projection_pump(websocket: WebSocket, bus: EventBus, bridge: Broadcas
     sub = bus.subscribe()
     try:
         async for event in sub:
-            message = project(event)
-            if message is None:
-                continue
-            await bridge.remember(message)
-            try:
-                await websocket.send_json(message)
-            except Exception as exc:
-                _log.info("WS pump: send failed (%s); exiting pump", exc)
-                return
+            for message in project_messages(event):
+                await bridge.remember(message)
+                if not await bridge.send(websocket, message):
+                    return
     except asyncio.CancelledError:
         raise
     except Exception as exc:
@@ -243,7 +276,7 @@ async def _dispatch_inbound(
         if not text:
             return
         bus.publish(UserTextSubmitted(ts=_now(), text=text))
-        await handle_user_text(text)
+        _start_turn_task(handle_user_text(text), source="websocket.text")
         return
 
     if msg_type == "ptt.down":
@@ -253,16 +286,32 @@ async def _dispatch_inbound(
             _log.warning("ptt.down failed: %s", exc)
             bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
             return
-        bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": True}))
+        bus.publish(
+            ConfigUpdated(
+                ts=_now(),
+                diff={"ptt_active": True, "ptt_stage": "listening"},
+            )
+        )
         return
 
     if msg_type == "ptt.up":
+        bus.publish(
+            ConfigUpdated(
+                ts=_now(),
+                diff={"ptt_active": True, "ptt_stage": "transcribing"},
+            )
+        )
         try:
             await speech.ptt_up()
         except Exception as exc:
             _log.warning("ptt.up failed: %s", exc)
             bus.publish(ErrorEvent(ts=_now(), where="voice.ptt", message=str(exc)))
-            bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": False}))
+            bus.publish(
+                ConfigUpdated(
+                    ts=_now(),
+                    diff={"ptt_active": False, "ptt_stage": "error"},
+                )
+            )
             return
         bus.publish(ConfigUpdated(ts=_now(), diff={"ptt_active": False}))
         return
@@ -296,3 +345,24 @@ async def _dispatch_inbound(
         return
 
     _log.info("WS: ignoring unknown inbound type=%r", msg_type)
+
+
+_TURN_TASKS: set[asyncio.Task[None]] = set()
+
+
+def _start_turn_task(turn: Awaitable[None], *, source: str) -> None:
+    """Run a conversation without blocking the socket receive loop."""
+
+    task = asyncio.create_task(turn, name=f"openmimicry.backend.turn.{source}")
+    _TURN_TASKS.add(task)
+
+    def _done(completed: asyncio.Task[None]) -> None:
+        _TURN_TASKS.discard(completed)
+        if completed.cancelled():
+            return
+        try:
+            completed.result()
+        except Exception:
+            _log.exception("background conversation failed: source=%s", source)
+
+    task.add_done_callback(_done)

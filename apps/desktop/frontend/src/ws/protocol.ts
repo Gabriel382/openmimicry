@@ -105,6 +105,17 @@ export interface BubbleTextMessage {
   type: "bubble.text";
   text: string;
   complete: boolean;
+  /** A new LLM turn started; clear any incomplete text from the prior turn. */
+  reset?: boolean;
+}
+
+export interface ConversationTurnMessage {
+  type: "conversation.turn";
+  id: string;
+  role: "user" | "assistant";
+  source: "text" | "voice" | "assistant";
+  text: string;
+  ts: string;
 }
 
 export interface TaskCardMessage {
@@ -129,13 +140,19 @@ export interface SystemNoticeMessage {
     wake_names?: string[];
     agent_voice?: boolean;
     ptt_active?: boolean;
+    ptt_stage?: string;
     listening_mode?: string;
     stt_adapter?: string;
+    stt_runtime?: Record<string, unknown>;
     tts_adapter?: string;
     real_input?: boolean;
     real_output?: boolean;
     input_install_hint?: string | null;
     output_install_hint?: string | null;
+  };
+  voice_result?: {
+    text: string;
+    reason: "normal" | "no_speech" | "interrupted";
   };
   [extra: string]: unknown;
 }
@@ -145,6 +162,7 @@ export type ServerMessage =
   | AvatarDirectiveMessage
   | TranscriptPreviewMessage
   | BubbleTextMessage
+  | ConversationTurnMessage
   | TaskCardMessage
   | SystemNoticeMessage;
 
@@ -204,6 +222,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     t === "avatar.directive" ||
     t === "transcript.preview" ||
     t === "bubble.text" ||
+    t === "conversation.turn" ||
     t === "task.card" ||
     t === "system.notice"
   );

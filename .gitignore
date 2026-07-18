@@ -39,6 +39,7 @@ src-tauri/target/
 *.log.*
 *.tmp
 .tmp/
+diagnostics/
 
 # --- Env + secrets -------------------------------------------------------
 .env

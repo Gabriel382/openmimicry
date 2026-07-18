@@ -68,6 +68,13 @@ class UserSpeechFinal(_Event):
     kind: Literal["speech_final"] = "speech_final"
     text: str
     reason: Literal["normal", "no_speech", "interrupted"] = "normal"
+    # Wake mode now records every final transcript for diagnostics/history,
+    # but only accepted turns are submitted to the LLM. ``text`` is the
+    # command after wake-prefix stripping; ``raw_text`` is what STT heard.
+    accepted: bool = True
+    input_mode: Literal["push_to_talk", "continuous", "wake"] = "push_to_talk"
+    raw_text: str | None = None
+    rejection_reason: Literal["wake_name_missing", "duplicate", "empty"] | None = None
 
 
 class TranscriptPreview(_Event):

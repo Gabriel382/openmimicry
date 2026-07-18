@@ -66,7 +66,11 @@ class RuntimeStore(BaseModel):
         # User text
         if isinstance(event, UserTextSubmitted):
             return self.model_copy(update={"last_user_text": event.text})
-        if isinstance(event, UserSpeechFinal) and event.reason == "normal":
+        if (
+            isinstance(event, UserSpeechFinal)
+            and event.reason == "normal"
+            and event.accepted
+        ):
             return self.model_copy(update={"last_user_text": event.text})
 
         # Assistant text

@@ -5,8 +5,10 @@ Exports
 
 * :class:`STTAdapter`, :class:`TTSAdapter` — re-exported Protocols.
 * :class:`MockSTTAdapter`, :class:`MockTTSAdapter` — canonical mocks.
-* :class:`RealtimeSTTAdapter`, :class:`RealtimeTTSAdapter` — RealtimeSTT /
-  RealtimeTTS-backed adapters (heavy deps are lazy-imported).
+* :class:`IsolatedFasterWhisperAdapter` — supervised, preloaded STT service.
+* :class:`IsolatedPiperTTSAdapter` — disposable per-utterance TTS jobs.
+* :class:`RealtimeSTTAdapter`, :class:`RealtimeTTSAdapter` — legacy
+  compatibility adapters (heavy deps are lazy-imported).
 * :class:`SpeechController` — owns the single active TTS task and the
   barge-in policy.
 * :class:`WakeController` — thin enable/disable wrapper.
@@ -22,10 +24,20 @@ from openmimicry.core.contracts import STTAdapter, TTSAdapter
 from .controllers.speech import SpeechController
 from .controllers.wake import WakeController
 from .mocks import MockSTTAdapter, MockTTSAdapter
+from .stt.isolated_faster_whisper import (
+    IsolatedFasterWhisperAdapter,
+    IsolatedFasterWhisperSettings,
+    IsolatedSTTUnavailable,
+)
 from .stt.realtimestt_adapter import (
     RealtimeSTTAdapter,
     RealtimeSTTSettings,
     RealtimeSTTUnavailable,
+)
+from .tts.isolated_piper import (
+    IsolatedPiperSettings,
+    IsolatedPiperTTSAdapter,
+    IsolatedTTSUnavailable,
 )
 from .tts.realtimetts_adapter import (
     RealtimeTTSAdapter,
@@ -34,6 +46,12 @@ from .tts.realtimetts_adapter import (
 )
 
 __all__ = [
+    "IsolatedFasterWhisperAdapter",
+    "IsolatedFasterWhisperSettings",
+    "IsolatedPiperSettings",
+    "IsolatedPiperTTSAdapter",
+    "IsolatedSTTUnavailable",
+    "IsolatedTTSUnavailable",
     "MockSTTAdapter",
     "MockTTSAdapter",
     "RealtimeSTTAdapter",
@@ -48,4 +66,4 @@ __all__ = [
     "WakeController",
 ]
 
-__version__ = "1.3.0"
+__version__ = "1.5.1"

@@ -33,6 +33,12 @@ h2 { margin: 0; font-size: 18px; }
 .card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .badge { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 11px; }
 .reply { min-height: 92px; max-height: 220px; margin-bottom: 12px; overflow: auto; padding: 13px; border-radius: 10px; background: #111319; color: #dfe2e8; line-height: 1.45; white-space: pre-wrap; }
+.conversation-history { display: grid; max-height: 300px; margin-bottom: 12px; overflow: auto; gap: 8px; }
+.conversation-turn { max-width: 88%; padding: 9px 11px; border-radius: 11px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.conversation-turn--user { justify-self: end; background: #713d21; color: #fff4ec; }
+.conversation-turn--assistant { justify-self: start; background: #111319; color: #dfe2e8; }
+.conversation-turn--ignored { opacity: .58; border: 1px dashed #7b6b61; }
+.conversation-turn small { display: block; margin-bottom: 3px; color: #b9bec8; font-size: 10px; text-transform: uppercase; }
 .chat-form { display: flex; gap: 8px; }
 .chat-form input { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; outline: none; background: #111319; color: var(--text); }
 .chat-form input:focus { border-color: var(--accent); }
@@ -42,10 +48,12 @@ h2 { margin: 0; font-size: 18px; }
 #ptt[aria-pressed="true"] { border-color: var(--bad); background: #77252b; }
 .wake-name-form { display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; align-items: center; gap: 8px; margin-top: 12px; }
 .wake-name-form label { color: var(--muted); font-size: 12px; }
-.wake-name-form input { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #111319; color: var(--text); }
+.wake-name-form input, .wake-name-form select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #111319; color: var(--text); }
 .wake-name-form input:focus { border-color: var(--accent); }
 .wake-name-form button { min-height: 38px; padding: 8px 12px; }
+.field-hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .muted, .explanation { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.voice-result { min-height: 20px; margin: 8px 0 0; color: #dfe2e8; font-size: 13px; }
 .explanation { margin-bottom: 0; }
 .error:empty { display: none; }
 .error { color: #ff9da3; font-size: 13px; }
@@ -53,12 +61,17 @@ h2 { margin: 0; font-size: 18px; }
 .settings-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
 .settings-form select { min-height: 38px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: #111319; color: var(--text); }
 .settings-form button { align-self: end; min-height: 38px; }
+.import-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 14px; }
+.import-form label { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.import-form input { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #111319; color: var(--muted); }
+.import-form button { min-height: 38px; padding: 8px 12px; }
 .tasks { display: grid; gap: 8px; }
 .task { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 9px; padding: 10px; border-radius: 10px; background: #111319; }
 .task small, .empty { color: var(--muted); }
 .task button { padding: 5px 9px; }
 .task progress { grid-column: 1 / -1; width: 100%; }
 .quiet { padding: 6px 9px; color: var(--muted); }
+.diagnostics-download { display: inline-block; border: 1px solid var(--line); border-radius: 9px; text-decoration: none; }
 pre { overflow: auto; margin: 0; padding: 12px; border-radius: 10px; background: #111319; color: #b8c0cc; font-size: 12px; }
 code { color: #ffc69f; }
 
@@ -68,4 +81,5 @@ code { color: #ffc69f; }
   .settings-form { grid-template-columns: 1fr; }
   .settings-form button { margin-bottom: 6px; }
   .wake-name-form { grid-template-columns: 1fr; }
+  .import-form { grid-template-columns: 1fr; }
 }

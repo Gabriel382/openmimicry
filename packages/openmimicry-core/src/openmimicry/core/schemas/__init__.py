@@ -14,6 +14,7 @@ from .app import (
     AvatarConfig,
     HotkeysConfig,
     LLMConfig,
+    LLMBackendConfig,
     LLMFallbackConfig,
     LLMRetryConfig,
     OverlayConfig,
@@ -118,6 +119,7 @@ __all__ = [
     # llm
     "LLMChunk",
     "LLMConfig",
+    "LLMBackendConfig",
     "LLMFallbackConfig",
     "LLMMessage",
     "LLMReplyComplete",

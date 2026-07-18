@@ -22,12 +22,16 @@ describe("avatar toolbar", () => {
     await waitFor(() => expect(sockets[0]?.readyState).toBe(1));
     expect(screen.getByLabelText("Drag avatar")).toBeTruthy();
     expect(screen.getByLabelText("Lock avatar position")).toBeTruthy();
+    expect(screen.getByLabelText("Enable reply scrolling")).toBeTruthy();
     expect(screen.getByLabelText("Hold to talk")).toBeTruthy();
     expect(screen.getByLabelText("Wake listen off")).toBeTruthy();
     expect(screen.getByLabelText("Agent voice on")).toBeTruthy();
     expect(screen.getByLabelText("Open settings and tasks")).toBeTruthy();
     expect(screen.getByLabelText("Exit OpenMimicry")).toBeTruthy();
     expect(screen.queryByLabelText("message")).toBeNull();
+
+    act(() => screen.getByLabelText("Enable reply scrolling").click());
+    expect(screen.getByLabelText("Disable reply scrolling")).toBeTruthy();
   });
 
   it("sends wake-listening and press-to-talk messages", async () => {
@@ -55,5 +59,37 @@ describe("avatar toolbar", () => {
     });
     expect(sent).toContainEqual({ type: "ptt.down" });
     expect(sent).toContainEqual({ type: "ptt.up" });
+  });
+
+  it("shows explicit listening, transcribing, and recognized PTT states", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline appearance"));
+    const { factory, sockets } = mockSocketFactory();
+    render(
+      <WSProvider url="ws://test/ws" socketFactory={factory}>
+        <ControlsRoute />
+      </WSProvider>,
+    );
+    await waitFor(() => expect(sockets[0]?.readyState).toBe(1));
+    const socket = sockets[0];
+    if (!socket) throw new Error("mock socket was not created");
+
+    const ptt = screen.getByLabelText("Hold to talk");
+    fireEvent.pointerDown(ptt, { button: 0, pointerId: 1 });
+    expect(screen.getByLabelText("Listening… release to transcribe")).toBeTruthy();
+    fireEvent.pointerUp(screen.getByLabelText("Listening… release to transcribe"), {
+      button: 0,
+      pointerId: 1,
+    });
+    expect(screen.getByLabelText("Transcribing…")).toBeTruthy();
+
+    act(() =>
+      socket._dispatchMessage({
+        type: "system.notice",
+        level: "info",
+        message: "speech_result",
+        voice_result: { text: "hello Mimi", reason: "normal" },
+      }),
+    );
+    await waitFor(() => expect(screen.getByLabelText("Last heard: hello Mimi")).toBeTruthy());
   });
 });

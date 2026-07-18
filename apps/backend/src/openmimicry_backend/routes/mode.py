@@ -16,9 +16,9 @@ from fastapi import APIRouter, HTTPException, Request
 from openmimicry.core import ConfigUpdated, EventBus, SpeechController
 from pydantic import BaseModel, Field
 
-from ..user_settings import persist_wake_names
+from ..user_settings import persist_voice_settings
 
-__all__ = ["ModeToggleRequest", "WakeNameRequest", "router"]
+__all__ = ["ModeToggleRequest", "VoiceSettingsRequest", "WakeNameRequest", "router"]
 
 
 _log = logging.getLogger(__name__)
@@ -36,8 +36,25 @@ class ModeToggleRequest(BaseModel):
     value: bool
 
 
-class WakeNameRequest(BaseModel):
-    wake_name: str = Field(min_length=1, max_length=40)
+class VoiceSettingsRequest(BaseModel):
+    wake_name: str | None = Field(default=None, min_length=1, max_length=40)
+    wake_aliases: list[str] | None = Field(default=None, max_length=12)
+    stt_model: (
+        Literal[
+            "tiny.en",
+            "base.en",
+            "small.en",
+            "medium.en",
+            "distil-large-v3",
+            "large-v3",
+        ]
+        | None
+    ) = None
+    post_speech_silence_duration: float | None = Field(default=None, ge=0.2, le=3.0)
+
+
+# Kept as an import-compatible alias for collaborators using the v1.3.1 name.
+WakeNameRequest = VoiceSettingsRequest
 
 
 router = APIRouter()
@@ -51,35 +68,111 @@ async def voice_settings(request: Request) -> dict[str, object]:
     return {
         "wake_name": _primary_wake_name(names),
         "wake_names": names,
+        "wake_aliases": list(getattr(speech, "wake_aliases", [])),
+        "stt_model": str(getattr(speech, "stt_model", "medium.en")),
         "live_wake": bool(mode_state.get("live_wake", False)),
+        "post_speech_silence_duration": float(getattr(speech, "post_speech_silence_duration", 1.0)),
     }
 
 
 @router.post("/voice/settings")
-async def update_voice_settings(req: WakeNameRequest, request: Request) -> dict[str, object]:
-    primary = _validate_wake_name(req.wake_name)
-    names = [primary]
-    if not primary.casefold().startswith("hey "):
-        names.append(f"Hey {primary}")
+async def update_voice_settings(req: VoiceSettingsRequest, request: Request) -> dict[str, object]:
+    if (
+        req.wake_name is None
+        and req.wake_aliases is None
+        and req.stt_model is None
+        and req.post_speech_silence_duration is None
+    ):
+        raise HTTPException(status_code=422, detail="at least one voice setting is required")
+
+    primary: str | None = None
+    names: list[str] | None = None
+    aliases: list[str] | None = None
+    if req.wake_name is not None:
+        primary = _validate_wake_name(req.wake_name)
+        names = [primary]
+        if not primary.casefold().startswith("hey "):
+            names.append(f"Hey {primary}")
+        aliases = (
+            [_validate_wake_name(alias) for alias in req.wake_aliases]
+            if req.wake_aliases is not None
+            else (["Me me"] if primary.casefold() == "mimi" else [])
+        )
+    elif req.wake_aliases is not None:
+        aliases = [_validate_wake_name(alias) for alias in req.wake_aliases]
 
     wiring = request.app.state.wiring
     speech: SpeechController = wiring.speech
-    previous = list(getattr(speech, "wake_names", []))
+    previous_names = list(getattr(speech, "wake_names", []))
+    previous_aliases = list(getattr(speech, "wake_aliases", []))
+    previous_model = str(getattr(speech, "stt_model", "medium.en"))
+    previous_pause = float(getattr(speech, "post_speech_silence_duration", 1.0))
     try:
-        await speech.set_wake_names(names)  # type: ignore[attr-defined]
-        persist_wake_names(names)
+        if names is not None:
+            await speech.set_wake_names(names, aliases)  # type: ignore[attr-defined]
+        elif aliases is not None:
+            await speech.set_wake_names(previous_names, aliases)  # type: ignore[attr-defined]
+        if req.stt_model is not None:
+            await speech.set_stt_model(req.stt_model)  # type: ignore[attr-defined]
+        if req.post_speech_silence_duration is not None:
+            await speech.set_post_speech_silence_duration(  # type: ignore[attr-defined]
+                req.post_speech_silence_duration
+            )
+        persist_voice_settings(
+            wake_names=names,
+            wake_aliases=aliases,
+            stt_model=req.stt_model,
+            post_speech_silence_duration=req.post_speech_silence_duration,
+        )
     except Exception as exc:
-        if previous:
+        if (names is not None or aliases is not None) and previous_names:
             with contextlib.suppress(Exception):
-                await speech.set_wake_names(previous)  # type: ignore[attr-defined]
-        _log.warning("wake-name update failed: %s", exc, exc_info=True)
+                await speech.set_wake_names(previous_names, previous_aliases)  # type: ignore[attr-defined]
+        if req.stt_model is not None:
+            with contextlib.suppress(Exception):
+                await speech.set_stt_model(previous_model)  # type: ignore[attr-defined]
+        if req.post_speech_silence_duration is not None:
+            with contextlib.suppress(Exception):
+                await speech.set_post_speech_silence_duration(previous_pause)  # type: ignore[attr-defined]
+        _log.warning("voice settings update failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     mode_state = getattr(request.app.state, "mode_state", None)
     if isinstance(mode_state, dict):
-        mode_state["wake_names"] = names
-    wiring.bus.publish(ConfigUpdated(ts=_now(), diff={"wake_names": names}))
-    return {"ok": True, "wake_name": primary, "wake_names": names}
+        if names is not None:
+            mode_state["wake_names"] = names
+            mode_state["wake_aliases"] = aliases or []
+        if req.stt_model is not None:
+            mode_state["stt_model"] = req.stt_model
+        if req.post_speech_silence_duration is not None:
+            mode_state["post_speech_silence_duration"] = req.post_speech_silence_duration
+
+    # Preserve the API's primary-name-first order even though the controller
+    # internally sorts longest prefixes first for correct wake matching.
+    current_names = (
+        list(names) if names is not None else list(getattr(speech, "wake_names", ["Mimi"]))
+    )
+    current_pause = float(getattr(speech, "post_speech_silence_duration", 1.0))
+    current_aliases = list(getattr(speech, "wake_aliases", []))
+    current_model = str(getattr(speech, "stt_model", "medium.en"))
+    diff: dict[str, object] = {}
+    if names is not None:
+        diff["wake_names"] = current_names
+    if aliases is not None:
+        diff["wake_aliases"] = current_aliases
+    if req.stt_model is not None:
+        diff["stt_model"] = current_model
+    if req.post_speech_silence_duration is not None:
+        diff["post_speech_silence_duration"] = current_pause
+    wiring.bus.publish(ConfigUpdated(ts=_now(), diff=diff))
+    return {
+        "ok": True,
+        "wake_name": _primary_wake_name(current_names),
+        "wake_names": current_names,
+        "wake_aliases": current_aliases,
+        "stt_model": current_model,
+        "post_speech_silence_duration": current_pause,
+    }
 
 
 @router.post("/mode/toggle")

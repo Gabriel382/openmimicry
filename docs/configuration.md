@@ -2,7 +2,7 @@
 
 OpenMimicry runtime behavior is configured by `config/app.yaml` plus an optional
 profile. The browser dashboard stores non-secret user overrides such as the
-wake name in ignored `config/user.yaml`. Desktop appearance is configured in
+wake name and end-of-speech pause in ignored `config/user.yaml`. Desktop appearance is configured in
 `config/theme.yml`, and assistant tone/cue vocabulary in
 `config/personality.yml`.
 
@@ -34,34 +34,45 @@ app:
   telemetry: false             # off by default; never on without explicit opt-in
 
 llm:
-  adapter: litellm             # litellm | mock | <custom>
-  model: openrouter/anthropic/claude-3.5-sonnet
-  temperature: 0.7
-  max_tokens: null
-  api_base: null               # for self-hosted/OpenAI-compatible endpoints
-  api_key_env: OPENROUTER_API_KEY
-  request_timeout_s: 60
-  retry:
-    attempts: 2
-    backoff_s: 1.5
-  fallback:
-    adapter: litellm
-    model: ollama/llama3.1
+  active_backend: openrouter
+  history_turns: 4             # completed user/assistant pairs; 0–10
+  backends:
+    openrouter:
+      adapter: litellm
+      model: openrouter/openai/gpt-4o-mini
+      api_key_env: OPENROUTER_API_KEY
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      request_timeout_s: 180
 
 voice:
   stt:
-    adapter: realtimestt        # realtimestt | mock | <custom>
+    adapter: isolated-faster-whisper  # supported default | mock | legacy realtimestt
     language: en
+    model: medium.en            # CPU default; distil-large-v3 for NVIDIA
+    realtime_model_type: medium.en  # legacy adapter compatibility only
+    use_main_model_for_realtime: true
+    device: auto                # auto | cpu | cuda
+    compute_type: auto          # auto -> CPU int8 / CUDA float16
+    beam_size: 5
+    speech_threshold: 0.015     # live energy-VAD threshold
     vad: silero                 # silero | webrtc | none
     sample_rate: 16000
+    post_speech_silence_duration: 1.0  # 0.2–3.0 s; raise if pauses cut speech
     wake:
       enabled: true
       names: ["Mimi", "Hey Mimi"]
+      aliases: ["Me me"]
       sensitivity: 0.6
   tts:
-    adapter: realtimetts        # realtimetts | mock | <custom>
-    engine: coqui               # coqui | piper | azure | openai | ...
-    voice: en_female_1
+    adapter: isolated-piper     # supported default | mock | legacy realtimetts
+    engine: piper
+    voice: en_US-lessac-medium
+    data_dir: ~/.openmimicry/voices
     rate: 1.0
     interruptible: true
   modes:
@@ -70,6 +81,7 @@ voice:
     continuous_listening: false  # advanced: submit every final utterance
     live_wake: false             # toolbar: require configured name prefix
     agent_voice: true
+    barge_in_enabled: false      # safe default for laptop speakers
     barge_in_grace_ms: 600
 
 avatar:
@@ -169,6 +181,9 @@ Some changes are safe to apply without restarting:
 | `app.log_level` | yes |
 | `llm.temperature`, `max_tokens`, `model` (same adapter) | yes |
 | `voice.modes.*` toggles | yes |
+| `voice.stt.post_speech_silence_duration` | yes (dashboard restarts active listener) |
+| `voice.stt.model` | yes (dashboard warms and swaps the model) |
+| `llm.active_backend` | yes (next accepted turn) |
 | `avatar.pack`, `avatar.transition_ms` | yes |
 | `avatar.runtime` swap | yes (handled by `AvatarOrchestrator.swap_runtime`) |
 | `avatar.runtimes.<modality>.*` | yes |
@@ -196,8 +211,9 @@ merged on top of `config/app.yaml`; choosing one is, for example,
 `OPENMIMICRY_PROFILE=openrouter-voice make backend`.
 
 - `basic.yaml` — Sprite2D with mock LLM, voice, and tasks; no key/network/audio.
-- `openrouter-voice.yaml` — OpenRouter through LiteLLM, local RealtimeSTT, and
-  operating-system TTS.
+- `openrouter-voice.yaml` — OpenRouter through LiteLLM, isolated local
+  Faster-Whisper/Piper voice, plus a dashboard-selectable Ollama `gpt-oss:20b`
+  backend. It keeps the last four successful interactions as LLM context.
 - `vision.yaml` — mocks plus the opt-in MediaPipe vision demonstration.
 
 The install profile and `OPENMIMICRY_PROFILE` must use the same name when

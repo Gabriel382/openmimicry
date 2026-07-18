@@ -14,11 +14,13 @@ export function ControlsRoute(): JSX.Element {
     openBackendDashboard,
     overlayInfo,
     quitApp,
+    setOverlayInteractive,
     setPositionLocked,
   } = useTauriCommand();
   const voice = useVoiceMode();
   const controls = appearance.behaviour.controls;
   const [locked, setLocked] = useState(false);
+  const [overlayInteractive, setOverlayInteractiveState] = useState(false);
   const pointerPtt = useRef(false);
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export function ControlsRoute(): JSX.Element {
 
   useEffect(() => {
     void overlayInfo().then((info) => {
-      if (info) setLocked(info.position_locked);
+      if (info) {
+        setLocked(info.position_locked);
+        setOverlayInteractiveState(info.interactive);
+      }
     });
   }, [overlayInfo]);
 
@@ -70,10 +75,25 @@ export function ControlsRoute(): JSX.Element {
     void setPositionLocked(next);
   };
 
+  const toggleReplyInteraction = (): void => {
+    const next = !overlayInteractive;
+    setOverlayInteractiveState(next);
+    void setOverlayInteractive(next);
+  };
+
   const primaryWakeName =
     voice.wakeNames.find((name) => !name.toLocaleLowerCase().startsWith("hey ")) ??
     voice.wakeNames[0] ??
     "Mimi";
+
+  const pttLabel =
+    voice.pttStage === "listening"
+      ? "Listening… release to transcribe"
+      : voice.pttStage === "transcribing"
+        ? "Transcribing…"
+        : voice.lastTranscript
+          ? `Last heard: ${voice.lastTranscript}`
+          : "Hold to talk";
 
   const style: CustomStyle = {
     "--om-font-family": appearance.theme.font_family,
@@ -111,10 +131,25 @@ export function ControlsRoute(): JSX.Element {
         </button>
         <button
           type="button"
+          className="avatar-toolbar__button"
+          aria-label={overlayInteractive ? "Disable reply scrolling" : "Enable reply scrolling"}
+          aria-pressed={overlayInteractive}
+          title={
+            overlayInteractive
+              ? "Return the avatar to click-through mode"
+              : "Interact with and scroll the reply (or press Ctrl+Shift+M)"
+          }
+          onClick={toggleReplyInteraction}
+        >
+          <ToolbarIcon name="scroll" />
+        </button>
+        <button
+          type="button"
           className="avatar-toolbar__button avatar-toolbar__ptt"
-          aria-label="Hold to talk"
+          data-stage={voice.pttStage}
+          aria-label={voice.pttStage === "idle" ? "Hold to talk" : pttLabel}
           aria-pressed={voice.pttActive}
-          title="Hold to talk (or hold Ctrl+Space)"
+          title={`${pttLabel} (or hold Ctrl+Space)`}
           onPointerDown={beginPtt}
           onPointerUp={endPtt}
           onPointerCancel={endPtt}

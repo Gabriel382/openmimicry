@@ -37,6 +37,11 @@ def test_dashboard_exposes_configurable_name_gated_wake_listening() -> None:
     assert "Wake listen" in text
     assert 'id="wake-name"' in text
     assert "begins with the configured name" in text
+    assert 'id="conversation-history"' in text
+    assert 'id="voice-result"' in text
+    assert 'id="speech-pause"' in text
+    assert "End-of-speech pause" in text
+    assert 'href="/diagnostics/bundle"' in text
 
 
 async def test_late_dashboard_receives_the_latest_task_card() -> None:
@@ -67,3 +72,33 @@ async def test_late_dashboard_receives_the_latest_task_card() -> None:
 
     assert len(socket.messages) == 1
     assert socket.messages[0]["update"]["status"] == "succeeded"
+
+
+async def test_late_dashboard_receives_deduplicated_conversation_history() -> None:
+    bridge = BroadcastBridge()
+    turn = {
+        "type": "conversation.turn",
+        "id": "speech_final:2026-01-01T00:00:00+00:00",
+        "role": "user",
+        "source": "voice",
+        "text": "What time is it?",
+        "ts": "2026-01-01T00:00:00+00:00",
+    }
+    await bridge.remember(turn)
+    await bridge.remember(turn)
+
+    socket = _Socket()
+    await bridge.add_socket(socket)  # type: ignore[arg-type]
+
+    assert socket.messages == [turn]
+
+
+async def test_new_turn_reset_does_not_replay_an_incomplete_bubble() -> None:
+    bridge = BroadcastBridge()
+    await bridge.remember({"type": "bubble.text", "text": "old complete", "complete": True})
+    await bridge.remember({"type": "bubble.text", "text": "", "complete": False, "reset": True})
+
+    socket = _Socket()
+    await bridge.add_socket(socket)  # type: ignore[arg-type]
+
+    assert socket.messages == []

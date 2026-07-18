@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
@@ -66,10 +66,6 @@ router = APIRouter()
 async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
     wiring = request.app.state.wiring
     bus: EventBus = wiring.bus
-    llm: LLMAdapter = wiring.llm
-    tasks: TaskRuntimeAdapter = wiring.tasks
-    speech: SpeechController = wiring.speech
-    intent_fn: Callable[[str], TaskRequest | None] = wiring.intent
 
     # The WS also publishes UserTextSubmitted on inbound user.text. Here
     # we publish it for callers that hit /chat directly (e.g. curl). The
@@ -79,14 +75,7 @@ async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
 
     # Background pipeline; the HTTP response returns immediately.
     chat_task = asyncio.create_task(
-        run_chat_turn(
-            req.text,
-            bus=bus,
-            llm=llm,
-            tasks=tasks,
-            speech=speech,
-            intent_fn=intent_fn,
-        ),
+        request.app.state.handle_user_text(req.text),
         name="openmimicry.backend.chat_turn",
     )
     _BACKGROUND_TASKS.add(chat_task)
@@ -102,7 +91,8 @@ async def run_chat_turn(
     tasks: TaskRuntimeAdapter,
     speech: SpeechController | None = None,
     intent_fn: Callable[[str], TaskRequest | None] | None = None,
-) -> None:
+    history: Sequence[LLMMessage] = (),
+) -> str | None:
     """The actual chat/task pipeline. Exposed for direct use in tests.
 
     ``intent_fn`` defaults to lazy-importing ``openmimicry.tasks.detect_task_intent``
@@ -114,8 +104,8 @@ async def run_chat_turn(
     intent = classifier(text)
     if intent is not None:
         await _run_task_path(intent, bus=bus, tasks=tasks)
-        return
-    await _run_llm_path(text, bus=bus, llm=llm, speech=speech)
+        return None
+    return await _run_llm_path(text, bus=bus, llm=llm, speech=speech, history=history)
 
 
 def _lazy_intent_classifier() -> Callable[[str], TaskRequest | None]:
@@ -200,13 +190,15 @@ async def _run_llm_path(
     bus: EventBus,
     llm: LLMAdapter,
     speech: SpeechController | None,
-) -> None:
+    history: Sequence[LLMMessage] = (),
+) -> str | None:
     bus.publish(LLMStarted(ts=_now()))
     thinking_started = asyncio.get_running_loop().time()
 
     settings = load_personality()
     messages = [
         LLMMessage(role="system", content=settings.system_prompt),
+        *history,
         LLMMessage(role="user", content=text),
     ]
     raw_parts: list[str] = []
@@ -226,20 +218,17 @@ async def _run_llm_path(
     thinking_elapsed = asyncio.get_running_loop().time() - thinking_started
     if reply.text and thinking_elapsed < _MIN_THINKING_SECONDS:
         await asyncio.sleep(_MIN_THINKING_SECONDS - thinking_elapsed)
-    for delta in _display_chunks(reply.text):
-        bus.publish(LLMTokenStreamed(ts=_now(), delta=delta))
-        await asyncio.sleep(0)
+    # The LLM response is already fully collected so its emotion/action JSON
+    # can be parsed. Publish one display update instead of artificial chunks:
+    # this clears the prior turn and prevents append-only UI artefacts.
+    if reply.text:
+        bus.publish(LLMTokenStreamed(ts=_now(), delta=reply.text))
 
-    if speech is not None and reply.text:
-        await speech.say(reply.text)
-        task = getattr(speech, "_current_tts_task", None)
-        if task is not None:
-            import contextlib
-
-            with contextlib.suppress(Exception):
-                await task
-
+    # Text/LLM delivery is the primary contract.  Audio is deliberately not a
+    # gate: a missing speaker, failed voice model, or killed playback process
+    # cannot hide the reply or block the next turn.
     bus.publish(LLMReplyComplete(ts=_now(), full_text=reply.text))
+
     bus.publish(
         AvatarCue(
             ts=_now(),
@@ -249,11 +238,9 @@ async def _run_llm_path(
             duration_ms=reply.duration_ms,
         )
     )
-
-
-def _display_chunks(text: str, size: int = 48) -> list[str]:
-    """Small UI chunks keep the existing bubble protocol deterministic."""
-
-    if not text:
-        return []
-    return [text[index : index + size] for index in range(0, len(text), size)]
+    if speech is not None and reply.text:
+        try:
+            await speech.say(reply.text)
+        except Exception as exc:
+            _log.warning("could not queue reply audio: %s", exc, exc_info=True)
+    return reply.text or None

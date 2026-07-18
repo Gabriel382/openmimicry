@@ -5,8 +5,9 @@ STT/TTS adapters and the `SpeechController` for OpenMimicry.
 Ships:
 
 - `MockSTTAdapter` / `MockTTSAdapter` — programmable, deterministic mocks.
-- `RealtimeSTTAdapter` — wraps `RealtimeSTT.AudioToTextRecorder` (lazy-imported).
-- `RealtimeTTSAdapter` — wraps `RealtimeTTS.TextToAudioStream` (lazy-imported).
+- `IsolatedFasterWhisperAdapter` — supervises a preloaded microphone/model child service.
+- `IsolatedPiperTTSAdapter` — runs every synthesis/playback in a disposable process.
+- `RealtimeSTTAdapter` / `RealtimeTTSAdapter` — compatibility adapters, not the supported Windows default.
 - `SpeechController` — owns the single active TTS task, the barge-in policy, and the PTT / continuous-listening / wake-name state machine.
 - `WakeController` — thin enable/disable wrapper for callers that don't want the full SpeechController.
 
@@ -20,13 +21,11 @@ Ships:
 python -m pip install -e "packages/openmimicry-voice[voice]"
 ```
 
-The Windows profile installs `RealtimeSTT[faster-whisper]` and
-`RealtimeTTS[system]` into the repository's `.venv`. The launcher checks the
-concrete recorder, stream, and system-engine imports before it starts, so a
-different global Python installation—or an engine-less base distribution—
-cannot accidentally look healthy. Python 3.13+ installs `audioop-lts`
-automatically because the standard-library `audioop` module was removed in
-that Python release while RealtimeTTS/pydub still imports its API.
+The Windows profile installs Faster-Whisper, Piper, NumPy, and SoundDevice into
+the repository `.venv`. The launcher downloads the free
+`en_US-lessac-medium` voice and runs `scripts/voice_doctor.py` before enabling
+voice. Legacy realtime dependencies are available separately with
+`openmimicry-voice[legacy-realtime]`.
 
 ## Usage
 
@@ -42,7 +41,7 @@ async def main():
     ctl = SpeechController(stt=stt, tts=tts, bus=bus)
     await ctl.start()
 
-    # Synthesise speech (barge-in enabled).
+    # Queue speech. TTSStarted is published only after playback starts.
     await ctl.say("Hello world.")
     # ... TTSStarted, TTSFinished published on the bus ...
 
@@ -67,7 +66,8 @@ asyncio.run(main())
 
 1. `SpeechController` is the **only** code that calls `tts.stop()`.
 2. At most one TTS task is alive at any moment. `say()` cancels the previous before starting the next.
-3. Barge-in waits `voice.modes.barge_in_grace_ms` before cancelling TTS, then re-checks `stt.vad_active`.
+3. Text delivery never waits for TTS readiness.
+4. Barge-in waits `voice.modes.barge_in_grace_ms` before cancelling TTS, then re-checks `stt.vad_active`.
 
 ## See also
 

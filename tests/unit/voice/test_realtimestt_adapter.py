@@ -47,6 +47,10 @@ class _FakeRecorder:
     def stop(self) -> None:
         self._stopped = True
 
+    def abort(self) -> None:
+        # Pausing a listening session must not destroy the warm recorder.
+        pass
+
     def shutdown(self) -> None:
         self._stopped = True
 
@@ -57,6 +61,7 @@ def _install_fake_realtimestt(monkeypatch: pytest.MonkeyPatch, recorder: _FakeRe
     captured: dict = {}
 
     def factory(**kwargs):
+        captured["calls"] = captured.get("calls", 0) + 1
         captured["kwargs"] = kwargs
         # Re-bind the recorder's callbacks to those provided in this call.
         recorder.__init__(**kwargs)  # type: ignore[misc]
@@ -92,8 +97,7 @@ async def test_partial_transcript_callback_streams(monkeypatch: pytest.MonkeyPat
     async def consume():
         async for t in adapter.transcripts:
             received.append((t.text, t.is_final))
-            if len(received) == 2:
-                return
+            return
 
     task = asyncio.create_task(consume())
     await asyncio.sleep(0)
@@ -102,8 +106,14 @@ async def test_partial_transcript_callback_streams(monkeypatch: pytest.MonkeyPat
     recorder._on_partial("partial-b")
     await asyncio.wait_for(task, timeout=0.5)
 
+    # Realtime previews are deliberately coalesced: the UI needs the newest
+    # hypothesis, not an ever-growing backlog that delays the final result.
+    recorder._on_partial("partial-c")
+    next_preview = await asyncio.wait_for(anext(adapter.transcripts), timeout=0.5)
+
     await adapter.stop()
-    assert received == [("partial-a", False), ("partial-b", False)]
+    assert received == [("partial-b", False)]
+    assert (next_preview.text, next_preview.is_final) == ("partial-c", False)
 
 
 async def test_vad_active_tracks_recording_callbacks(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -141,4 +151,88 @@ async def test_portable_default_uses_cpu_int8(monkeypatch: pytest.MonkeyPatch) -
 
     assert captured["kwargs"]["device"] == "cpu"
     assert captured["kwargs"]["compute_type"] == "int8"
+    assert captured["kwargs"]["model"] == "small.en"
+    assert captured["kwargs"]["use_main_model_for_realtime"] is True
+    assert captured["kwargs"]["post_speech_silence_duration"] == 1.0
     await adapter.stop()
+
+
+async def test_passes_configured_end_of_speech_pause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _FakeRecorder()
+    captured = _install_fake_realtimestt(monkeypatch, recorder)
+
+    adapter = RealtimeSTTAdapter()
+    await adapter.start(STTConfig(post_speech_silence_duration=1.6))
+
+    assert captured["kwargs"]["post_speech_silence_duration"] == 1.6
+    await adapter.stop()
+
+
+async def test_pause_and_restart_reuses_recorder_for_a_second_final(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _FakeRecorder()
+    captured = _install_fake_realtimestt(monkeypatch, recorder)
+    adapter = RealtimeSTTAdapter()
+    config = STTConfig(mode="dictation", prompt_terms=["Mimi", "Me me"])
+
+    await adapter.start(config)
+    recorder.queue_final("first turn")
+    first = await asyncio.wait_for(anext(adapter.transcripts), timeout=0.5)
+    await adapter.stop()
+
+    await adapter.start(config)
+    recorder.queue_final("second turn")
+    second = await asyncio.wait_for(anext(adapter.transcripts), timeout=0.5)
+
+    assert first.text == "first turn"
+    assert second.text == "second turn"
+    assert captured["calls"] == 1
+    await adapter.close()
+
+
+async def test_final_is_not_starved_by_realtime_preview_flood(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _FakeRecorder()
+    _install_fake_realtimestt(monkeypatch, recorder)
+    adapter = RealtimeSTTAdapter()
+    await adapter.start(STTConfig(mode="wake"))
+
+    for index in range(500):
+        recorder._on_partial(f"preview {index}")
+    assert adapter._queue.qsize() == 1
+
+    recorder.queue_final("Mimi, send this now")
+
+    async def _next_final():
+        previews = 0
+        async for item in adapter.transcripts:
+            if item.is_final:
+                return item, previews
+            previews += 1
+        raise AssertionError("transcript stream ended before its final")
+
+    transcript, previews = await asyncio.wait_for(_next_final(), timeout=0.5)
+
+    assert transcript.is_final is True
+    assert transcript.text == "Mimi, send this now"
+    assert previews <= 1
+    await adapter.close()
+
+
+async def test_wake_metadata_does_not_rebuild_the_same_warm_recorder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _FakeRecorder()
+    captured = _install_fake_realtimestt(monkeypatch, recorder)
+    adapter = RealtimeSTTAdapter()
+
+    await adapter.start(STTConfig(mode="wake", wake_names=["Mimi"], prompt_terms=["Mimi", "Me me"]))
+    await adapter.stop()
+    await adapter.start(STTConfig(mode="dictation", wake_names=[], prompt_terms=["Mimi", "Me me"]))
+
+    assert captured["calls"] == 1
+    await adapter.close()

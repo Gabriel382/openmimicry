@@ -9,11 +9,11 @@ This document explains how we achieve that without the most common trap: per-pix
 ```text
 overlay window  - frameless, transparent background, always-on-top,
                   decorations: none, resizable: false
-                  permanently click-through
+                  click-through by default; temporarily interactive for scroll
                   renders the avatar and speech bubble only
 
 controls window - frameless, always-on-top toolbar docked above the avatar
-                  drag, lock, PTT, wake listen, voice, settings, exit
+                  drag, lock, reply interaction, PTT, wake, voice, settings, exit
                   moving it moves the avatar window and persists position
 
 composer window - frameless, always-on-top message input below the avatar
@@ -21,8 +21,10 @@ composer window - frameless, always-on-top message input below the avatar
 ```
 
 This split works with Tauri's whole-window click-through behavior: the PNG can
-never steal clicks while the separate control surfaces remain draggable and
-can accept keyboard focus. The three implementation windows are visually docked and
+does not steal clicks in its normal mode while the separate control surfaces
+remain draggable and can accept keyboard focus. The reply-interaction toolbar
+button temporarily enables the avatar window so long bubbles can be scrolled.
+The three implementation windows are visually docked and
 behave as one unit. There is no native settings panel; the gear button opens
 `http://127.0.0.1:8000/dashboard` in the default browser.
 
@@ -33,7 +35,8 @@ We do **not** read alpha values per pixel. Tauri's
 standard layout keeps the avatar overlay passive and delegates interaction to
 the two control surfaces:
 
-- **avatar window:** `ignoreCursorEvents(true)`; all clicks fall through.
+- **avatar window:** `ignoreCursorEvents(true)` normally; the toolbar scroll
+  control or `Ctrl+Shift+M` temporarily switches it to `false`.
 - **controls window:** normal cursor events; its drag handle moves the companion
   and its buttons remain clickable.
 - **composer window:** normal cursor and keyboard events; owns text input only.
@@ -49,8 +52,8 @@ fn set_overlay_interactive(window: tauri::Window, interactive: bool) {
 }
 ```
 
-The legacy interaction toggle remains available for debugging, but normal users
-move the companion through the dedicated strip.
+The interaction toggle is for reading/scrolling the reply. Movement remains on
+the dedicated drag control so enabling interaction cannot move the companion.
 
 ## 2.1 Appearance configuration
 

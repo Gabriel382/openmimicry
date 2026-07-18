@@ -7,6 +7,8 @@ export interface VoiceModeState {
   wakeNames: string[];
   agentVoice: boolean;
   pttActive: boolean;
+  pttStage: "idle" | "listening" | "transcribing" | "recognized" | "no_speech" | "error";
+  lastTranscript: string;
   sttAdapter: string;
   ttsAdapter: string;
   realInput: boolean;
@@ -24,6 +26,8 @@ export function useVoiceMode(): VoiceModeState {
   const [wakeNames, setWakeNames] = useState<string[]>(["Mimi", "Hey Mimi"]);
   const [agentVoice, setAgentVoice] = useState(true);
   const [pttActive, setPttActive] = useState(false);
+  const [pttStage, setPttStage] = useState<VoiceModeState["pttStage"]>("idle");
+  const [lastTranscript, setLastTranscript] = useState("");
   const [sttAdapter, setSttAdapter] = useState("unknown");
   const [ttsAdapter, setTtsAdapter] = useState("unknown");
   const [realInput, setRealInput] = useState(false);
@@ -45,6 +49,9 @@ export function useVoiceMode(): VoiceModeState {
         if (typeof message.voice.ptt_active === "boolean") {
           setPttActive(message.voice.ptt_active);
         }
+        if (typeof message.voice.ptt_stage === "string") {
+          setPttStage(message.voice.ptt_stage as VoiceModeState["pttStage"]);
+        }
         if (typeof message.voice.stt_adapter === "string") {
           setSttAdapter(message.voice.stt_adapter);
         }
@@ -61,7 +68,15 @@ export function useVoiceMode(): VoiceModeState {
       if (message.level === "error" && message.where?.startsWith("voice.")) {
         setError(message.message);
         setPttActive(false);
+        setPttStage("error");
         if (message.where === "voice.mode") setWakeListening(false);
+        return;
+      }
+      if (message.message === "speech_result" && message.voice_result) {
+        const text = message.voice_result.text.trim();
+        setLastTranscript(text);
+        setPttActive(false);
+        setPttStage(text ? "recognized" : "no_speech");
         return;
       }
       if (message.message !== "config_updated") return;
@@ -74,6 +89,9 @@ export function useVoiceMode(): VoiceModeState {
       }
       if (typeof diff.agent_voice === "boolean") setAgentVoice(diff.agent_voice);
       if (typeof diff.ptt_active === "boolean") setPttActive(diff.ptt_active);
+      if (typeof diff.ptt_stage === "string") {
+        setPttStage(diff.ptt_stage as VoiceModeState["pttStage"]);
+      }
     });
   }, [subscribe]);
 
@@ -94,11 +112,14 @@ export function useVoiceMode(): VoiceModeState {
   const pttDown = useCallback((): void => {
     setError(null);
     setPttActive(true);
+    setPttStage("listening");
+    setLastTranscript("");
     send({ type: "ptt.down" });
   }, [send]);
 
   const pttUp = useCallback((): void => {
-    setPttActive(false);
+    setPttActive(true);
+    setPttStage("transcribing");
     send({ type: "ptt.up" });
   }, [send]);
 
@@ -107,6 +128,8 @@ export function useVoiceMode(): VoiceModeState {
     wakeNames,
     agentVoice,
     pttActive,
+    pttStage,
+    lastTranscript,
     sttAdapter,
     ttsAdapter,
     realInput,

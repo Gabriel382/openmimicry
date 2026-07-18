@@ -1,11 +1,13 @@
-"""Import the optional Windows voice engines without PowerShell quoting.
+"""Import the v1.5 isolated voice dependencies without PowerShell quoting.
 
-This script intentionally does not instantiate either engine.  The Windows
+This script intentionally does not instantiate either engine. The Windows
 launcher executes it as a file so Windows PowerShell never has to serialize a
 multiline ``python -c`` argument containing quotes.
 """
 
-from RealtimeSTT import AudioToTextRecorder  # noqa: F401
-from RealtimeTTS import SystemEngine, TextToAudioStream  # noqa: F401
+import numpy  # noqa: F401
+import sounddevice  # noqa: F401
+from faster_whisper import WhisperModel  # noqa: F401
+from piper import PiperVoice  # noqa: F401
 
-print("RealtimeSTT/RealtimeTTS imports OK")
+print("Faster-Whisper/Piper isolated voice imports OK")

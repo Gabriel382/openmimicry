@@ -12,6 +12,7 @@ llm:
 voice:
   stt:
     adapter: mock
+    post_speech_silence_duration: 1.0
     wake:
       enabled: false
   tts:
@@ -21,6 +22,7 @@ voice:
     continuous_listening: false
     live_wake: false
     agent_voice: false
+    barge_in_enabled: false
 
 avatar:
   runtime: sprite2d

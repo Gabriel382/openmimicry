@@ -249,6 +249,15 @@ pub fn overlay_info<R: Runtime>(app: AppHandle<R>) -> Result<OverlayInfo, String
 /// Quit the application cleanly.
 #[tauri::command]
 pub fn quit_app<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    // Explicitly close WebView2 windows before terminating the runtime. This
+    // gives Chromium a chance to unregister its Windows classes instead of
+    // leaving that work to process teardown (which emits Win32 error 1412 on
+    // some Tauri/WebView2 combinations).
+    for label in ["avatar-composer", "overlay", "avatar-controls"] {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.close();
+        }
+    }
     app.exit(0);
     Ok(())
 }

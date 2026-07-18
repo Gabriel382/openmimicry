@@ -4,9 +4,9 @@
 architecture](../../docs/architecture/README.md).
 
 This package lives in the **sensor layer** of OpenMimicry. It contains
-the speech-to-text half of the voice runtime: a mock for testing, a
-RealtimeSTT-backed adapter for production, and the `WakeController`
-that turns live-wake mode on and off.
+the speech-to-text half of the voice runtime: a mock for testing, the
+crash-contained Faster-Whisper service used by v1.5, a legacy RealtimeSTT
+adapter, and the `WakeController` that turns live-wake mode on and off.
 
 ## Why this package exists
 
@@ -37,7 +37,10 @@ behaviour; it only renames it for the sensor-layer consumer.
 |--------|--------------|
 | `STTAdapter` | The Protocol every STT adapter must satisfy. Re-exported from `openmimicry.core.contracts.voice`. |
 | `MockSTTAdapter` | Zero-dependency mock. Canonical fixture for the other layers' tests. |
-| `RealtimeSTTAdapter` | RealtimeSTT-backed adapter. Heavy deps lazy-imported. |
+| `IsolatedFasterWhisperAdapter` | Supported runtime. Preloads Faster-Whisper in a supervised child service and records finite utterances. |
+| `IsolatedFasterWhisperSettings` | Worker lifecycle, device, compute, decoding, and VAD settings. |
+| `IsolatedSTTUnavailable` | Actionable startup/runtime failure for the isolated service. |
+| `RealtimeSTTAdapter` | Legacy RealtimeSTT compatibility adapter. Heavy deps lazy-imported. |
 | `RealtimeSTTSettings` | Pydantic settings for the RealtimeSTT adapter. |
 | `RealtimeSTTUnavailable` | Raised when RealtimeSTT isn't installed. Used to fall back to mocks. |
 | `WakeController` | Enable/disable wrapper for the live-wake flow. |
@@ -49,7 +52,10 @@ behaviour; it only renames it for the sensor-layer consumer.
 # Mocks only (recommended for CI, dev workstations without a mic)
 pip install openmimicry-stt
 
-# With RealtimeSTT runtime (microphone-bound)
+# Supported isolated runtime
+pip install "openmimicry-stt[voice]"
+
+# Legacy compatibility runtime
 pip install "openmimicry-stt[realtimestt]"
 ```
 

@@ -25,12 +25,17 @@ from openmimicry.core import AppConfig, TaskHandle, UserSpeechFinal
 from openmimicry.core.config import load as load_config
 
 from .appearance import load_appearance
+from .character_import import CharacterRegistry
+from .conversation import ConversationCoordinator
+from .diagnostics import install_diagnostics
 from .routes import (
     admin_router,
     appearance_router,
     chat_router,
     dashboard_router,
+    diagnostics_router,
     health_router,
+    llm_router,
     mode_router,
     pack_router,
 )
@@ -62,26 +67,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the runtime, start the orchestrator + speech, tear it all down."""
     config, config_path = _load_app_config()
     appearance = load_appearance()
+    character_registry = CharacterRegistry(config.avatar.pack_roots)
 
     bridge = BroadcastBridge()
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
+    diagnostics = install_diagnostics(config.app.data_dir)
 
     mode_state = {
         "continuous_listening": config.voice.modes.continuous_listening,
         "live_wake": config.voice.modes.live_wake,
         "agent_voice": config.voice.modes.agent_voice,
         "wake_names": list(wiring.speech.wake_names),
+        "wake_aliases": list(getattr(wiring.speech, "wake_aliases", [])),
+        "stt_model": getattr(wiring.speech, "stt_model", config.voice.stt.model),
+        "post_speech_silence_duration": wiring.speech.post_speech_silence_duration,
     }
 
-    async def _handle_user_text(text: str) -> None:
-        await run_chat_turn(
+    async def _run_ordered_turn(text: str, history) -> str | None:
+        return await run_chat_turn(
             text,
             bus=wiring.bus,
             llm=wiring.llm,
             tasks=wiring.tasks,
             speech=wiring.speech if mode_state["agent_voice"] else None,
             intent_fn=wiring.intent,
+            history=history,
         )
+
+    conversation = ConversationCoordinator(
+        run_turn=_run_ordered_turn,
+        history_turns=config.llm.history_turns,
+    )
+
+    async def _handle_user_text(text: str) -> None:
+        conversation.submit_background(text)
 
     async def _apply_mode_toggle(key: str, value: bool) -> None:
         if key == "continuous_listening":
@@ -109,17 +128,47 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         real_output = not tts_name.startswith("mock")
         if stt_name == "realtimestt":
             real_input = _module_available("RealtimeSTT")
+        elif stt_name == "isolated-faster-whisper":
+            real_input = all(
+                _module_available(module) for module in ("faster_whisper", "sounddevice", "numpy")
+            )
+            real_input = real_input and bool(getattr(wiring.speech, "stt_ready", False))
         if tts_name == "realtimetts":
             real_output = _module_available("RealtimeTTS")
+        elif tts_name == "isolated-piper":
+            tts_model = (
+                Path(config.voice.tts.data_dir).expanduser() / f"{config.voice.tts.voice}.onnx"
+            )
+            real_output = (
+                _module_available("piper")
+                and tts_model.is_file()
+                and Path(f"{tts_model}.json").is_file()
+            )
+            real_output = real_output and bool(getattr(wiring.speech, "tts_ready", False))
         return {
             **mode_state,
             "listening_mode": getattr(wiring.speech, "listening_mode", "off"),
             "ptt_active": getattr(wiring.speech, "ptt_active", False),
             "wake_names": list(getattr(wiring.speech, "wake_names", ["Mimi"])),
+            "wake_aliases": list(getattr(wiring.speech, "wake_aliases", [])),
+            "stt_model": str(getattr(wiring.speech, "stt_model", "medium.en")),
+            "stt_runtime": dict(getattr(wiring.stt, "runtime_info", {})),
+            "post_speech_silence_duration": float(
+                getattr(wiring.speech, "post_speech_silence_duration", 1.0)
+            ),
             "stt_adapter": stt_name,
             "tts_adapter": tts_name,
             "real_input": real_input,
             "real_output": real_output,
+            "llm_backend": getattr(wiring.llm, "active_backend", None),
+            "llm_model": getattr(
+                wiring.llm,
+                "active_model",
+                getattr(getattr(wiring.llm, "_settings", None), "model", "unknown"),
+            ),
+            "history_turns": conversation.memory.max_turns,
+            "diagnostics_session": diagnostics.session_id,
+            "diagnostics_log": str(diagnostics.log_path),
             "input_install_hint": (
                 None
                 if real_input or stt_name.startswith("mock")
@@ -143,6 +192,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.appearance = appearance
     app.state.get_mode_status = _mode_status
     app.state.cancel_task = _cancel_task
+    app.state.conversation = conversation
+    app.state.character_registry = character_registry
+    app.state.diagnostics = diagnostics
 
     speech_subscription = wiring.bus.subscribe()
 
@@ -151,7 +203,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if not isinstance(event, UserSpeechFinal):
                 continue
             spoken = event.text.strip()
-            if not spoken or event.reason == "interrupted":
+            if not event.accepted or not spoken or event.reason == "interrupted":
                 continue
             await _handle_user_text(spoken)
 
@@ -174,10 +226,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         speech_turn_task.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await speech_turn_task
+        await conversation.close()
         try:
             await asyncio.wait_for(_graceful_shutdown(wiring), timeout=2.0)
         except TimeoutError:
             _log.warning("backend lifespan: graceful shutdown exceeded 2s budget")
+        finally:
+            diagnostics.close()
 
 
 async def _graceful_shutdown(wiring: Wiring) -> None:
@@ -192,14 +247,16 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.3.0",
+        version="1.5.1",
         lifespan=lifespan,
     )
 
     app.include_router(health_router)
     app.include_router(chat_router)
     app.include_router(dashboard_router)
+    app.include_router(diagnostics_router)
     app.include_router(mode_router)
+    app.include_router(llm_router)
     app.include_router(pack_router)
     app.include_router(admin_router)
     app.include_router(appearance_router)

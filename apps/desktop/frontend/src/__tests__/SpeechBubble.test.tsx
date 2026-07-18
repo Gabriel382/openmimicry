@@ -47,6 +47,38 @@ describe("<SpeechBubble />", () => {
     );
   });
 
+  it("clears an incomplete prior reply when a new LLM turn starts", async () => {
+    const { factory, sockets } = mockSocketFactory();
+    const { container } = render(
+      <WSProvider url="ws://test/ws" socketFactory={factory}>
+        <SpeechBubble />
+      </WSProvider>,
+    );
+    await waitFor(() => expect(sockets.length).toBe(1));
+    const ws = sockets[0]!;
+
+    act(() =>
+      ws._dispatchMessage({ type: "bubble.text", text: "old unfinished", complete: false }),
+    );
+    await waitFor(() => expect(container.textContent).toContain("old unfinished"));
+
+    act(() =>
+      ws._dispatchMessage({
+        type: "bubble.text",
+        text: "",
+        complete: false,
+        reset: true,
+      }),
+    );
+    expect(container.querySelector(".speech-bubble")).toBeNull();
+
+    act(() =>
+      ws._dispatchMessage({ type: "bubble.text", text: "new reply", complete: false }),
+    );
+    await waitFor(() => expect(container.textContent).toContain("new reply"));
+    expect(container.textContent).not.toContain("old unfinished");
+  });
+
   it("does not erase a completed reply merely because listening starts", async () => {
     const { factory, sockets } = mockSocketFactory();
     const { container } = render(

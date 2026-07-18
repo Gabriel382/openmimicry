@@ -79,7 +79,7 @@ const WSContext = createContext<WSContextValue>(DEFAULT_CONTEXT);
 export type SocketFactory = (url: string) => WebSocketLike;
 
 export interface WSProviderProps extends PropsWithChildren {
-  /** WS URL. Defaults to `${origin.replace(/^http/, "ws")}/ws`. */
+  /** WS URL. Defaults to the local backend for Tauri/Vite desktop builds. */
   url?: string;
   /** Pluggable socket factory (tests inject `mockSocketFactory().factory`). */
   socketFactory?: SocketFactory;
@@ -91,6 +91,15 @@ export interface WSProviderProps extends PropsWithChildren {
 
 function defaultUrl(): string {
   if (typeof window === "undefined") return "ws://localhost:8000/ws";
+  const configured = import.meta.env["VITE_OPENMIMICRY_WS_URL"];
+  if (configured) return configured;
+  if (
+    "__TAURI_INTERNALS__" in window ||
+    "__TAURI_IPC__" in window ||
+    window.location.port === "5173"
+  ) {
+    return "ws://127.0.0.1:8000/ws";
+  }
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}/ws`;
 }
@@ -121,6 +130,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
   );
   const ctrlRef = useRef(createReconnectController(reconnectCfg));
   const stoppedRef = useRef(false);
+  const connectionGenerationRef = useRef(0);
   const forceReconnectRef = useRef<(() => void) | null>(null);
 
   // -----------------------------------------------------------------------
@@ -131,14 +141,19 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     if (stoppedRef.current) return;
     setStatus("connecting");
     const ws = socketFactory(url);
+    const generation = ++connectionGenerationRef.current;
     socketRef.current = ws;
+    const isCurrent = (): boolean =>
+      socketRef.current === ws && connectionGenerationRef.current === generation;
 
     const onOpen = (): void => {
+      if (!isCurrent()) return;
       ctrlRef.current.reset();
       setStatus("open");
     };
 
     const onMessage = (ev: Event): void => {
+      if (!isCurrent()) return;
       const data = (ev as unknown as { data?: string }).data;
       if (typeof data !== "string") return;
 
@@ -170,6 +185,10 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     };
 
     const onClose = (): void => {
+      // React StrictMode mounts, cleans up, then mounts again in development.
+      // A delayed close/message from that first socket must never clear or
+      // reconnect the active second socket.
+      if (!isCurrent()) return;
       setStatus("closed");
       socketRef.current = null;
       if (stoppedRef.current) return;
@@ -177,6 +196,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
     };
 
     const onError = (): void => {
+      if (!isCurrent()) return;
       // Errors land as `close` on most browsers; some send `error`
       // separately. We rely on `close` to drive reconnect.
     };
@@ -226,6 +246,7 @@ export function WSProvider(props: WSProviderProps): JSX.Element {
 
     return () => {
       stoppedRef.current = true;
+      connectionGenerationRef.current += 1;
 
       const ws = socketRef.current;
       socketRef.current = null;

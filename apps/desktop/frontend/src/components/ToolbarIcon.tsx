@@ -2,6 +2,7 @@ export type ToolbarIconName =
   | "drag"
   | "lock"
   | "unlock"
+  | "scroll"
   | "microphone"
   | "listen"
   | "voice"
@@ -16,6 +17,7 @@ const PATHS: Record<ToolbarIconName, JSX.Element> = {
   drag: <path d="M8 5h.01M12 5h.01M16 5h.01M8 12h.01M12 12h.01M16 12h.01M8 19h.01M12 19h.01M16 19h.01" />,
   lock: <><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   unlock: <><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 7.4-2" /></>,
+  scroll: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M8 9h8M8 13h8M8 17h5" /></>,
   microphone: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" /></>,
   listen: <><path d="M4 13a8 8 0 0 1 16 0" /><path d="M7 13a5 5 0 0 1 10 0M10 13a2 2 0 0 1 4 0M12 15v6" /></>,
   voice: <><path d="M5 9v6h4l5 4V5L9 9H5Z" /><path d="M17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12" /></>,

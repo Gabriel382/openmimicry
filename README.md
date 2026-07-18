@@ -16,7 +16,7 @@
 
 </div>
 
-OpenMimicry is a transparent desktop overlay that connects an animated character to an LLM, a voice stack, and external agentic task runtimes — all swappable, all behind one frozen `AvatarRuntimeAdapter` Protocol. Five avatar modalities ship (Sprite2D, Three.js/VRM, Live3D, Unity bridge, generic External), three task runtimes (Local shell with allowlist, Claude Code CLI, MCP agent), two voice backends (RealtimeSTT/TTS) with mocks for every layer, and an optional MediaPipe-driven vision pipeline that maps hand / body / head gestures to avatar reactions.
+OpenMimicry is a transparent desktop overlay that connects an animated character to an LLM, a voice stack, and external agentic task runtimes — all swappable, all behind one frozen `AvatarRuntimeAdapter` Protocol. Five avatar modalities ship (Sprite2D, Three.js/VRM, Live3D, Unity bridge, generic External), three task runtimes (Local shell with allowlist, Claude Code CLI, MCP agent), an isolated Faster-Whisper/Piper voice runtime with mocks and legacy adapters, and an optional MediaPipe-driven vision pipeline that maps hand / body / head gestures to avatar reactions.
 
 ---
 
@@ -32,7 +32,7 @@ The result is a portfolio-quality reference for the pattern: contracts as the sp
 
 - **5 avatar modalities, 1 Protocol.** Sprite2D · Three.js (VRM/glTF) · Live3D (mouth / idle / gaze drivers over Three.js) · Unity bridge · External (renderer-agnostic WS).
 - **3 LLM backends, 1 LLMAdapter.** Mock · LiteLLM (any provider) · LLMRouter (primary + fallback).
-- **3 voice paths.** Mock · RealtimeSTT/TTS for real audio · SpeechController owns the single TTS task + barge-in.
+- **Fail-safe voice.** Mock · isolated Faster-Whisper/Piper · explicit legacy Realtime adapters. Audio runs outside the backend process and can never suppress a text reply.
 - **3 task runtimes + router.** Mock · LocalShell (allowlist-or-reject, audit log) · ClaudeCodeAdapter · MCPAgentAdapter, all behind a capability-based `TaskRouter`.
 - **Vision (optional, off by default).** MediaPipe Hands / Pose / Face → gesture + movement classifiers → `AvatarDirective` overrides. Consent-gated. Frames never leave the process.
 - **Transparent desktop companion.** Tauri 2 shell with a click-through avatar, top controls, bottom message composer, global hotkeys, mood-pixel tray icon, and a localhost browser dashboard.
@@ -54,7 +54,7 @@ The result is a portfolio-quality reference for the pattern: contracts as the sp
 
 | Tool | Version |
 |------|---------|
-| Python | 3.11 or 3.12 |
+| Python | 3.11–3.13 |
 | Node | 20 LTS or later |
 | pnpm | 11.x (`corepack enable` + `corepack prepare pnpm@11.0.0 --activate`) |
 | Rust | stable (only for the Tauri desktop shell — `cargo tauri dev` is optional) |
@@ -92,19 +92,32 @@ make desktop
 
 The desktop appears as one companion: a transparent avatar, a top-docked
 interactive toolbar, and a message composer underneath. The toolbar provides
-drag, position lock, hold-to-talk, wake-name listening, agent voice, browser
-settings, and exit. The three surfaces are separate internally only because
+drag, position lock, reply scrolling, hold-to-talk, wake-name listening, agent
+voice, browser settings, and exit. The three surfaces are separate internally only because
 click-through is a whole-window operating-system feature. No native settings
 panel opens.
 
 `Ctrl+Space` is hold-to-talk and does not require a name. `Ctrl+Shift+O` opens
 the local browser dashboard. Wake listen stays ready but accepts a command only
 when its transcript begins with the configured name, `Mimi` by default. Change
-the name in the dashboard; window geometry, colors, avatar scale, and reply
-reading time remain in `config/theme.yml`.
+the name, recognition aliases, STT quality, and end-of-speech pause in the
+dashboard. The stronger CPU default (`medium.en`) is prewarmed in an isolated
+worker at startup; `distil-large-v3` is available for compatible NVIDIA GPUs.
+Window geometry, colors, avatar scale, and reply reading time remain in
+`config/theme.yml`.
 
-For OpenRouter plus free local microphone STT and operating-system TTS on
-Windows, see [`docs/V1.3_WINDOWS_TESTING.md`](docs/V1.3_WINDOWS_TESTING.md).
+The dashboard also shows the exact active LLM model. The OpenRouter voice
+profile starts on `openrouter/openai/gpt-4o-mini`; its optional local backend is
+Ollama `gpt-oss:20b`. Accepted turns are processed in order and only the last
+four completed exchanges are used as conversational context.
+
+Import Sprite2D characters from **Avatar settings → Import character ZIP**.
+See [`docs/character_packs.md`](docs/character_packs.md#import-from-the-dashboard)
+for the required `pack.yaml` and sprite layout.
+
+For OpenRouter plus free local Faster-Whisper STT and Piper TTS on Windows, see
+[`docs/V1.5.1_WINDOWS_TESTING.md`](docs/V1.5.1_WINDOWS_TESTING.md). The launcher
+runs a multi-turn voice preflight before enabling the runtime.
 
 ### Docker (backend-only smoke)
 
@@ -127,7 +140,7 @@ make install PROFILE=full
 export OPENROUTER_API_KEY=...
 OPENMIMICRY_PROFILE=full make backend
 
-# real voice (RealtimeSTT + RealtimeTTS, optional GPU)
+# real voice (isolated Faster-Whisper + Piper, optional NVIDIA acceleration)
 make install PROFILE=voice
 OPENMIMICRY_PROFILE=voice make backend
 
@@ -176,7 +189,7 @@ Profile YAML lives in [`config/profiles/`](config/profiles).
 ┌──▼────┐ ┌──────▼─────┐ ┌──────▼──────┐ ┌────────▼─────┐ ┌────────▼────────┐ ┌────▼─────┐
 │ -llm  │ │   -voice   │ │  -avatar   │ │   -tasks     │ │ -vision (opt)   │ │  -core   │
 │Mock + │ │Mock +      │ │Director +  │ │TaskRouter +  │ │MediaPipe Hands /│ │Phase 0   │
-│LiteLLM│ │RealtimeSTT │ │5 modalities│ │LocalShell /  │ │Pose / Head +    │ │contracts │
+│LiteLLM│ │isolated STT│ │5 modalities│ │LocalShell /  │ │Pose / Head +    │ │contracts │
 │Router │ │/TTS +      │ │(M3–M12)    │ │ClaudeCode /  │ │gesture +        │ │schemas   │
 │       │ │SpeechCtl   │ │            │ │MCPAgent      │ │movement classf.│ │EventBus  │
 └───────┘ └────────────┘ └────────────┘ └──────────────┘ └─────────────────┘ └──────────┘
@@ -190,7 +203,8 @@ The single immutable interface is [`docs/contracts.md`](docs/contracts.md). Any 
 // server → frontend
 { "type": "avatar.directive", "directive": { ... } }
 { "type": "transcript.preview", "text": "...", "is_final": false }
-{ "type": "bubble.text", "text": "...", "complete": false }
+{ "type": "bubble.text", "text": "...", "complete": false, "reset": false }
+{ "type": "conversation.turn", "role": "user|assistant", "source": "text|voice|assistant", "text": "..." }
 { "type": "task.card", "update": { ... } }
 { "type": "system.notice", "level": "info|warn|error", "message": "..." }
 

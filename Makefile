@@ -82,7 +82,7 @@ help:
 	@echo "  make m2-demo-barge-in              Exercise the barge-in path"
 	@echo ""
 	@echo "Release"
-	@echo "  make release-preview               Show the v1.3.0 publish plan"
+	@echo "  make release-preview               Show the v1.5.1 publish plan"
 	@echo "  make clean                         Remove venv + build artefacts"
 
 $(VENV_DIR):
@@ -203,8 +203,8 @@ cleanup-legacy:
 	bash scripts/cleanup-legacy.sh --apply
 
 release-preview:
-	@echo "v1.3.0 publish plan (dry run)"
-	@echo "  1. git tag v1.3.0 && git push origin v1.3.0"
+	@echo "v1.5.1 publish plan (dry run)"
+	@echo "  1. git tag v1.5.1 && git push origin v1.5.1"
 	@echo "  2. GitHub release workflow (.github/workflows/release.yml) picks it up"
 	@echo "  3. Manual: pnpm --filter @openmimicry/desktop-frontend build"
 	@echo "  4. Manual: cd apps/desktop/src-tauri && cargo tauri build"

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-tts"
-version = "1.3.0"
-description = "OpenMimicry effector layer (TTS facade): RealtimeTTS adapter, mocks. Re-exports the TTS half of openmimicry-voice."
+version = "1.5.1"
+description = "OpenMimicry effector layer: isolated Piper TTS, legacy adapter, and mocks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -28,6 +28,7 @@ dependencies = [
 # Installing the `realtimetts` extra here is equivalent to installing
 # it on openmimicry-voice — kept for ergonomic parity.
 realtimetts = ["openmimicry-voice[realtimetts]>=1.0.0"]
+voice = ["openmimicry-voice[voice]>=1.5.1"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",

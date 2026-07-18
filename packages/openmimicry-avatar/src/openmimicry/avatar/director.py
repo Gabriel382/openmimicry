@@ -252,6 +252,8 @@ class AvatarDirector:
             return None, False
 
         if isinstance(event, UserSpeechFinal):
+            if not event.accepted:
+                return None, False
             # Speech ended without a new TTS yet: park at "thinking" so the
             # user sees the avatar is processing.
             if s == "listening":

@@ -28,7 +28,7 @@ export interface TauriCommands {
     showComposer: boolean;
   }): Promise<void>;
   setPositionLocked(locked: boolean): Promise<void>;
-  overlayInfo(): Promise<{ position_locked: boolean } | undefined>;
+  overlayInfo(): Promise<{ interactive: boolean; position_locked: boolean } | undefined>;
   openBackendDashboard(): Promise<void>;
   quitApp(): Promise<void>;
 }
@@ -84,8 +84,10 @@ export function useTauriCommand(): TauriCommands {
   const setPositionLocked = useCallback(async (locked: boolean): Promise<void> => {
     await tryInvoke("set_position_locked", { locked });
   }, []);
-  const overlayInfo = useCallback(async (): Promise<{ position_locked: boolean } | undefined> => {
-    return tryInvoke<{ position_locked: boolean }>("overlay_info");
+  const overlayInfo = useCallback(async (): Promise<
+    { interactive: boolean; position_locked: boolean } | undefined
+  > => {
+    return tryInvoke<{ interactive: boolean; position_locked: boolean }>("overlay_info");
   }, []);
   const openBackendDashboard = useCallback(async (): Promise<void> => {
     await tryInvoke("open_backend_dashboard");
