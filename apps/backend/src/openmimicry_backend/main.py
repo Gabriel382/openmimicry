@@ -12,21 +12,30 @@ Run with::
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import logging
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from openmimicry.core import AppConfig
+from openmimicry.core import AppConfig, TaskHandle, UserSpeechFinal
 from openmimicry.core.config import load as load_config
 
+from .appearance import load_appearance
+from .character_import import CharacterRegistry
+from .conversation import ConversationCoordinator
+from .diagnostics import install_diagnostics
 from .routes import (
     admin_router,
+    appearance_router,
     chat_router,
+    dashboard_router,
+    diagnostics_router,
     health_router,
+    llm_router,
     mode_router,
     pack_router,
 )
@@ -40,49 +49,173 @@ __all__ = ["app", "create_app", "run_uvicorn"]
 _log = logging.getLogger(__name__)
 
 
+def _module_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
 def _load_app_config() -> tuple[AppConfig, str | None]:
     """Load :class:`AppConfig` from ``OPENMIMICRY_CONFIG_PATH`` or defaults."""
     path_env = os.environ.get("OPENMIMICRY_CONFIG_PATH")
-    if path_env:
-        return load_config(path_env), path_env
-    return AppConfig(), None
+    return load_config(path_env), path_env
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the runtime, start the orchestrator + speech, tear it all down."""
     config, config_path = _load_app_config()
+    appearance = load_appearance()
+    character_registry = CharacterRegistry(config.avatar.pack_roots)
 
     bridge = BroadcastBridge()
-    wiring: Wiring = await build_runtime(
-        config, ws_bridge=bridge, config_path=config_path
-    )
+    wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
+    diagnostics = install_diagnostics(config.app.data_dir)
 
-    async def _handle_user_text(text: str) -> None:
-        await run_chat_turn(
+    mode_state = {
+        "continuous_listening": config.voice.modes.continuous_listening,
+        "live_wake": config.voice.modes.live_wake,
+        "agent_voice": config.voice.modes.agent_voice,
+        "wake_names": list(wiring.speech.wake_names),
+        "wake_aliases": list(getattr(wiring.speech, "wake_aliases", [])),
+        "stt_model": getattr(wiring.speech, "stt_model", config.voice.stt.model),
+        "post_speech_silence_duration": wiring.speech.post_speech_silence_duration,
+    }
+
+    async def _run_ordered_turn(text: str, history) -> str | None:
+        return await run_chat_turn(
             text,
             bus=wiring.bus,
             llm=wiring.llm,
             tasks=wiring.tasks,
-            speech=wiring.speech,
+            speech=wiring.speech if mode_state["agent_voice"] else None,
             intent_fn=wiring.intent,
+            history=history,
         )
 
+    conversation = ConversationCoordinator(
+        run_turn=_run_ordered_turn,
+        history_turns=config.llm.history_turns,
+    )
+
+    async def _handle_user_text(text: str) -> None:
+        conversation.submit_background(text)
+
     async def _apply_mode_toggle(key: str, value: bool) -> None:
-        if key == "live_wake":
+        if key == "continuous_listening":
+            if value:
+                await wiring.speech.enable_continuous_listening()
+                mode_state["live_wake"] = False
+            else:
+                await wiring.speech.disable_live_listening()
+        elif key == "live_wake":
             if value:
                 await wiring.speech.enable_live_listening(wake_names=None)
+                mode_state["continuous_listening"] = False
             else:
                 await wiring.speech.disable_live_listening()
         elif key == "agent_voice" and not value:
             await wiring.speech.interrupt()
+        elif key not in mode_state:
+            raise ValueError(f"unknown mode key: {key!r}")
+        mode_state[key] = value
+
+    def _mode_status() -> dict[str, object]:
+        stt_name = getattr(wiring.stt, "name", "unknown")
+        tts_name = getattr(wiring.tts, "name", "unknown")
+        real_input = not stt_name.startswith("mock")
+        real_output = not tts_name.startswith("mock")
+        if stt_name == "realtimestt":
+            real_input = _module_available("RealtimeSTT")
+        elif stt_name == "isolated-faster-whisper":
+            real_input = all(
+                _module_available(module) for module in ("faster_whisper", "sounddevice", "numpy")
+            )
+            real_input = real_input and bool(getattr(wiring.speech, "stt_ready", False))
+        if tts_name == "realtimetts":
+            real_output = _module_available("RealtimeTTS")
+        elif tts_name == "isolated-piper":
+            tts_model = (
+                Path(config.voice.tts.data_dir).expanduser() / f"{config.voice.tts.voice}.onnx"
+            )
+            real_output = (
+                _module_available("piper")
+                and tts_model.is_file()
+                and Path(f"{tts_model}.json").is_file()
+            )
+            real_output = real_output and bool(getattr(wiring.speech, "tts_ready", False))
+        return {
+            **mode_state,
+            "listening_mode": getattr(wiring.speech, "listening_mode", "off"),
+            "ptt_active": getattr(wiring.speech, "ptt_active", False),
+            "wake_names": list(getattr(wiring.speech, "wake_names", ["Mimi"])),
+            "wake_aliases": list(getattr(wiring.speech, "wake_aliases", [])),
+            "stt_model": str(getattr(wiring.speech, "stt_model", "medium.en")),
+            "stt_runtime": dict(getattr(wiring.stt, "runtime_info", {})),
+            "post_speech_silence_duration": float(
+                getattr(wiring.speech, "post_speech_silence_duration", 1.0)
+            ),
+            "stt_adapter": stt_name,
+            "tts_adapter": tts_name,
+            "real_input": real_input,
+            "real_output": real_output,
+            "llm_backend": getattr(wiring.llm, "active_backend", None),
+            "llm_model": getattr(
+                wiring.llm,
+                "active_model",
+                getattr(getattr(wiring.llm, "_settings", None), "model", "unknown"),
+            ),
+            "history_turns": conversation.memory.max_turns,
+            "diagnostics_session": diagnostics.session_id,
+            "diagnostics_log": str(diagnostics.log_path),
+            "input_install_hint": (
+                None
+                if real_input or stt_name.startswith("mock")
+                else r"Run .\scripts\win\install.bat openrouter-voice"
+            ),
+            "output_install_hint": (
+                None
+                if real_output or tts_name.startswith("mock")
+                else r"Run .\scripts\win\install.bat openrouter-voice"
+            ),
+        }
+
+    async def _cancel_task(raw_handle: dict[str, object]) -> None:
+        await wiring.tasks.cancel(TaskHandle.model_validate(raw_handle))
 
     app.state.wiring = wiring
     app.state.bridge = bridge
     app.state.handle_user_text = _handle_user_text
     app.state.apply_mode_toggle = _apply_mode_toggle
+    app.state.mode_state = mode_state
+    app.state.appearance = appearance
+    app.state.get_mode_status = _mode_status
+    app.state.cancel_task = _cancel_task
+    app.state.conversation = conversation
+    app.state.character_registry = character_registry
+    app.state.diagnostics = diagnostics
+
+    speech_subscription = wiring.bus.subscribe()
+
+    async def _consume_speech_turns() -> None:
+        async for event in speech_subscription:
+            if not isinstance(event, UserSpeechFinal):
+                continue
+            spoken = event.text.strip()
+            if not event.accepted or not spoken or event.reason == "interrupted":
+                continue
+            await _handle_user_text(spoken)
+
+    speech_turn_task = asyncio.create_task(
+        _consume_speech_turns(), name="openmimicry.backend.speech_turns"
+    )
 
     await wiring.speech.start()
+    if mode_state["continuous_listening"]:
+        await wiring.speech.enable_continuous_listening()
+    elif mode_state["live_wake"]:
+        await wiring.speech.enable_live_listening(wake_names=None)
     await wiring.orchestrator.start()
 
     _mount_static_characters(app, config)
@@ -90,10 +223,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        speech_turn_task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await speech_turn_task
+        await conversation.close()
         try:
             await asyncio.wait_for(_graceful_shutdown(wiring), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _log.warning("backend lifespan: graceful shutdown exceeded 2s budget")
+        finally:
+            diagnostics.close()
 
 
 async def _graceful_shutdown(wiring: Wiring) -> None:
@@ -108,15 +247,19 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.0.0",
+        version="1.5.1",
         lifespan=lifespan,
     )
 
     app.include_router(health_router)
     app.include_router(chat_router)
+    app.include_router(dashboard_router)
+    app.include_router(diagnostics_router)
     app.include_router(mode_router)
+    app.include_router(llm_router)
     app.include_router(pack_router)
     app.include_router(admin_router)
+    app.include_router(appearance_router)
 
     @app.websocket("/ws")
     async def _ws(websocket: WebSocket) -> None:
@@ -124,6 +267,8 @@ def create_app() -> FastAPI:
         bridge: BroadcastBridge = websocket.app.state.bridge
         handle_user_text = websocket.app.state.handle_user_text
         apply_mode_toggle = websocket.app.state.apply_mode_toggle
+        get_mode_status = websocket.app.state.get_mode_status
+        cancel_task = websocket.app.state.cancel_task
         await ws_endpoint(
             websocket,
             bus=wiring.bus,
@@ -131,6 +276,8 @@ def create_app() -> FastAPI:
             bridge=bridge,
             handle_user_text=handle_user_text,
             apply_mode_toggle=apply_mode_toggle,
+            get_mode_status=get_mode_status,
+            cancel_task=cancel_task,
         )
 
     return app
@@ -150,7 +297,7 @@ def _mount_static_characters(app: FastAPI, config: AppConfig) -> None:
                     StaticFiles(directory=str(root)),
                     name="characters",
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning("static-mount /static/characters failed: %s", exc)
             return
     _log.info("no avatar.pack_roots directory found; skipping static mount")

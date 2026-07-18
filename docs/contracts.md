@@ -71,6 +71,13 @@ class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
 
+class AvatarCue(_Event):
+    kind: Literal["avatar_cue"] = "avatar_cue"
+    emotion: str = "neutral"   # backend allow-listed before publication
+    action: str = "idle"       # backend allow-listed before publication
+    intensity: float = 0.6
+    duration_ms: int = 1800
+
 class TTSStarted(_Event):
     kind: Literal["tts_start"] = "tts_start"
 
@@ -109,7 +116,7 @@ class ErrorEvent(_Event):
 
 RuntimeEvent = Union[
     UserTextSubmitted, UserSpeechStarted, UserSpeechFinal, TranscriptPreview,
-    WakeDetected, LLMStarted, LLMTokenStreamed, LLMReplyComplete,
+    WakeDetected, LLMStarted, LLMTokenStreamed, LLMReplyComplete, AvatarCue,
     TTSStarted, TTSChunkSpoken, TTSFinished, TTSInterrupted,
     TaskSubmitted, TaskUpdatedEvent, TaskCompleted, ConfigUpdated, ErrorEvent,
 ]
@@ -238,6 +245,7 @@ class STTConfig(BaseModel, frozen=True):
     wake_names: list[str] = []
     sample_rate: int = 16000
     vad: Literal["silero", "webrtc", "none"] = "silero"
+    post_speech_silence_duration: float = 1.0  # inclusive range: 0.2..3.0
 
 class TTSConfig(BaseModel, frozen=True):
     engine: str = "coqui"
@@ -299,6 +307,7 @@ class SpeechController(Protocol):
     async def interrupt(self) -> None: ...
     async def ptt_down(self) -> None: ...
     async def ptt_up(self) -> None: ...
+    async def enable_continuous_listening(self) -> None: ...
     async def enable_live_listening(self, *, wake_names: list[str] | None) -> None: ...
     async def disable_live_listening(self) -> None: ...
 
@@ -468,10 +477,18 @@ The frontend never sees `RuntimeEvent` directly. It consumes a narrow projection
 ```json
 { "type": "avatar.directive",  "directive": { /* AvatarDirective */ } }
 { "type": "transcript.preview","text": "...", "is_final": false }
-{ "type": "bubble.text",       "text": "...", "complete": false }
+{ "type": "bubble.text",       "text": "...", "complete": false, "reset": false }
+{ "type": "conversation.turn", "id": "...", "role": "user|assistant", "source": "text|voice|assistant", "text": "...", "ts": "..." }
 { "type": "task.card",         "update": { /* TaskUpdate */ } }
 { "type": "system.notice",     "level": "info|warn|error", "message": "..." }
 ```
+
+`bubble.text.reset=true` marks a new LLM turn and clears any incomplete prior
+reply before new chunks arrive. `conversation.turn` is an additive dashboard
+projection; the backend retains and replays the latest 100 turns for the life
+of the backend process. Push-to-talk progress is projected through
+`system.notice` configuration diffs (`ptt_stage`: `listening`, `transcribing`,
+or `error`) and finishes with `message="speech_result"` plus `voice_result`.
 
 The reverse direction (frontend → backend):
 
@@ -479,7 +496,8 @@ The reverse direction (frontend → backend):
 { "type": "user.text",  "text": "..." }
 { "type": "ptt.down" }
 { "type": "ptt.up" }
-{ "type": "mode.toggle","key": "live_wake|agent_voice", "value": true }
+{ "type": "mode.toggle","key": "continuous_listening|live_wake|agent_voice", "value": true }
+{ "type": "task.cancel", "handle": { "id": "...", "runtime": "..." } }
 ```
 
 These message names are part of the frozen contract. Adding new types is additive (minor version); removing or renaming requires a major bump.

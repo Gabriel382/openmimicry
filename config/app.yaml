@@ -1,0 +1,40 @@
+# Safe default: a complete Sprite2D desktop with no keys or audio downloads.
+schema_version: 1
+
+app:
+  log_level: INFO
+  log_format: text
+
+llm:
+  adapter: mock
+  model: mock/test
+
+voice:
+  stt:
+    adapter: mock
+    post_speech_silence_duration: 1.0
+    wake:
+      enabled: false
+  tts:
+    adapter: mock
+  modes:
+    text_always_on: true
+    continuous_listening: false
+    live_wake: false
+    agent_voice: false
+    barge_in_enabled: false
+
+avatar:
+  runtime: sprite2d
+  pack: octomimic
+  pack_roots:
+    - ./characters
+  runtimes:
+    sprite2d:
+      pack_path: ./characters/octomimic
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

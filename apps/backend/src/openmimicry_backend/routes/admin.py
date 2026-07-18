@@ -64,6 +64,6 @@ async def admin_reload(request: Request) -> dict[str, object]:
         # not be exposed as a method. Publish the marker anyway.
         bus.publish(ConfigUpdated(ts=_now(), diff={"_admin_reload": True}))
         return {"ok": True, "reload": "noop"}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"ok": True, "reload": "applied"}

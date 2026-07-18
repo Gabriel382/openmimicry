@@ -161,6 +161,7 @@ def test_voice_configs_defaults() -> None:
     stt = STTConfig()
     assert stt.language == "en"
     assert stt.vad == "silero"
+    assert stt.post_speech_silence_duration == 1.0
     tts = TTSConfig()
     assert tts.engine == "coqui"
     assert tts.interruptible is True
@@ -217,8 +218,10 @@ def test_app_config_default_tree_is_complete() -> None:
     assert cfg.app.log_level == "INFO"
     assert cfg.app.log_format == "json"
     assert cfg.llm.adapter == "litellm"
-    assert cfg.voice.stt.adapter == "realtimestt"
-    assert cfg.voice.tts.engine == "coqui"
+    assert cfg.voice.stt.adapter == "isolated-faster-whisper"
+    assert cfg.voice.stt.model == "medium.en"
+    assert cfg.voice.tts.adapter == "isolated-piper"
+    assert cfg.voice.tts.engine == "piper"
     assert cfg.avatar.runtime == "sprite2d"
     assert cfg.tasks.default_runtime == "mcp_agent"
     assert cfg.ui.overlay.click_through_default is True

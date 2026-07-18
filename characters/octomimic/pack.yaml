@@ -48,7 +48,7 @@ emotions:
     loop: true
 
   happy:
-    frames: idle
+    frames: happy
     speaking_frames: happy_speaking
     fps: 9
     loop: false
@@ -69,7 +69,5 @@ voice_hint:
 metadata:
   notes: |
     The bundled OctoMimic frames came over from the v0.x prototype.
-    `happy` reuses the idle base frames so the static pose is calm;
-    `happy_speaking` is the celebratory pose. The loader is happy
-    with one or the other — drop a dedicated `happy/` directory if
-    you want distinct happy frames in non-speaking mode.
+    `happy` and `happy_speaking` are distinct so structured LLM cues are
+    visible whether or not agent voice is enabled.

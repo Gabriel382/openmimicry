@@ -4,7 +4,7 @@ This document specifies the four canonical event flows in OpenMimicry. Each flow
 
 Legend:
 
-- `[FE]` frontend (React, in the overlay/panel window) — only for *non-avatar* projection (text bubble, task cards, system notices)
+- `[FE]` frontend (React toolbar/avatar or browser dashboard) — only for *non-avatar* projection (text bubble, task cards, system notices)
 - `[BE]` backend (FastAPI process)
 - `[CORE]` `openmimicry-core` (bus, runtime)
 - `[LLM]` `openmimicry-llm`
@@ -21,8 +21,8 @@ Legend:
 ## 1. Text input
 
 ```text
-[FE]  user types in panel, presses Enter
-[FE]  WS send: {type: "user_text", text: "Summarise this PDF."}
+[FE]  user types in the avatar toolbar or browser dashboard, presses Enter
+[FE]  WS send: {type: "user.text", text: "Summarise this PDF."}
 [BE]  validates, calls Runtime.handle_user_text(text)
 [CORE]pub: UserTextSubmitted(text)
 [AV]  on(UserTextSubmitted) -> AvatarDirective(thinking)
@@ -81,34 +81,32 @@ Edge cases:
 - Hotkey held for <100ms: treated as a no-op (debounce in `SpeechController`).
 - No speech detected during PTT window: publish `UserSpeechFinal(text="", reason="no_speech")` so the avatar returns to `idle` without invoking the LLM.
 
-## 3. Wake-name live mode
+## 3. Passive listening modes
+
+The toolbar's **Wake listen** control uses VAD-driven dictation, then accepts
+only transcripts that begin with a configured name:
 
 ```text
 [BE]  on startup, if cfg.voice.modes.live_wake == true:
-        SpeechController.enable_live_listening(wake_names=["Mimi"])
-        WakeController.enable()
+        SpeechController.enable_live_listening(wake_names=["Mimi", "Hey Mimi"])
 [VC]  STTAdapter.start(STTConfig(mode="wake", wake_names=[...]))
 
-  ... silence ...
-  ... user says "Mimi, summarise this." ...
-
-[STT] internal wake-word fires
-[WK]  pub: WakeDetected(name="Mimi")
-[AV]  on(WakeDetected) -> AvatarDirective(listening)
-[VC]  if TTS speaking: cancel + pub: TTSInterrupted   (barge-in)
-[VC]  STT switches to STTConfig(mode="dictation")
-[CORE]pub: UserSpeechStarted
-
-  ... STT publishes TranscriptPreview frames ...
-                                                →FE: render preview in bubble
-
-[STT] silence threshold reached
+  ... user says "Mimi, summarise this" ...
+[VC]  prefix match -> WakeDetected(name="Mimi")
 [STT] pub: UserSpeechFinal(text="summarise this")
-[VC]  STT returns to STTConfig(mode="wake")
-[VC]  ...flow joins Text input flow
 ```
 
-The wake -> dictation -> wake transitions are owned by `SpeechController`, not by the frontend. The frontend just sees `AvatarDirective` and `TranscriptPreview` events and renders them.
+The advanced `continuous_listening` API remains available for deployments that
+want every final utterance submitted without a name:
+
+```text
+[BE]  SpeechController.enable_continuous_listening()
+[VC]  STTAdapter.start(STTConfig(mode="dictation", wake_names=[]))
+[STT] every final transcript -> UserSpeechFinal
+```
+
+Wake-prefix matching is owned by `SpeechController`, not by the frontend or a
+provider-specific wake vocabulary. This permits arbitrary configured names.
 
 Barge-in semantics (when TTS is speaking and live wake is on):
 

@@ -1,0 +1,65 @@
+# OpenRouter plus crash-contained local STT and Piper TTS.
+schema_version: 1
+
+llm:
+  active_backend: openrouter
+  history_turns: 4
+  backends:
+    openrouter:
+      adapter: litellm
+      model: openrouter/openai/gpt-4o-mini
+      api_key_env: OPENROUTER_API_KEY
+      temperature: 0.6
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      temperature: 0.6
+      request_timeout_s: 180
+
+voice:
+  stt:
+    adapter: isolated-faster-whisper
+    language: en
+    # Strong CPU default. NVIDIA users can select distil-large-v3 from the
+    # dashboard; tiny/base/small remain opt-in low-resource modes.
+    model: medium.en
+    realtime_model_type: medium.en
+    use_main_model_for_realtime: true
+    device: auto
+    compute_type: auto
+    beam_size: 5
+    speech_threshold: 0.015
+    vad: silero
+    # Raise this if natural pauses are cutting a phrase short (0.2–3.0 s).
+    post_speech_silence_duration: 1.0
+    wake:
+      enabled: true
+      names:
+        - Mimi
+        - Hey Mimi
+      aliases:
+        - Me me
+      sensitivity: 0.6
+  tts:
+    adapter: isolated-piper
+    engine: piper
+    voice: en_US-lessac-medium
+    data_dir: ~/.openmimicry/voices
+    rate: 1.0
+    interruptible: true
+  modes:
+    text_always_on: true
+    continuous_listening: false
+    live_wake: false
+    agent_voice: true
+    # Laptop speakers are otherwise often mistaken for user speech.
+    barge_in_enabled: false
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

@@ -20,12 +20,14 @@ from .errors import LLMAuthError, LLMError, LLMToolCallError, LLMTransportError
 from .litellm_adapter import LiteLLMAdapter, LiteLLMSettings
 from .mocks import MockLLMAdapter
 from .router import LLMRouter, RouterRetryPolicy
+from .switchboard import LLMSwitchboard
 
 __all__ = [
     "LLMAdapter",
     "LLMAuthError",
     "LLMError",
     "LLMRouter",
+    "LLMSwitchboard",
     "LLMToolCallError",
     "LLMTransportError",
     "LiteLLMAdapter",
@@ -34,4 +36,4 @@ __all__ = [
     "RouterRetryPolicy",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.5.1"

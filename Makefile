@@ -44,7 +44,7 @@ help:
 	@echo ""
 	@echo "Setup"
 	@echo "  make install PROFILE=basic         Install workspace + selected profile"
-	@echo "    PROFILES: basic | voice | threejs | live3d | unity | agent"
+	@echo "    PROFILES: basic | openrouter-voice | voice | threejs | live3d | unity | agent"
 	@echo "              vision (optional — webcam + MediaPipe, off by default)"
 	@echo "              full | full-vision | studio | dev"
 	@echo "  make doctor                        Print environment checklist"
@@ -55,7 +55,7 @@ help:
 	@echo "  make backend-prod                  FastAPI backend bound to 0.0.0.0"
 	@echo "  make frontend                      Vite dev server (:5173)"
 	@echo "  make dev                           Hint for two-terminal dev loop"
-	@echo "  make desktop                       cargo tauri dev (overlay + panel)"
+	@echo "  make desktop                       cargo tauri dev (avatar + top toolbar)"
 	@echo ""
 	@echo "Docker"
 	@echo "  make docker-build                  Build backend + frontend-dev images"
@@ -82,7 +82,7 @@ help:
 	@echo "  make m2-demo-barge-in              Exercise the barge-in path"
 	@echo ""
 	@echo "Release"
-	@echo "  make release-preview               Show the v1.0.0 publish plan"
+	@echo "  make release-preview               Show the v1.5.1 publish plan"
 	@echo "  make clean                         Remove venv + build artefacts"
 
 $(VENV_DIR):
@@ -101,6 +101,13 @@ install-workspace: $(VENV_DIR)
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-core
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-llm
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-voice
+	@if [ "$(PROFILE)" = "voice" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice]"; \
+	fi
+	@if [ "$(PROFILE)" = "openrouter-voice" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice]"; \
+	fi
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-avatar
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-tasks
 	$(PYTHON) -m pip install -e packages/openmimicry-vision
@@ -196,8 +203,8 @@ cleanup-legacy:
 	bash scripts/cleanup-legacy.sh --apply
 
 release-preview:
-	@echo "v1.0.0 publish plan (dry run)"
-	@echo "  1. git tag v1.0.0 && git push origin v1.0.0"
+	@echo "v1.5.1 publish plan (dry run)"
+	@echo "  1. git tag v1.5.1 && git push origin v1.5.1"
 	@echo "  2. GitHub release workflow (.github/workflows/release.yml) picks it up"
 	@echo "  3. Manual: pnpm --filter @openmimicry/desktop-frontend build"
 	@echo "  4. Manual: cd apps/desktop/src-tauri && cargo tauri build"

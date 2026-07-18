@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capabilities exposed to the overlay and panel windows.",
-  "windows": ["overlay", "panel"],
+  "description": "Capabilities exposed to the avatar and top-toolbar windows.",
+  "windows": ["overlay", "avatar-controls", "avatar-composer"],
   "permissions": [
     "core:default",
     "core:window:default",

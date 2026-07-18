@@ -1,6 +1,6 @@
 # openmimicry-desktop (M8)
 
-The Rust/Tauri shell. Two windows, six commands, one tray icon with a
+The Rust/Tauri shell. Two visually docked windows, one tray icon with a
 dynamic mood pixel, and three global hotkeys. Whole-window click-through
 via `set_ignore_cursor_events` — no per-pixel hit testing.
 
@@ -25,25 +25,22 @@ window opens on top.
 |----------------------------------|--------------------------------------------------------------------------|
 | `set_overlay_interactive`        | Toggle whole-window click-through.                                       |
 | `swap_avatar_runtime`            | Emit `avatar.swap_runtime` to the frontend (`/runtime/swap` is the real). |
-| `show_panel` / `hide_panel`      | Show / hide the panel window.                                            |
+| `set_position_locked`            | Persist whether the avatar can be moved.                                 |
+| `open_backend_dashboard`         | Open the local settings/task board in the default browser.               |
 | `move_overlay_to_saved_position` | Restore the overlay to the saved position, clamped to the monitor.       |
 | `save_overlay_position`          | Persist the current overlay position.                                    |
-| `overlay_info`                   | Read a small status snapshot for the panel UI.                           |
+| `overlay_info`                   | Read position, interaction, and lock status for the top toolbar.         |
 | `quit_app`                       | Exit the app.                                                            |
 
 ## Global hotkeys
 
 * `Ctrl+Space` — PTT (press emits `ptt.down`, release emits `ptt.up`).
 * `Ctrl+Shift+M` — toggle overlay interactive / click-through.
-* `Ctrl+Shift+O` — toggle the panel window.
+* `Ctrl+Shift+O` — open the backend dashboard.
 
 ## Tray menu
 
-* Show panel
-* Toggle overlay interact
-* Mute mic (`tray.mute_mic` event)
-* Mute voice (`tray.mute_voice` event)
-* Pause live wake (`tray.pause_live_wake` event)
+* Open dashboard
 * Quit
 
 The mood pixel listens to `avatar.emotion` events that the frontend

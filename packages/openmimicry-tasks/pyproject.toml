@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-tasks"
-version = "1.0.0"
+version = "1.5.1"
 description = "OpenMimicry task delegation: TaskRouter, mcp-agent / Claude Code / local-shell adapters."
 readme = "README.md"
 requires-python = ">=3.11"

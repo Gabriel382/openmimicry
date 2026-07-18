@@ -1,6 +1,6 @@
 # OpenMimicry Architecture
 
-Status: proposal, target v0.2.0
+Status: implemented, v1.5.1
 Audience: contributors, reviewers, recruiters reading the repo
 
 This document is the entry point to OpenMimicry's design. It defines the repository layout, module boundaries, contracts between modules, and the overall philosophy. Deep dives live in the companion docs linked below.
@@ -16,7 +16,7 @@ In scope:
 - A small, typed Python core that owns state, events, and configuration.
 - Clean adapter contracts for LLMs, speech-to-text, text-to-speech, external task runtimes, **and avatar runtimes**.
 - A pluggable avatar layer: Sprite2D (default), Advanced 2D, lightweight 3D (Three.js / VRM / glTF), Live 3D, Unity (via protocol), and external renderers — all behind one `AvatarRuntimeAdapter` interface.
-- A Tauri + React desktop shell with a transparent overlay and a separate panel window.
+- A Tauri + React desktop shell with a transparent avatar and a compact top toolbar, plus a localhost browser dashboard for settings and tasks.
 - YAML-driven configuration, validated by Pydantic.
 - Reproducible installs, type-checked Python, linted code, tested adapters, and tagged releases.
 
@@ -31,7 +31,7 @@ Out of scope for v0.2.x:
 
 Four rules drive every decision in the rest of this document.
 
-**Hexagonal core.** Domain logic lives behind small interfaces. Concrete libraries (LiteLLM, RealtimeTTS, RealtimeSTT, mcp-agent, Tauri) sit on the outside and implement those interfaces. The avatar/runtime never imports a concrete library.
+**Hexagonal core.** Domain logic lives behind small interfaces. Concrete libraries (LiteLLM, Faster-Whisper, Piper, mcp-agent, Tauri) sit on the outside and implement those interfaces. The avatar/runtime never imports a concrete library.
 
 **Events, not RPC.** Modules talk to each other through a typed in-process event bus, not by reaching across module boundaries. The desktop UI subscribes to a stream of directives; it does not pull on the LLM.
 
@@ -58,13 +58,13 @@ openmimicry/
           unity/                    # UnityAvatarAdapter (WS/HTTP/TCP bridge)
           external/                 # ExternalAvatarAdapter (generic transport)
           mock/                     # MockAvatarAdapter (tests)
-    openmimicry-voice/              # STT/TTS adapter contracts + RealtimeSTT/TTS impls
+    openmimicry-voice/              # Voice controllers + isolated/legacy adapters
     openmimicry-llm/                # LLMAdapter contract + LiteLLM impl
     openmimicry-tasks/              # TaskRuntimeAdapter contract + adapters
   apps/
     backend/                        # FastAPI process: HTTP + WebSocket transport
     desktop/
-      frontend/                     # React/Vite UI (overlay + panel routes)
+      frontend/                     # React/Vite UI (avatar + top-toolbar routes)
         src/runtimes/
           sprite2d/                 # frame renderer
           threejs/                  # Three.js scene + VRM viewer
@@ -106,9 +106,9 @@ Notes on the layout:
 
 | Module | Owns | Depends on | Never imports |
 |---|---|---|---|
-| `openmimicry-core` | `AppConfig`, `EventBus`, `RuntimeStore`, lifecycle, logging | Pydantic, stdlib | LiteLLM, RealtimeTTS, RealtimeSTT, mcp-agent, FastAPI, Tauri |
+| `openmimicry-core` | `AppConfig`, `EventBus`, `RuntimeStore`, lifecycle, logging | Pydantic, stdlib | LiteLLM, audio/model engines, mcp-agent, FastAPI, Tauri |
 | `openmimicry-avatar` | `AvatarDirector`, `AvatarOrchestrator`, `AvatarRuntimeAdapter` + Sprite2D/Advanced2D/Three.js/Live3D/Unity/External runtimes, pack loader | core; rendering libs only inside the per-runtime modules | Anything voice/LLM/UI |
-| `openmimicry-voice` | `STTAdapter`, `TTSAdapter`, `SpeechController`, `WakeController` | core; RealtimeSTT/TTS only inside the `realtime_*` impl modules | LLM, tasks, UI |
+| `openmimicry-voice` | `STTAdapter`, `TTSAdapter`, `SpeechController`, `WakeController` | core; Faster-Whisper/Piper only inside isolated workers; legacy engines only inside legacy adapters | LLM, tasks, UI |
 | `openmimicry-llm` | `LLMAdapter`, `Router`, prompt registry | core; LiteLLM only inside `litellm_adapter` | Voice, avatar, UI |
 | `openmimicry-tasks` | `TaskRuntimeAdapter`, task router | core; `mcp-agent` only inside `mcp_agent_adapter` | Voice, avatar, UI |
 | `apps/backend` | HTTP + WebSocket transport, wiring | All packages | — |
@@ -207,7 +207,8 @@ voice:
   modes:
     text_always_on: true
     push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true
+    continuous_listening: false
+    live_wake: false
     agent_voice: true
 
 avatar:
@@ -257,8 +258,8 @@ ui:
         |                                                          |
         v                                                          v
    LLM (LiteLLM)                                          React app: avatar renderer,
-   STT (RealtimeSTT)                                      speech bubble, text input,
-   TTS (RealtimeTTS)                                      voice control buttons
+   STT child (Faster-Whisper)                             speech bubble, text input,
+   TTS jobs (Piper)                                       voice control buttons
    Task adapters (mcp-agent, Claude Code CLI, ...)
 ```
 
@@ -268,7 +269,7 @@ Why two windows: the overlay window stays transparent and click-through almost a
 
 Full sequence diagrams in [`event_flows.md`](./event_flows.md). One-liner versions:
 
-- **Text input.** Frontend POSTs `/chat` -> `UserTextSubmitted` -> avatar goes `thinking` -> `LLMAdapter.generate` streams tokens -> per-chunk `LLMTokenStreamed` to bus -> `TTSAdapter.speak` consumes the stream if agent voice is on -> avatar transitions `thinking -> speaking -> idle`.
+- **Text input.** Frontend POSTs `/chat` -> `UserTextSubmitted` -> avatar goes `thinking` -> `LLMAdapter.generate` completes -> reply text/history are published -> optional isolated TTS starts -> avatar transitions to `speaking` only after playback begins.
 - **Push-to-talk.** Hotkey down -> `SpeechController.ptt_down()` opens STT mic and stops any running TTS -> avatar `listening` -> hotkey up -> STT finalizes -> `UserSpeechFinal` -> same path as text.
 - **Wake-name live mode.** `WakeController` runs the STT in wake-listening mode -> on wake event, full STT transcription starts -> partial transcripts publish `TranscriptPreview` for the speech bubble -> on final transcript, same path as text. Barge-in: if `TTSStarted` is active when speech is detected, `SpeechController.interrupt()` stops TTS and the avatar switches to `listening`.
 - **Task delegation.** LLM tool-calls or intent classifier produces a `TaskRequest` -> `TaskRouter` picks an adapter -> `TaskRuntimeAdapter.submit` returns an id and an `updates` stream -> updates publish to the bus, the avatar shows `thinking_speaking` (or a dedicated `working` emotion if defined), and the frontend renders a task card.
@@ -294,18 +295,18 @@ The full directive schema, modality-by-modality field mapping, and the `AvatarRu
 
 Detail in [`voice_modes.md`](./voice_modes.md). The short version:
 
-- `TTSAdapter` exposes a cooperative `stop()` that cancels both playback and the underlying generator.
+- `TTSAdapter` exposes `stop()`; the supported Piper adapter terminates the complete child job.
 - `SpeechController` owns a single active TTS task. New `say(...)` calls first `await self._current.stop()`.
-- The STT runs with VAD even while TTS is playing. When voice activity is detected and `voice.tts.interruptible` is true, the controller stops TTS and transitions the avatar to `listening`. This is the "barge-in" path.
-- Audio loopback into the mic is mitigated by either (a) using a directional/USB mic, or (b) enabling RealtimeSTT's echo handling. We document both in the README under "Known issues" rather than silently doing the wrong thing.
+- Passive STT pauses during output by default so laptop speakers are not fed back into the microphone. Explicit PTT still terminates playback immediately. Optional VAD barge-in requires echo-safe hardware.
 
 ## 13. Transparent overlay and click-through
 
 Detail in [`desktop_overlay.md`](./desktop_overlay.md). The strategy is deliberately simple:
 
-- Two windows. The overlay window is decoration-less, transparent, always-on-top, click-through by default. The panel window is normal.
-- Click-through is toggled at the OS level via Tauri (`setIgnoreCursorEvents(true|false)`), not by reading pixel alpha. A configurable hotkey and a tray menu item flip it. While "interact mode" is on, the entire overlay is clickable; while off, all clicks fall through.
-- Visual interaction with the avatar (drag to reposition, right-click for menu) is opt-in via a small interactive zone — a normal HTML element inside the overlay that grabs focus only when interact mode is on.
+- Three visually docked implementation windows. The avatar is decoration-less, transparent, always-on-top, and click-through; the compact toolbar above and message composer below it are interactive. There is no native side panel.
+- Click-through is toggled at the OS level via Tauri (`setIgnoreCursorEvents(true|false)`), not by reading pixel alpha. A configurable hotkey flips it. While "interact mode" is on, the entire avatar window is clickable; while off, clicks on the avatar area fall through.
+- Drag, lock, PTT, wake-name listening, agent voice, browser settings, and exit remain clickable in the toolbar while the PNG area passes clicks through. The lower composer keeps text independent of voice state. Dragging the unlocked toolbar moves and persists the complete companion.
+- Settings, diagnostics, chat, and tasks are served by FastAPI at `/dashboard` and open in the operating system's default browser.
 - We never attempt per-pixel hit testing. It is platform-fragile, expensive, and unnecessary for a companion overlay.
 
 ## 14. Configuration, observability, and lifecycle

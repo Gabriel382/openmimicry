@@ -10,13 +10,16 @@ Run from the repo root:
 ```powershell
 PS> .\scripts\win\install.bat                  # make install PROFILE=basic
 PS> .\scripts\win\install.bat voice            # make install PROFILE=voice
+PS> .\scripts\win\install.bat openrouter-voice # OpenRouter + local STT/system TTS
 PS> .\scripts\win\backend.bat                  # FastAPI on :8000
 PS> .\scripts\win\frontend.bat                 # Vite on :5173
 PS> .\scripts\win\desktop.bat                  # cargo tauri dev
 PS> .\scripts\win\doctor.bat                   # toolchain checklist
+PS> .\scripts\win\collect-diagnostics.bat       # sanitized voice/runtime ZIP
 PS> .\scripts\win\test.bat                     # pytest + Vitest
 PS> .\scripts\win\docker-up.bat                # docker compose up backend
 PS> .\scripts\win\cleanup-legacy.bat           # purge v0.x prototype dirs
+PS> powershell -ExecutionPolicy Bypass -File .\scripts\win\start-openrouter-voice.ps1
 ```
 
 If you have Make installed (via Chocolatey, scoop, or Git for Windows),

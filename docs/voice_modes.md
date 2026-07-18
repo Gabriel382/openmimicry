@@ -1,102 +1,170 @@
-# Voice modes, interruptible TTS, and barge-in
+# Voice runtime and interaction modes
 
-OpenMimicry supports four orthogonal voice toggles. They are configured under `voice.modes` and can be flipped at runtime through the panel UI.
+OpenMimicry v1.5 treats audio as an optional, crash-contained side effect of a
+text conversation. Microphone capture, model inference, synthesis, and playback
+cannot own or block the FastAPI event loop.
+
+## Runtime topology
+
+```mermaid
+flowchart TD
+    UI["Toolbar or dashboard"] --> Backend["Backend conversation lane"]
+    Backend --> LLM["OpenRouter or Ollama"]
+    Backend --> Text["Text and history"]
+    UI --> STT["Isolated STT service"]
+    STT --> Backend
+    Backend --> TTS["Disposable Piper job"]
+    TTS --> Speaker["Speaker"]
+```
+
+The STT service is a supervised child process. It preloads Faster-Whisper once,
+owns the PortAudio handle, records finite utterances, and sends final transcripts
+over newline-delimited JSON. If it exits or misses a command deadline, the
+adapter terminates it and prepares a new worker without restarting the backend.
+
+Each TTS reply uses a fresh process. The process synthesizes a complete WAV,
+validates it, reports `playback_started`, and plays it. Interruption terminates
+the process. No COM object, playback thread, engine instance, or audio handle is
+reused by the following reply.
+
+The legacy `realtimestt` and `realtimetts` adapters remain installable through
+`openmimicry-voice[legacy-realtime]`, but they are not part of the supported
+Windows profile.
+
+## Configuration
 
 ```yaml
 voice:
+  stt:
+    adapter: isolated-faster-whisper
+    language: en
+    model: medium.en
+    device: auto
+    compute_type: auto
+    beam_size: 5
+    speech_threshold: 0.015
+    sample_rate: 16000
+    post_speech_silence_duration: 1.0
+    wake:
+      names: [Mimi, Hey Mimi]
+      aliases: [Me me]
+  tts:
+    adapter: isolated-piper
+    engine: piper
+    voice: en_US-lessac-medium
+    data_dir: ~/.openmimicry/voices
+    rate: 1.0
+    interruptible: true
   modes:
-    text_always_on: true     # /chat input box always usable; never disables
-    push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true          # passive wake-word listening
-    agent_voice: true        # speak LLM replies via TTS
-    barge_in_grace_ms: 600
+    text_always_on: true
+    push_to_talk_hotkey: Ctrl+Space
+    continuous_listening: false
+    live_wake: false
+    agent_voice: true
+    barge_in_enabled: false
 ```
 
-## 1. The four modes
+Recognition presets exposed by the dashboard are:
 
-**Text always on.** The panel's text input is always wired straight to `Runtime.handle_user_text(text)`. It does not depend on the voice subsystem being healthy. If STT/TTS are broken, text still works.
+| Model | Intended hardware | Trade-off |
+|---|---|---|
+| `medium.en` | CPU, INT8 | Supported default; stronger English recognition |
+| `distil-large-v3` | NVIDIA GPU, FP16 | Strong English recognition with lower latency than large-v3 |
+| `large-v3` | High-memory GPU or patient CPU use | Maximum multilingual accuracy |
+| `small.en` | Lower-memory CPU | Faster, less reliable for names |
+| `base.en` / `tiny.en` | Constrained systems | Lowest latency and accuracy |
 
-**Push-to-talk.** A global hotkey (Tauri-registered for cross-window capture) opens the mic for the duration of the keypress. While held, all running TTS is cancelled. On release, the final transcript is dispatched as if the user had typed it. PTT works regardless of `live_wake`.
+`device: auto` tries CUDA when CTranslate2 detects it, then proves the runtime
+by loading the model and running inference. Missing CUDA DLLs or another failed
+GPU initialization automatically fall back to CPU/INT8. `device: cuda` remains
+strict for users who explicitly require GPU execution.
 
-**Live wake.** STT runs continuously in low-cost wake-listening mode. On a wake word, the controller switches the STT to dictation mode, the avatar enters `listening`, and the flow proceeds as PTT. Wake names are configurable; multiple are supported.
+## Input modes
 
-**Agent voice.** When on, LLM replies are streamed into TTS (token-by-token, low-latency). When off, replies are only displayed in the speech bubble. Off does not impose any cost: the TTS adapter is not started.
+### Text
 
-These toggles compose. The user can run pure-text, voice-out only, voice-in only via PTT, or fully hands-free.
+Text is always independent of voice. An accepted user message appears at once.
+The LLM reply appears when generation completes, before TTS is queued. A missing
+microphone, failed synthesis, or terminated playback cannot suppress either.
 
-## 2. Interruptible TTS
+### Push-to-talk
 
-Interruptibility is a TTS-adapter capability and a `SpeechController` responsibility.
+Hold the toolbar microphone or `Ctrl+Space`. Pressing starts a fresh finite
+recording; releasing closes the recording and submits one transcription job to
+the already-loaded model. Push-to-talk does not require the wake name.
 
-Adapter requirement: the `TTSAdapter.stop()` method must cancel both playback and the underlying speech generator within ~100 ms. RealtimeTTS supports this via its stream/queue abstractions; the wrapper exposes a single cancel flag the loop checks per chunk.
+The UI sequence is `listening → transcribing → thinking`. Empty audio produces
+an explicit no-speech result and always leaves `transcribing`.
 
-Controller invariant: at most one `TTSAdapter.speak(...)` task is alive at a time. `SpeechController.say(...)` is:
+### Wake listening
 
-```python
-async def say(self, text_or_stream):
-    if self._current is not None and not self._current.done():
-        await self.interrupt()
-    self._current = asyncio.create_task(
-        self._tts.speak(text_or_stream, config=self._cfg.tts, on_chunk=self._on_chunk)
-    )
-    self.bus.publish(TTSStarted())
-    try:
-        await self._current
-        self.bus.publish(TTSFinished())
-    except CancelledError:
-        self.bus.publish(TTSInterrupted())
-```
+Wake listening continuously segments speech with energy VAD. Every utterance is
+transcribed immediately after the configured silence interval. The raw text is
+shown in conversation history, but only a transcript beginning with a configured
+name or alias is submitted to the LLM. The prefix is removed before submission.
 
-`interrupt()` calls `self._tts.stop()` and awaits the task. Anything that creates a new utterance (a new user message, a PTT press, a wake detection) goes through `say` or `interrupt` and never touches `_tts` directly.
+For example, `Mimi, tell me a joke` submits `tell me a joke`; `tell me a joke`
+is recorded as heard but not submitted.
 
-## 3. Barge-in
+### Continuous listening
 
-Barge-in is "user starts speaking while the avatar is speaking." It needs three things to feel natural:
+Continuous mode uses the same segmentation but submits every nonempty final
+transcript. It is intended for controlled or headset environments. Wake mode is
+the safer hands-free default.
 
-- **Low-latency detection.** The STT runs even while TTS is playing. RealtimeSTT's VAD fires `speech_start` events well before a full transcript is ready.
-- **Mic safety.** A talking speaker can falsely trigger the VAD. We avoid building our own echo canceller. Instead:
-  - Recommend a USB/cardioid mic in the README.
-  - Enable RealtimeSTT's echo handling where supported.
-  - Provide `voice.modes.barge_in_grace_ms` (default 600 ms): the controller must receive `speech_start` *for at least this long* before it cancels TTS. Tunes out short echo bursts.
-- **Single owner.** Only `SpeechController` decides to cancel TTS. The avatar director does not. The LLM does not. This avoids races.
+### Endpointing
 
-```python
-class SpeechController:
-    async def _on_vad_speech_start(self):
-        if not self._cfg.tts.interruptible:
-            return
-        if not self._tts.is_speaking:
-            # User is just talking; nothing to interrupt.
-            return
-        await asyncio.sleep(self._cfg.modes.barge_in_grace_ms / 1000)
-        # Re-check after the grace window — VAD may have settled.
-        if self._stt.vad_active and self._tts.is_speaking:
-            await self.interrupt()
-            self.bus.publish(UserSpeechStarted())
-```
+`post_speech_silence_duration` controls the silence required to finalize a live
+utterance. The allowed range is 0.2–3.0 seconds. Increase it if pauses between
+clauses cause early submission. It does not change the push-to-talk boundary:
+release remains authoritative there.
 
-The avatar's reaction to barge-in is whatever it is for `UserSpeechStarted` (transition to `listening`). The director does not know barge-in happened; it just reacts to the event. That's the point of the abstraction.
+## Output and visual state
 
-## 4. Mode transitions are atomic from the frontend's view
+The priority order is:
 
-The frontend never sees half-states. The only signals it gets are:
+`listening → transcribing → thinking → speaking → idle`
 
-- `AvatarDirective` (one at a time, replaces previous),
-- `TranscriptPreview` (text frame for the speech bubble),
-- `SpeechBubbleText` (assistant reply progress),
-- `SystemNotice` (mode toggles, errors).
+Speaking begins only when the child reports `playback_started`, never when text
+is queued or WAV synthesis begins. A PTT press cancels the playback process
+before publishing `UserSpeechStarted`. A late event from the terminated process
+cannot overwrite listening because the controller publishes TTS state only for
+its current task.
 
-If TTS is interrupted mid-reply, the frontend sees `TTSInterrupted` -> `AvatarDirective(listening)`; the bubble keeps the partial text. There is no "TTSInterrupted but still speaking" intermediate state.
+With laptop speakers, passive listening pauses during TTS to avoid transcribing
+the avatar itself and resumes after the playback process exits. Explicit PTT
+still interrupts immediately. `barge_in_enabled` should be enabled only with
+headphones or reliable echo cancellation.
 
-## 5. Test coverage
+## Failure behavior
 
-`tests/integration/test_voice_modes.py` covers:
+| Failure | Required behavior |
+|---|---|
+| Piper model missing | Text works; TTS readiness is false; diagnostics identify the model path |
+| TTS job hangs | Process is terminated; the next reply starts a fresh process |
+| STT worker exits | Current voice turn fails clearly; the next voice action recreates the worker |
+| No microphone | Backend and typed chat start normally; voice status is unavailable |
+| OpenRouter error | An LLM error is recorded independently of voice state |
+| WebSocket reconnect | Completed text/history replays; no audio job is replayed |
 
-- `say` cancels and replaces a running utterance.
-- `ptt_down` cancels TTS within 100 ms.
-- `WakeDetected` while TTS plays causes `TTSInterrupted` then `listening`.
-- VAD bounces shorter than `barge_in_grace_ms` do not cancel TTS.
-- Disabling `agent_voice` mid-reply stops at the next chunk boundary and emits `TTSFinished`, not `TTSInterrupted`.
-- Disabling `live_wake` while listening shuts STT cleanly.
+Voice failures are logged under `~/.openmimicry/logs` and exposed in the
+diagnostic bundle. They are not rendered as a blocking conversation overlay.
 
-All of those use the mock adapters; no audio hardware is required in CI.
+## Preflight and acceptance
+
+`scripts/voice_doctor.py` verifies the real dependency and device boundary. It:
+
+1. enumerates at least one microphone and speaker;
+2. runs multiple independent Piper synthesis jobs;
+3. validates every generated WAV;
+4. optionally plays the final sample;
+5. loads the selected Faster-Whisper model and transcribes a generated sample.
+
+On Windows, `start-openrouter-voice.ps1` runs this preflight once per v1.5
+installation and stores a versioned pass marker. Set
+`OPENMIMICRY_VOICE_PREFLIGHT=force` to run it again after changing devices or
+drivers.
+
+CI uses subprocess fakes to verify repeat turns and forced-hang recovery without
+audio hardware. Release acceptance additionally requires the real Windows matrix
+in `docs/V1.5.1_WINDOWS_TESTING.md`.

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-llm"
-version = "1.0.0"
+version = "1.5.1"
 description = "OpenMimicry LLM adapter: LiteLLMAdapter, LLMRouter, MockLLMAdapter."
 readme = "README.md"
 requires-python = ">=3.11"

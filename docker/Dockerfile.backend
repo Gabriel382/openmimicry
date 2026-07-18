@@ -5,8 +5,8 @@
 # resolved virtualenv. The image runs the M6 FastAPI process on
 # port 8000 by default.
 #
-# Build:   docker build -f docker/Dockerfile.backend -t openmimicry-backend:1.0.0 .
-# Run:     docker run --rm -p 8000:8000 openmimicry-backend:1.0.0
+# Build:   docker build -f docker/Dockerfile.backend -t openmimicry-backend:1.5.1 .
+# Run:     docker run --rm -p 8000:8000 openmimicry-backend:1.5.1
 # Compose: docker compose up backend
 
 # --- builder ------------------------------------------------------------

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 __all__ = ["PackSwapRequest", "RuntimeSwapRequest", "router"]
@@ -30,14 +30,34 @@ class RuntimeSwapRequest(BaseModel):
 router = APIRouter()
 
 
+@router.get("/packs")
+async def packs(request: Request) -> dict[str, object]:
+    return {"packs": request.app.state.character_registry.list()}
+
+
+@router.post("/pack/import", status_code=201)
+async def pack_import(
+    request: Request,
+    filename: str = Query(default="character.zip", max_length=255),
+) -> dict[str, object]:
+    try:
+        result = request.app.state.character_registry.install_zip(
+            await request.body(), filename=filename
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "pack": result}
+
+
 @router.post("/pack/swap")
 async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]:
     wiring = request.app.state.wiring
     orchestrator = wiring.orchestrator
-    runtime = wiring.avatar_runtime
+    runtime = orchestrator.runtime
     try:
-        await runtime.load_character(req.pack, {})
-    except Exception as exc:  # noqa: BLE001
+        pack_path = request.app.state.character_registry.resolve(req.pack)
+        await runtime.load_character(req.pack, {"pack_path": str(pack_path)})
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Mirror the current directive so the new pack reflects state. The
     # orchestrator owns ``_current``; we ask it (best-effort, via getattr).
@@ -45,7 +65,7 @@ async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]
     if current is not None:
         try:
             await runtime.apply_directive(current)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("re-apply current directive after pack swap: %s", exc)
     return {"ok": True, "pack": req.pack}
 
@@ -68,6 +88,7 @@ async def runtime_swap(req: RuntimeSwapRequest, request: Request) -> dict[str, o
     new_runtime = factory()
     try:
         await orchestrator.swap_runtime(new_runtime)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    wiring.avatar_runtime = new_runtime
     return {"ok": True, "runtime": req.runtime}

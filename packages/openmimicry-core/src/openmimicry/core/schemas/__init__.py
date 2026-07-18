@@ -14,6 +14,7 @@ from .app import (
     AvatarConfig,
     HotkeysConfig,
     LLMConfig,
+    LLMBackendConfig,
     LLMFallbackConfig,
     LLMRetryConfig,
     OverlayConfig,
@@ -30,6 +31,7 @@ from .app import (
 )
 from .avatar import AvatarDirective, CharacterPack, Emotion, EmotionFrames, State
 from .events import (
+    AvatarCue,
     ConfigUpdated,
     ConsentRequired,
     ConsentResolved,
@@ -92,6 +94,7 @@ __all__ = [
     # tasks
     "Artifact",
     "AvatarConfig",
+    "AvatarCue",
     # avatar
     "AvatarDirective",
     # vision
@@ -116,6 +119,7 @@ __all__ = [
     # llm
     "LLMChunk",
     "LLMConfig",
+    "LLMBackendConfig",
     "LLMFallbackConfig",
     "LLMMessage",
     "LLMReplyComplete",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-avatar"
-version = "1.0.0"
+version = "1.5.1"
 description = "OpenMimicry avatar core: pack loader, director, orchestrator, mock runtime."
 readme = "README.md"
 requires-python = ">=3.11"

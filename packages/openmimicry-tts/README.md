@@ -4,8 +4,8 @@
 architecture](../../docs/architecture/README.md).
 
 This package lives in the **effector layer** of OpenMimicry. It
-contains the text-to-speech half of the voice runtime: a mock for
-testing and a RealtimeTTS-backed adapter for production.
+contains the text-to-speech half of the voice runtime: a mock for testing,
+the disposable Piper job used by v1.5, and a legacy RealtimeTTS adapter.
 
 ## Why this package exists
 
@@ -36,7 +36,10 @@ behaviour; it only renames it for the effector-layer consumer.
 |--------|--------------|
 | `TTSAdapter` | The Protocol every TTS adapter must satisfy. Re-exported from `openmimicry.core.contracts.voice`. |
 | `MockTTSAdapter` | Zero-dependency mock. Canonical fixture for the other layers' tests. |
-| `RealtimeTTSAdapter` | RealtimeTTS-backed adapter. Supports Coqui/Piper/Azure/OpenAI/System engines via the underlying library. Heavy deps lazy-imported. |
+| `IsolatedPiperTTSAdapter` | Supported runtime. Synthesizes and plays each reply in a fresh, killable process. |
+| `IsolatedPiperSettings` | Piper model directory and worker lifecycle settings. |
+| `IsolatedTTSUnavailable` | Actionable startup/runtime failure for the isolated job. |
+| `RealtimeTTSAdapter` | Legacy RealtimeTTS compatibility adapter. Heavy deps lazy-imported. |
 | `RealtimeTTSSettings` | Pydantic settings for the RealtimeTTS adapter. |
 | `RealtimeTTSUnavailable` | Raised when RealtimeTTS isn't installed. Used to fall back to mocks. |
 
@@ -46,7 +49,10 @@ behaviour; it only renames it for the effector-layer consumer.
 # Mocks only (recommended for CI, dev workstations without audio out)
 pip install openmimicry-tts
 
-# With RealtimeTTS runtime (audio-device-bound)
+# Supported isolated runtime
+pip install "openmimicry-tts[voice]"
+
+# Legacy compatibility runtime
 pip install "openmimicry-tts[realtimetts]"
 ```
 

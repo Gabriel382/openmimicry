@@ -18,6 +18,7 @@ the tests inspect.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -54,10 +55,8 @@ async def wiring(integration_config: AppConfig) -> AsyncIterator[Wiring]:
         yield w
     finally:
         # Mirror main.py's graceful shutdown budget.
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(_teardown(w), timeout=2.0)
-        except asyncio.TimeoutError:
-            pass
 
 
 async def _teardown(w: Wiring) -> None:
@@ -95,7 +94,12 @@ def client_factory(integration_config: AppConfig) -> Any:
                 )
 
             async def _apply_mode_toggle(key: str, value: bool) -> None:
-                if key == "live_wake":
+                if key == "continuous_listening":
+                    if value:
+                        await w.speech.enable_continuous_listening()
+                    else:
+                        await w.speech.disable_live_listening()
+                elif key == "live_wake":
                     if value:
                         await w.speech.enable_live_listening(wake_names=None)
                     else:
@@ -103,10 +107,37 @@ def client_factory(integration_config: AppConfig) -> Any:
                 elif key == "agent_voice" and not value:
                     await w.speech.interrupt()
 
+            def _get_mode_status() -> dict[str, object]:
+                return {
+                    "continuous_listening": w.speech.continuous_listening,
+                    "live_wake": False,
+                    "agent_voice": True,
+                    "ptt_active": w.speech.ptt_active,
+                    "listening_mode": w.speech.listening_mode,
+                    "wake_names": w.speech.wake_names,
+                    "stt_adapter": w.stt.name,
+                    "tts_adapter": w.tts.name,
+                    "real_input": False,
+                    "real_output": False,
+                }
+
+            async def _cancel_task(raw_handle: dict[str, object]) -> None:
+                from openmimicry.core import TaskHandle
+
+                await w.tasks.cancel(TaskHandle.model_validate(raw_handle))
+
             _app.state.wiring = w
             _app.state.bridge = w.bridge or BroadcastBridge()
             _app.state.handle_user_text = _handle_user_text
             _app.state.apply_mode_toggle = _apply_mode_toggle
+            _app.state.get_mode_status = _get_mode_status
+            _app.state.mode_state = {
+                "continuous_listening": False,
+                "live_wake": False,
+                "agent_voice": True,
+                "wake_names": w.speech.wake_names,
+            }
+            _app.state.cancel_task = _cancel_task
             yield
 
         app.router.lifespan_context = _lifespan

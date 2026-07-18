@@ -3,7 +3,7 @@
 //! manual smoke test.
 
 use openmimicry_desktop_lib::hotkeys::{
-    parse_shortcut, DEFAULT_PTT, DEFAULT_TOGGLE_INTERACT, DEFAULT_TOGGLE_PANEL,
+    parse_shortcut, DEFAULT_OPEN_DASHBOARD, DEFAULT_PTT, DEFAULT_TOGGLE_INTERACT,
 };
 use tauri_plugin_global_shortcut::{Code, Modifiers};
 
@@ -11,7 +11,7 @@ use tauri_plugin_global_shortcut::{Code, Modifiers};
 fn defaults_parse_without_error() {
     parse_shortcut(DEFAULT_PTT).unwrap();
     parse_shortcut(DEFAULT_TOGGLE_INTERACT).unwrap();
-    parse_shortcut(DEFAULT_TOGGLE_PANEL).unwrap();
+    parse_shortcut(DEFAULT_OPEN_DASHBOARD).unwrap();
 }
 
 #[test]

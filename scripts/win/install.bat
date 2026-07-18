@@ -22,6 +22,11 @@ set "PY=%VENV%\Scripts\python.exe"
 "%PY%" -m pip install -e packages\openmimicry-core      || goto :error
 "%PY%" -m pip install -e packages\openmimicry-llm       || goto :error
 "%PY%" -m pip install -e packages\openmimicry-voice     || goto :error
+if /i "%PROFILE%"=="voice" "%PY%" -m pip install -e "packages\openmimicry-voice[voice]" || goto :error
+if /i "%PROFILE%"=="openrouter-voice" (
+    "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
+    "%PY%" -m pip install -e "packages\openmimicry-voice[voice]" || goto :error
+)
 "%PY%" -m pip install -e packages\openmimicry-avatar    || goto :error
 "%PY%" -m pip install -e packages\openmimicry-tasks     || goto :error
 if exist packages\openmimicry-vision (

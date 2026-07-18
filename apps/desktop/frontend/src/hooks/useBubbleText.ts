@@ -7,8 +7,8 @@
  * - On a complete message (`complete: true`), REPLACE the buffer with the
  *   full final text. The backend's `LLMReplyComplete` projector sends the
  *   whole reply on `complete`, not just the trailing delta.
- * - On an `avatar.directive` whose `state === "listening"`, clear the
- *   buffer so the bubble doesn't carry stale text into the next turn.
+ * - A completed reply remains visible for a configurable reading-time
+ *   formula. The next partial replaces it immediately.
  */
 
 import { useEffect, useState } from "react";
@@ -22,13 +22,26 @@ export interface BubbleState {
 
 const EMPTY: BubbleState = { text: "", complete: true };
 
-export function useBubbleText(): BubbleState {
+export interface BubbleTiming {
+  base_ms: number;
+  ms_per_character: number;
+  max_ms: number;
+}
+
+const DEFAULT_TIMING: BubbleTiming = {
+  base_ms: 2500,
+  ms_per_character: 55,
+  max_ms: 30000,
+};
+
+export function useBubbleText(timing: BubbleTiming = DEFAULT_TIMING): BubbleState {
   const ws = useWS();
   const [state, setState] = useState<BubbleState>(EMPTY);
 
   useEffect(() => {
     const offText = ws.subscribe("bubble.text", (msg) => {
       setState((prev) => {
+        if (msg.reset) return EMPTY;
         if (msg.complete) return { text: msg.text, complete: true };
         return {
           text: (prev.complete ? "" : prev.text) + msg.text,
@@ -36,16 +49,20 @@ export function useBubbleText(): BubbleState {
         };
       });
     });
-    const offDirective = ws.subscribe("avatar.directive", (msg) => {
-      if (msg.directive?.state === "listening") {
-        setState(EMPTY);
-      }
-    });
     return () => {
       offText();
-      offDirective();
     };
   }, [ws]);
+
+  useEffect(() => {
+    if (!state.text || !state.complete) return;
+    const readingMs = Math.min(
+      timing.max_ms,
+      timing.base_ms + state.text.length * timing.ms_per_character,
+    );
+    const handle = window.setTimeout(() => setState(EMPTY), readingMs);
+    return () => window.clearTimeout(handle);
+  }, [state.complete, state.text, timing.base_ms, timing.max_ms, timing.ms_per_character]);
 
   return state;
 }

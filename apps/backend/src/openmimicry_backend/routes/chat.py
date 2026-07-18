@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
-
-from collections.abc import AsyncIterator, Callable
 
 from fastapi import APIRouter, Request
 from openmimicry.core import (
+    AvatarCue,
     EventBus,
     LLMAdapter,
     LLMMessage,
@@ -41,10 +41,14 @@ from openmimicry.core import (
 )
 from pydantic import BaseModel
 
+from ..llm_response import load_personality, parse_assistant_reply
+
 __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
 
 _log = logging.getLogger(__name__)
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+_MIN_THINKING_SECONDS = 0.65
 
 
 def _now() -> datetime:
@@ -62,10 +66,6 @@ router = APIRouter()
 async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
     wiring = request.app.state.wiring
     bus: EventBus = wiring.bus
-    llm: LLMAdapter = wiring.llm
-    tasks: TaskRuntimeAdapter = wiring.tasks
-    speech: SpeechController = wiring.speech
-    intent_fn: Callable[[str], TaskRequest | None] = wiring.intent
 
     # The WS also publishes UserTextSubmitted on inbound user.text. Here
     # we publish it for callers that hit /chat directly (e.g. curl). The
@@ -74,17 +74,12 @@ async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
     bus.publish(UserTextSubmitted(ts=_now(), text=req.text))
 
     # Background pipeline; the HTTP response returns immediately.
-    asyncio.create_task(
-        run_chat_turn(
-            req.text,
-            bus=bus,
-            llm=llm,
-            tasks=tasks,
-            speech=speech,
-            intent_fn=intent_fn,
-        ),
+    chat_task = asyncio.create_task(
+        request.app.state.handle_user_text(req.text),
         name="openmimicry.backend.chat_turn",
     )
+    _BACKGROUND_TASKS.add(chat_task)
+    chat_task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"status": "accepted"}
 
 
@@ -96,7 +91,8 @@ async def run_chat_turn(
     tasks: TaskRuntimeAdapter,
     speech: SpeechController | None = None,
     intent_fn: Callable[[str], TaskRequest | None] | None = None,
-) -> None:
+    history: Sequence[LLMMessage] = (),
+) -> str | None:
     """The actual chat/task pipeline. Exposed for direct use in tests.
 
     ``intent_fn`` defaults to lazy-importing ``openmimicry.tasks.detect_task_intent``
@@ -108,8 +104,8 @@ async def run_chat_turn(
     intent = classifier(text)
     if intent is not None:
         await _run_task_path(intent, bus=bus, tasks=tasks)
-        return
-    await _run_llm_path(text, bus=bus, llm=llm, speech=speech)
+        return None
+    return await _run_llm_path(text, bus=bus, llm=llm, speech=speech, history=history)
 
 
 def _lazy_intent_classifier() -> Callable[[str], TaskRequest | None]:
@@ -118,7 +114,7 @@ def _lazy_intent_classifier() -> Callable[[str], TaskRequest | None]:
     Pushing the import out of module-load lets `routes.chat` stay clean
     of sibling-package imports at the top of the file.
     """
-    from openmimicry.tasks import detect_task_intent  # noqa: PLC0415
+    from openmimicry.tasks import detect_task_intent
 
     return detect_task_intent
 
@@ -137,14 +133,10 @@ async def _run_task_path(
     # `detect_task_intent` returns a fully-formed TaskRequest.
     try:
         handle = await tasks.submit(request_obj)  # type: ignore[arg-type]
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
-        bus.publish(
-            ErrorEvent(
-                ts=_now(), where="backend.chat.task", message=str(exc)
-            )
-        )
+        bus.publish(ErrorEvent(ts=_now(), where="backend.chat.task", message=str(exc)))
         return
 
     bus.publish(
@@ -159,7 +151,7 @@ async def _run_task_path(
     try:
         async for update in tasks.updates(handle):
             bus.publish(TaskUpdatedEvent(ts=_now(), update=update))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
         bus.publish(
@@ -172,7 +164,7 @@ async def _run_task_path(
 
     try:
         result = await tasks.result(handle)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         from openmimicry.core import ErrorEvent
 
         bus.publish(
@@ -198,48 +190,57 @@ async def _run_llm_path(
     bus: EventBus,
     llm: LLMAdapter,
     speech: SpeechController | None,
-) -> None:
+    history: Sequence[LLMMessage] = (),
+) -> str | None:
     bus.publish(LLMStarted(ts=_now()))
+    thinking_started = asyncio.get_running_loop().time()
 
-    # Per the M6 brief's chat-flow ordering (avatar.directive thinking ->
-    # bubble.text partials -> avatar.directive speaking -> bubble.text
-    # complete -> avatar.directive idle), we feed the speech controller
-    # an async generator that yields deltas as they stream. TTSStarted
-    # (published by SpeechController) drives the "speaking" transition.
-    captured: dict[str, str] = {"full_text": ""}
+    settings = load_personality()
+    messages = [
+        LLMMessage(role="system", content=settings.system_prompt),
+        *history,
+        LLMMessage(role="user", content=text),
+    ]
+    raw_parts: list[str] = []
+    try:
+        async for chunk in llm.generate(messages):
+            if chunk.delta:
+                raw_parts.append(chunk.delta)
+    except Exception as exc:
+        from openmimicry.core import ErrorEvent
 
-    async def _delta_stream() -> AsyncIterator[str]:
+        bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
+
+    reply = parse_assistant_reply("".join(raw_parts), settings)
+    # Fast local/mock models can otherwise advance from thinking to the reply
+    # inside one paint frame. Keep the thinking animation perceptible without
+    # adding latency to ordinary network LLM calls that already exceed it.
+    thinking_elapsed = asyncio.get_running_loop().time() - thinking_started
+    if reply.text and thinking_elapsed < _MIN_THINKING_SECONDS:
+        await asyncio.sleep(_MIN_THINKING_SECONDS - thinking_elapsed)
+    # The LLM response is already fully collected so its emotion/action JSON
+    # can be parsed. Publish one display update instead of artificial chunks:
+    # this clears the prior turn and prevents append-only UI artefacts.
+    if reply.text:
+        bus.publish(LLMTokenStreamed(ts=_now(), delta=reply.text))
+
+    # Text/LLM delivery is the primary contract.  Audio is deliberately not a
+    # gate: a missing speaker, failed voice model, or killed playback process
+    # cannot hide the reply or block the next turn.
+    bus.publish(LLMReplyComplete(ts=_now(), full_text=reply.text))
+
+    bus.publish(
+        AvatarCue(
+            ts=_now(),
+            emotion=reply.emotion,
+            action=reply.action,
+            intensity=reply.intensity,
+            duration_ms=reply.duration_ms,
+        )
+    )
+    if speech is not None and reply.text:
         try:
-            stream = llm.generate([LLMMessage(role="user", content=text)])
-            async for chunk in stream:
-                if not chunk.delta:
-                    continue
-                captured["full_text"] += chunk.delta
-                bus.publish(LLMTokenStreamed(ts=_now(), delta=chunk.delta))
-                yield chunk.delta
-        except Exception as exc:  # noqa: BLE001
-            from openmimicry.core import ErrorEvent
-
-            bus.publish(
-                ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc))
-            )
-
-    if speech is not None:
-        # The speech controller cancels any previous utterance and runs
-        # the new one as a background task. We wait for it to finish so
-        # `LLMReplyComplete` is published only after the avatar has had
-        # a chance to leave the "speaking" state.
-        await speech.say(_delta_stream())
-        # Wait for the in-flight TTS task to complete (best-effort).
-        task = getattr(speech, "_current_tts_task", None)
-        if task is not None:
-            import contextlib
-
-            with contextlib.suppress(Exception):
-                await task
-    else:
-        # No speech controller: just drain the generator to publish deltas.
-        async for _ in _delta_stream():
-            pass
-
-    bus.publish(LLMReplyComplete(ts=_now(), full_text=captured["full_text"]))
+            await speech.say(reply.text)
+        except Exception as exc:
+            _log.warning("could not queue reply audio: %s", exc, exc_info=True)
+    return reply.text or None

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-stt"
-version = "1.0.0"
-description = "OpenMimicry sensor layer (STT facade): RealtimeSTT adapter, WakeController, mocks. Re-exports the STT half of openmimicry-voice."
+version = "1.5.1"
+description = "OpenMimicry sensor layer: isolated Faster-Whisper STT, legacy adapter, controllers, and mocks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -28,6 +28,7 @@ dependencies = [
 # the `realtimestt` extra here is equivalent to installing it on
 # openmimicry-voice — kept for ergonomic parity.
 realtimestt = ["openmimicry-voice[realtimestt]>=1.0.0"]
+voice = ["openmimicry-voice[voice]>=1.5.1"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",

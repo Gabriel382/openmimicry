@@ -11,8 +11,8 @@ Exports
 
 * :class:`TTSAdapter` — re-exported Protocol from ``openmimicry.core``.
 * :class:`MockTTSAdapter` — zero-dependency mock for unit tests.
-* :class:`RealtimeTTSAdapter` — RealtimeTTS-backed adapter
-  (lazy-imports heavy deps).
+* :class:`IsolatedPiperTTSAdapter` — supported per-utterance runtime.
+* :class:`RealtimeTTSAdapter` — legacy RealtimeTTS compatibility adapter.
 * :class:`RealtimeTTSSettings`, :class:`RealtimeTTSUnavailable`.
 
 Usage
@@ -29,6 +29,9 @@ package version is exposed as :data:`source_package_version`.
 from __future__ import annotations
 
 from openmimicry.voice import (
+    IsolatedPiperSettings,
+    IsolatedPiperTTSAdapter,
+    IsolatedTTSUnavailable,
     MockTTSAdapter,
     RealtimeTTSAdapter,
     RealtimeTTSSettings,
@@ -38,6 +41,9 @@ from openmimicry.voice import (
 from openmimicry.voice import __version__ as source_package_version
 
 __all__ = [
+    "IsolatedPiperSettings",
+    "IsolatedPiperTTSAdapter",
+    "IsolatedTTSUnavailable",
     "MockTTSAdapter",
     "RealtimeTTSAdapter",
     "RealtimeTTSSettings",
@@ -46,4 +52,4 @@ __all__ = [
     "source_package_version",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.5.1"
