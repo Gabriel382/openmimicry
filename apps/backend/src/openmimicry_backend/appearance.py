@@ -87,8 +87,9 @@ class LayoutAppearance(BaseModel):
 class BubbleBehaviour(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    base_ms: int = Field(default=2500, ge=0, le=60000)
+    base_ms: int = Field(default=1500, ge=0, le=60000)
     ms_per_character: int = Field(default=55, ge=0, le=1000)
+    min_ms: int = Field(default=2500, ge=0, le=60000)
     max_ms: int = Field(default=30000, ge=1000, le=300000)
 
 

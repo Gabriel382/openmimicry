@@ -2,6 +2,7 @@
   "include": [
     "packages/openmimicry-core/src",
     "packages/openmimicry-llm/src",
+    "packages/openmimicry-memory/src",
     "packages/openmimicry-voice/src",
     "packages/openmimicry-avatar/src",
     "packages/openmimicry-tasks/src",
@@ -34,6 +35,7 @@
   "extraPaths": [
     "packages/openmimicry-core/src",
     "packages/openmimicry-llm/src",
+    "packages/openmimicry-memory/src",
     "packages/openmimicry-voice/src",
     "packages/openmimicry-avatar/src",
     "packages/openmimicry-tasks/src",

@@ -44,6 +44,43 @@ def test_dashboard_exposes_configurable_name_gated_wake_listening() -> None:
     assert 'href="/diagnostics/bundle"' in text
 
 
+def test_dashboard_exposes_v16_configuration_surfaces() -> None:
+    html_path = (
+        Path(__file__).resolve().parents[3]
+        / "apps/backend/src/openmimicry_backend/static/dashboard.html"
+    )
+    text = html_path.read_text(encoding="utf-8")
+    for element_id in (
+        "presentation-mode",
+        "llm-backend",
+        "llm-model-select",
+        "personality-prompt",
+        "memory-enabled",
+        "memory-provider",
+        "memory-extraction",
+        "voice-clone-form",
+        "voice-token-form",
+        "pack-create-form",
+    ):
+        assert f'id="{element_id}"' in text
+
+
+def test_dashboard_prevents_invalid_enabled_memory_provider_pair() -> None:
+    root = Path(__file__).resolve().parents[3]
+    html = (root / "apps/backend/src/openmimicry_backend/static/dashboard.html").read_text(
+        encoding="utf-8"
+    )
+    javascript = (root / "apps/backend/src/openmimicry_backend/static/dashboard.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "None (memory off)" in html
+    assert "Turning memory on defaults to private Local SQLite storage." in html
+    assert 'provider.value = "local"' in javascript
+    assert 'enabled.value = "false"' in javascript
+    assert 'throw new Error("Select Local SQLite or Hindsight' in javascript
+
+
 async def test_late_dashboard_receives_the_latest_task_card() -> None:
     bridge = BroadcastBridge()
     await bridge.publish(

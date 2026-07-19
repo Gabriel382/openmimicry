@@ -24,7 +24,7 @@ def test_load_reads_yaml(tmp_path: Path) -> None:
     yaml.write_text(
         dedent(
             """
-            schema_version: 1
+            schema_version: 2
             app:
               log_level: DEBUG
             llm:
@@ -41,7 +41,7 @@ def test_load_reads_yaml(tmp_path: Path) -> None:
 
 def test_env_override_wins(tmp_path: Path) -> None:
     yaml = tmp_path / "app.yaml"
-    yaml.write_text("schema_version: 1\napp: { log_level: INFO }\n", encoding="utf-8")
+    yaml.write_text("schema_version: 2\napp: { log_level: INFO }\n", encoding="utf-8")
     cfg = load(
         yaml,
         env={"OPENMIMICRY__APP__LOG_LEVEL": "WARNING"},
@@ -51,7 +51,7 @@ def test_env_override_wins(tmp_path: Path) -> None:
 
 def test_env_override_booleans_and_numbers(tmp_path: Path) -> None:
     yaml = tmp_path / "app.yaml"
-    yaml.write_text("schema_version: 1\n", encoding="utf-8")
+    yaml.write_text("schema_version: 2\n", encoding="utf-8")
     cfg = load(
         yaml,
         env={
@@ -69,7 +69,7 @@ def test_env_override_booleans_and_numbers(tmp_path: Path) -> None:
 
 def test_env_override_accepts_json_list(tmp_path: Path) -> None:
     yaml = tmp_path / "app.yaml"
-    yaml.write_text("schema_version: 1\n", encoding="utf-8")
+    yaml.write_text("schema_version: 2\n", encoding="utf-8")
     cfg = load(
         yaml,
         env={"OPENMIMICRY__VOICE__STT__WAKE__NAMES": '["A","B"]'},
@@ -85,7 +85,7 @@ def test_profile_overlay_merges_on_top_of_base(tmp_path: Path) -> None:
     base.write_text(
         dedent(
             """
-            schema_version: 1
+            schema_version: 2
             app: { log_level: INFO }
             llm: { adapter: litellm }
             """
@@ -109,7 +109,7 @@ def test_user_overlay_wins_over_profile_but_env_still_wins(tmp_path: Path) -> No
     config_dir = tmp_path / "config"
     profile_dir = config_dir / "profiles"
     profile_dir.mkdir(parents=True)
-    (config_dir / "app.yaml").write_text("schema_version: 1\n", encoding="utf-8")
+    (config_dir / "app.yaml").write_text("schema_version: 2\n", encoding="utf-8")
     (profile_dir / "voice.yaml").write_text(
         "voice: { stt: { wake: { names: [ProfileName] } } }\n",
         encoding="utf-8",
@@ -174,7 +174,7 @@ def test_validation_error_surfaces_as_config_error(tmp_path: Path) -> None:
     yaml.write_text(
         dedent(
             """
-            schema_version: 1
+            schema_version: 2
             app:
               log_level: NOPE
             """
@@ -183,6 +183,26 @@ def test_validation_error_surfaces_as_config_error(tmp_path: Path) -> None:
     )
     with pytest.raises(ConfigError):
         load(yaml, env={})
+
+
+def test_v1_requires_explicit_migration(tmp_path: Path) -> None:
+    yaml = tmp_path / "app.yaml"
+    yaml.write_text("schema_version: 1\n", encoding="utf-8")
+    with pytest.raises(SchemaVersionError):
+        load(yaml, env={})
+
+
+def test_v1_migration_is_in_memory_and_preserves_source(tmp_path: Path) -> None:
+    yaml = tmp_path / "app.yaml"
+    source = "schema_version: 1\nvoice: { modes: { text_always_on: false, agent_voice: true } }\n"
+    yaml.write_text(source, encoding="utf-8")
+
+    cfg = load(yaml, env={}, allow_migrate=True)
+
+    assert cfg.schema_version == 2
+    assert cfg.interaction.response_presentation.mode == "voice_only"
+    assert cfg.memory.enabled is False
+    assert yaml.read_text(encoding="utf-8") == source
 
 
 def test_diff_dicts_only_changed_leaves() -> None:

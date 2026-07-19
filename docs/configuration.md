@@ -25,7 +25,7 @@ The merge is deep for nested dicts and replacement for scalars/lists. The final 
 ## 2. Top-level schema
 
 ```yaml
-schema_version: 1
+schema_version: 2
 
 app:
   log_level: INFO              # DEBUG | INFO | WARNING | ERROR
@@ -39,7 +39,7 @@ llm:
   backends:
     openrouter:
       adapter: litellm
-      model: openrouter/openai/gpt-4o-mini
+      model: openrouter/openai/gpt-oss-20b
       api_key_env: OPENROUTER_API_KEY
       request_timeout_s: 90
     ollama:
@@ -69,12 +69,13 @@ voice:
       aliases: ["Me me"]
       sensitivity: 0.6
   tts:
-    adapter: isolated-piper     # supported default | mock | legacy realtimetts
-    engine: piper
-    voice: en_US-lessac-medium
+    adapter: system-command     # mock | system-command | isolated-piper | chatterbox-local | elevenlabs
+    engine: system
+    voice: system-default
     data_dir: ~/.openmimicry/voices
     rate: 1.0
     interruptible: true
+    readiness_timeout_s: 30     # up to 180 for cold-start clone models
   modes:
     text_always_on: true
     push_to_talk_hotkey: "Ctrl+Space"
@@ -83,6 +84,32 @@ voice:
     agent_voice: true
     barge_in_enabled: false      # safe default for laptop speakers
     barge_in_grace_ms: 600
+
+interaction:
+  response_presentation:
+    mode: parallel              # parallel | voice_ready | text_only | voice_only
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+memory:
+  enabled: false                # no retention until explicitly enabled
+  provider: none                # none | local | hindsight
+  database_path: ~/.openmimicry/memory/memory.sqlite3
+  endpoint: null                # required for enabled Hindsight
+  retrieval_limit: 6
+  retrieval_deadline_ms: 150
+  retention_days: 365           # local SQLite; null means no automatic expiry
+  extraction_mode: deterministic # deterministic | llm
+  llm_backend: null             # independent named backend for LLM extraction
+  store_raw_audio: false        # invariant; true is rejected
+
+distribution:
+  profile: commercial           # core | local | cloud | commercial | community
+  reject_licenses: [GPL, AGPL, non-commercial, CC-BY-NC, research-only, unknown]
 
 avatar:
   runtime: sprite2d            # sprite2d | advanced2d | threejs | vrm | live3d | unity | external | mock
@@ -163,7 +190,7 @@ Every section maps 1:1 to a Pydantic model in `openmimicry.core.schemas.app`. Mo
 Double-underscore separates levels:
 
 ```bash
-export OPENMIMICRY__LLM__MODEL=openrouter/anthropic/claude-3.5-haiku
+export OPENMIMICRY__LLM__BACKENDS__OPENROUTER__MODEL=openrouter/anthropic/claude-3.5-haiku
 export OPENMIMICRY__VOICE__MODES__AGENT_VOICE=false
 export OPENMIMICRY__UI__OVERLAY__CLICK_THROUGH_DEFAULT=false
 ```
@@ -197,12 +224,11 @@ The reloader watches the active config file with `watchfiles`, re-merges env ove
 
 ## 5. Schema versioning
 
-`schema_version: 1` is mandatory. Future major bumps:
-
-- v2 might split `voice.tts` into engine-specific subtrees.
-- v2 might add a `personalities` section.
-
-Each bump ships with a migration function in `openmimicry.core.config.migrations` and the runtime refuses to load an older version unless `--allow-config-migrate` is passed.
+`schema_version: 2` is current. The loader contains a deterministic v1→v2
+migration for legacy single-LLM and voice configurations. The backend opts into
+that migration in memory and never overwrites the source file. Library callers
+remain strict unless they pass `allow_migrate=True`; a version newer than the
+running code is always rejected.
 
 ## 6. Profiles
 
@@ -213,7 +239,14 @@ merged on top of `config/app.yaml`; choosing one is, for example,
 - `basic.yaml` — Sprite2D with mock LLM, voice, and tasks; no key/network/audio.
 - `openrouter-voice.yaml` — OpenRouter through LiteLLM, isolated local
   Faster-Whisper/Piper voice, plus a dashboard-selectable Ollama `gpt-oss:20b`
-  backend. It keeps the last four successful interactions as LLM context.
+  backend. This is a community/GPL profile because current Piper is GPL-3.0.
+- `openrouter-commercial.yaml` — OpenRouter/Ollama, isolated Faster-Whisper,
+  and dependency-free operating-system TTS; no Piper installation.
+- `openrouter-chatterbox.yaml` — free local Chatterbox voice cloning in a
+  prewarmed disposable worker. Explicit consent and a reference recording are
+  required; this is an opt-in community profile.
+- `openrouter-elevenlabs.yaml` — remote BYOK voice selected in an ElevenLabs
+  account. The API token remains in an environment variable or process memory.
 - `vision.yaml` — mocks plus the opt-in MediaPipe vision demonstration.
 
 The install profile and `OPENMIMICRY_PROFILE` must use the same name when

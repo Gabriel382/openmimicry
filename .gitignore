@@ -47,6 +47,10 @@ config/user.yaml
 .env.*
 !.env.example
 
+# --- Characters ------------------------------------------------------
+characters/glados/
+
+
 # --- IDE / OS noise ------------------------------------------------------
 .idea/
 .vscode/

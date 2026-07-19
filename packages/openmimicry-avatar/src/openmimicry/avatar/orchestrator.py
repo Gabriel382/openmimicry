@@ -53,6 +53,7 @@ class AvatarOrchestrator:
         self._current: AvatarDirective | None = None
         self._subscriber_task: asyncio.Task[None] | None = None
         self._return_handle: asyncio.TimerHandle | None = None
+        self._return_tasks: set[asyncio.Task[None]] = set()
         self._started: bool = False
         self._lock = asyncio.Lock()
 
@@ -103,6 +104,11 @@ class AvatarOrchestrator:
             return
         self._started = False
         self._cancel_return_timer()
+        for task in self._return_tasks:
+            task.cancel()
+        if self._return_tasks:
+            await asyncio.gather(*self._return_tasks, return_exceptions=True)
+            self._return_tasks.clear()
         if self._subscriber_task is not None:
             self._subscriber_task.cancel()
             with suppress(asyncio.CancelledError, Exception):
@@ -119,13 +125,13 @@ class AvatarOrchestrator:
                 await self._handle_event(event)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("AvatarOrchestrator: bus consumer crashed: %s", exc, exc_info=True)
 
     async def _handle_event(self, event: Any) -> None:
         try:
             directive = self._director.on_event(event)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning(
                 "AvatarDirector raised on %s: %s",
                 getattr(event, "kind", "?"),
@@ -145,10 +151,8 @@ class AvatarOrchestrator:
 
             try:
                 await self._runtime.apply_directive(directive)
-            except Exception as exc:  # noqa: BLE001
-                _log.warning(
-                    "runtime.apply_directive raised: %s", exc, exc_info=True
-                )
+            except Exception as exc:
+                _log.warning("runtime.apply_directive raised: %s", exc, exc_info=True)
                 return
             self._current = directive
 
@@ -163,12 +167,14 @@ class AvatarOrchestrator:
     def _fire_return(self, next_state: str) -> None:
         """Timer callback: schedule the return-to-idle dispatch on the loop."""
         loop = asyncio.get_running_loop()
-        loop.create_task(self._do_return(next_state), name="openmimicry.avatar.return")
+        task = loop.create_task(self._do_return(next_state), name="openmimicry.avatar.return")
+        self._return_tasks.add(task)
+        task.add_done_callback(self._return_tasks.discard)
 
     async def _do_return(self, next_state: str) -> None:
         try:
             directive = self._director.apply_return_to(next_state)  # type: ignore[arg-type]
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.warning("director.apply_return_to raised: %s", exc, exc_info=True)
             return
         await self._dispatch(directive)

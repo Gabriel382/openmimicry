@@ -1,5 +1,5 @@
 # OpenRouter plus crash-contained local STT and Piper TTS.
-schema_version: 1
+schema_version: 2
 
 llm:
   active_backend: openrouter
@@ -7,12 +7,15 @@ llm:
   backends:
     openrouter:
       adapter: litellm
-      model: openrouter/openai/gpt-4o-mini
+      provider: openrouter
+      # "GPT-20" default: OpenAI's 20B open-weight model on OpenRouter.
+      model: openrouter/openai/gpt-oss-20b
       api_key_env: OPENROUTER_API_KEY
       temperature: 0.6
       request_timeout_s: 90
     ollama:
       adapter: litellm
+      provider: ollama
       model: ollama_chat/gpt-oss:20b
       api_base: http://127.0.0.1:11434
       api_key_env: null
@@ -57,6 +60,25 @@ voice:
     agent_voice: true
     # Laptop speakers are otherwise often mistaken for user speech.
     barge_in_enabled: false
+
+interaction:
+  response_presentation:
+    mode: parallel
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+memory:
+  enabled: false
+  provider: none
+
+# isolated-piper is retained for existing users but is a community-profile
+# component. Select the commercial profile to exclude it from redistributions.
+distribution:
+  profile: community
 
 tasks:
   default_runtime: mock

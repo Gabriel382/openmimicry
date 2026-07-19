@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.4] — Chatterbox Perth startup repair
+
+### Fixed
+
+- Detect the defective `resemble-perth` state where the package imports but
+  `PerthImplicitWatermarker` is `None`; this state can no longer produce a
+  misleading successful runtime report.
+- Repair only Perth from the official MIT upstream repository at immutable
+  commit `ce86c49d029f42272c1902eccb675556b9ed2330`, while preserving the
+  verified Torch, Torchaudio, Torchvision, CUDA, and NumPy installation.
+- Resolve the real Perth constructor before Chatterbox model construction and
+  surface the underlying import failure instead of Chatterbox's unhelpful
+  `'NoneType' object is not callable` exception.
+- Keep Chatterbox's audio watermark active. OpenMimicry never substitutes the
+  Perth dummy/no-watermark implementation.
+
+### Diagnostics
+
+- Runtime reports now include Perth's installed version, package origin, and
+  `perth_watermarker_callable` result. The v1.6.4 preflight marker is written
+  only after the real Chatterbox Turbo model loads successfully.
+
+## [1.6.3] — unified and non-destructive Chatterbox setup
+
+### Fixed
+
+- Accepted CUDA build suffixes such as `torchvision 0.21.0+cu126` when
+  verifying the PyTorch 2.6 version triplet.
+- Preserved a complete CUDA runtime that already imports, sees the GPU, and
+  matches Chatterbox instead of guessing CUDA 11.8 when `nvidia-smi` omits its
+  banner version and downloading a multi-gigabyte downgrade.
+- Limited Torch repairs to Torch, Torchvision, and Torchaudio with `--no-deps`
+  so an accelerator repair cannot unnecessarily reinstall NumPy and unrelated
+  application dependencies.
+
+### Changed
+
+- Folded Chatterbox detection, installation repair, verification, model
+  prewarming, profile selection, and startup into the existing Windows
+  `start-openrouter-voice.ps1` flow.
+- Removed the separate Chatterbox PowerShell and shell launchers. Installation
+  remains an ordinary `openrouter-chatterbox` profile; execution uses the same
+  voice/backend entry points as the other providers.
+
+## [1.6.2] — reliable Chatterbox installation and NumPy 2 compatibility
+
+### Fixed
+
+- Kept Chatterbox 0.1.7 reference conditioning in float32 inside its isolated
+  worker, fixing `expected scalar type Double but found Float` with NumPy 2.x
+  without modifying files under `.venv`.
+- Added hardware-aware installation of the official, version-matched PyTorch
+  2.6 CUDA wheels when an NVIDIA GPU is present; macOS retains its MPS-capable
+  platform wheel and CPU remains a deliberate fallback.
+- Added dedicated Windows and Unix Chatterbox launchers with dependency
+  repair, CUDA verification, bounded one-time model prewarming, the correct
+  profile, and a 180-second cold-start deadline.
+- Persisted the Chatterbox readiness deadline alongside dashboard provider
+  selection so a former Piper configuration cannot retain a 30-second limit.
+- Prevented two-second HTTP health checks from cold-starting or orphaning a
+  multi-gigabyte Chatterbox worker after cancellation.
+
+### Diagnostics
+
+- Worker handshakes now report device, Torch/CUDA, NumPy, and compatibility
+  status, while startup and synthesis failures include stable error codes and
+  retain their child-process tracebacks in diagnostics.
+
+### Tests
+
+- Added regressions for NumPy 2 float promotion, hardware channel selection,
+  unsupported Blackwell/Torch combinations, non-starting health checks,
+  dashboard timeout persistence, and the dedicated Windows launcher.
+
+## [1.6.1] — memory settings validation hotfix
+
+### Fixed
+
+- Prevented the dashboard from submitting the invalid combination of enabled
+  long-term memory with the `none` provider. Enabling memory now defaults to
+  private Local SQLite storage, while choosing `None` turns memory off.
+- Converted nested memory-configuration validation failures into safe HTTP 422
+  responses instead of uncaught HTTP 500 errors and server tracebacks.
+- Added an explicit endpoint check for enabled Hindsight memory and readable
+  dashboard error messages for rejected settings.
+- Included `openmimicry-memory` in Pyright source resolution while retaining a
+  narrow ignore for its intentionally optional Hindsight client import.
+
+### Tests
+
+- Added regression coverage for `enabled + none`, Hindsight without an
+  endpoint, non-persistence of invalid settings, and dashboard normalization.
+
+## [1.6.0] — configurable interaction, optional memory, and voice providers
+
+### Added
+
+- Four utterance-correlated reply-presentation modes with a character-based
+  reading timer and speech-terminal hold.
+- Named OpenRouter/Ollama backends, bounded catalog discovery, model roles,
+  session-only tokens, and editable personality.
+- Disabled-by-default SQLite/Hindsight memory with deterministic or independent
+  LLM extraction, deadlines, retention, local CRUD, and export.
+- Hardened character ZIP import, simple Sprite2D authoring, and a versioned
+  template archive.
+- OS-native TTS, free local consent-gated Chatterbox cloning, ElevenLabs BYOK,
+  schema v2 migration, dependency profiles, and license audit tooling.
+
+### Changed
+
+- Default OpenRouter model is `openrouter/openai/gpt-oss-20b`.
+- Commercial installs exclude Piper/Chatterbox and use host-native TTS; Piper
+  remains an explicit community profile.
+- Assistant bubbles dismiss only after the reading deadline and matching audio
+  terminal event.
+
+### Security
+
+- Added session/environment-only provider secrets, loopback-only Ollama
+  discovery, bounded provider responses, atomic prompt/settings writes,
+  consented private voice-reference storage, and license-aware atomic pack
+  installation.
+- Memory cannot store raw audio and optional-subsystem failures cannot suppress
+  typed chat.
+
 ## [1.5.1] — verified CUDA auto-selection fallback
 
 ### Fixed

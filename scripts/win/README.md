@@ -11,6 +11,7 @@ Run from the repo root:
 PS> .\scripts\win\install.bat                  # make install PROFILE=basic
 PS> .\scripts\win\install.bat voice            # make install PROFILE=voice
 PS> .\scripts\win\install.bat openrouter-voice # OpenRouter + local STT/system TTS
+PS> .\scripts\win\install.bat openrouter-chatterbox # OpenRouter + local cloned TTS
 PS> .\scripts\win\backend.bat                  # FastAPI on :8000
 PS> .\scripts\win\frontend.bat                 # Vite on :5173
 PS> .\scripts\win\desktop.bat                  # cargo tauri dev
@@ -21,6 +22,15 @@ PS> .\scripts\win\docker-up.bat                # docker compose up backend
 PS> .\scripts\win\cleanup-legacy.bat           # purge v0.x prototype dirs
 PS> powershell -ExecutionPolicy Bypass -File .\scripts\win\start-openrouter-voice.ps1
 ```
+
+`start-openrouter-voice.ps1` is the single launcher for local voice. It reads
+the dashboard selection and prepares either Piper or Chatterbox. For
+Chatterbox it repairs incomplete Torch runtimes, performs a one-time model
+prewarm, repairs the real Perth watermark implementation when required,
+selects `openrouter-chatterbox`, and disables backend reloads. Set
+`OPENMIMICRY_CHATTERBOX_PREFLIGHT=force` to repeat model prewarming or
+`OPENMIMICRY_TORCH_CHANNEL=cpu|cu118|cu124|cu126` to override automatic Torch
+wheel selection.
 
 If you have Make installed (via Chocolatey, scoop, or Git for Windows),
 prefer `make <target>` directly — these wrappers exist for the

@@ -112,33 +112,31 @@ class Sprite2DAvatarAdapter:
             _log.warning("Sprite2DAvatarAdapter: apply_directive without a loaded pack; dropping")
             return
 
-        if directive.state not in pack.emotions:
-            if directive.state not in self._warned_unknown_states:
-                self._warned_unknown_states.add(directive.state)
-                _log.warning(
-                    "Sprite2DAvatarAdapter: state %r not in pack %r; falling back to %r",
-                    directive.state,
-                    pack.id,
-                    pack.default_state,
-                )
+        if (
+            directive.state not in pack.emotions
+            and directive.state not in self._warned_unknown_states
+        ):
+            self._warned_unknown_states.add(directive.state)
+            _log.warning(
+                "Sprite2DAvatarAdapter: state %r not in pack %r; falling back to %r",
+                directive.state,
+                pack.id,
+                pack.default_state,
+            )
 
         try:
-            message = build_sprite2d_projection(
-                directive, pack, static_url_prefix=self._url_prefix
-            )
-        except Exception as exc:  # noqa: BLE001 — never raise
+            message = build_sprite2d_projection(directive, pack, static_url_prefix=self._url_prefix)
+        except Exception as exc:
             _log.warning("Sprite2DAvatarAdapter: projection failed: %s", exc, exc_info=True)
             return
 
         try:
             await self._bridge.publish(message)
-        except Exception as exc:  # noqa: BLE001 — transport issues shouldn't poison the bus
+        except Exception as exc:
             _log.warning("Sprite2DAvatarAdapter: bridge.publish failed: %s", exc, exc_info=True)
 
     async def set_text(self, text: str) -> None:
-        await self._bridge.publish(
-            {"type": "bubble.text", "text": text, "complete": True}
-        )
+        await self._bridge.publish({"type": "bubble.text", "text": text, "complete": True})
 
     async def start_speaking(self, text: str | None = None) -> None:
         await self._bridge.publish(

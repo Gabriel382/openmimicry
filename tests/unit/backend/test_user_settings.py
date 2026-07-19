@@ -1,5 +1,9 @@
 import yaml
-from openmimicry_backend.user_settings import persist_voice_settings, persist_wake_names
+from openmimicry_backend.user_settings import (
+    persist_tts_clone,
+    persist_voice_settings,
+    persist_wake_names,
+)
 
 
 def test_persist_wake_names_is_additive_and_atomic(tmp_path) -> None:
@@ -24,3 +28,19 @@ def test_persist_voice_settings_preserves_wake_name_when_only_pause_changes(tmp_
 
     assert loaded["voice"]["stt"]["wake"]["names"] == ["Octo"]
     assert loaded["voice"]["stt"]["post_speech_silence_duration"] == 1.3
+
+
+def test_persist_chatterbox_clone_carries_cold_start_timeout(tmp_path) -> None:
+    path = tmp_path / "user.yaml"
+
+    persist_tts_clone(
+        provider="chatterbox-local",
+        voice_id="local-reference",
+        consent_record="Speaker consented on 2026-07-19",
+        reference_path="C:/voices/reference.mp3",
+        path=path,
+    )
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert loaded["voice"]["tts"]["adapter"] == "chatterbox-local"
+    assert loaded["voice"]["tts"]["readiness_timeout_s"] == 180.0

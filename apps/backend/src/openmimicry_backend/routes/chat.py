@@ -18,9 +18,12 @@ WS via :mod:`openmimicry_backend.projection`.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
+from typing import cast
+from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from openmimicry.core import (
@@ -39,6 +42,7 @@ from openmimicry.core import (
     TaskUpdatedEvent,
     UserTextSubmitted,
 )
+from openmimicry.core.schemas.app import ResponsePresentationConfig
 from pydantic import BaseModel
 
 from ..llm_response import load_personality, parse_assistant_reply
@@ -92,6 +96,8 @@ async def run_chat_turn(
     speech: SpeechController | None = None,
     intent_fn: Callable[[str], TaskRequest | None] | None = None,
     history: Sequence[LLMMessage] = (),
+    presentation: ResponsePresentationConfig | None = None,
+    voice_enabled: bool = True,
 ) -> str | None:
     """The actual chat/task pipeline. Exposed for direct use in tests.
 
@@ -105,7 +111,15 @@ async def run_chat_turn(
     if intent is not None:
         await _run_task_path(intent, bus=bus, tasks=tasks)
         return None
-    return await _run_llm_path(text, bus=bus, llm=llm, speech=speech, history=history)
+    return await _run_llm_path(
+        text,
+        bus=bus,
+        llm=llm,
+        speech=speech,
+        history=history,
+        presentation=presentation,
+        voice_enabled=voice_enabled,
+    )
 
 
 def _lazy_intent_classifier() -> Callable[[str], TaskRequest | None]:
@@ -191,6 +205,8 @@ async def _run_llm_path(
     llm: LLMAdapter,
     speech: SpeechController | None,
     history: Sequence[LLMMessage] = (),
+    presentation: ResponsePresentationConfig | None = None,
+    voice_enabled: bool = True,
 ) -> str | None:
     bus.publish(LLMStarted(ts=_now()))
     thinking_started = asyncio.get_running_loop().time()
@@ -218,17 +234,61 @@ async def _run_llm_path(
     thinking_elapsed = asyncio.get_running_loop().time() - thinking_started
     if reply.text and thinking_elapsed < _MIN_THINKING_SECONDS:
         await asyncio.sleep(_MIN_THINKING_SECONDS - thinking_elapsed)
-    # The LLM response is already fully collected so its emotion/action JSON
-    # can be parsed. Publish one display update instead of artificial chunks:
-    # this clears the prior turn and prevents append-only UI artefacts.
-    if reply.text:
-        bus.publish(LLMTokenStreamed(ts=_now(), delta=reply.text))
+    presentation = presentation or ResponsePresentationConfig()
+    mode = presentation.mode
+    wants_speech = bool(speech is not None and voice_enabled and reply.text and mode != "text_only")
+    utterance_id = uuid4().hex if wants_speech else None
 
-    # Text/LLM delivery is the primary contract.  Audio is deliberately not a
-    # gate: a missing speaker, failed voice model, or killed playback process
-    # cannot hide the reply or block the next turn.
-    bus.publish(LLMReplyComplete(ts=_now(), full_text=reply.text))
+    def publish_reply() -> None:
+        # Publish one display update instead of artificial chunks: this clears
+        # the previous turn and prevents append-only UI artefacts. Voice-only
+        # remains present in conversation history but is suppressed by the
+        # bubble projector.
+        if reply.text and mode != "voice_only":
+            bus.publish(LLMTokenStreamed(ts=_now(), delta=reply.text))
+        bus.publish(
+            LLMReplyComplete(
+                ts=_now(),
+                full_text=reply.text,
+                presentation_mode=mode,
+                speech_expected=wants_speech,
+                speech_utterance_id=utterance_id,
+            )
+        )
 
+    # Parallel/text-only are never gated by audio. This also gives a readable
+    # fallback when a driver or optional TTS provider fails.
+    if mode in {"parallel", "text_only", "voice_only"}:
+        publish_reply()
+
+    speech_ready = False
+    if wants_speech and speech is not None:
+        try:
+            if "utterance_id" in inspect.signature(speech.say).parameters:
+                await speech.say(reply.text, utterance_id=utterance_id)
+            else:
+                # Compatibility for third-party v1 SpeechController plugins.
+                await speech.say(reply.text)
+            if mode == "voice_ready":
+                wait_ready = getattr(speech, "wait_until_speech_ready", None)
+                readiness_timeout_s = float(getattr(speech, "speech_readiness_timeout_s", 30.0))
+                if callable(wait_ready):
+                    ready_waiter = cast(Callable[..., Awaitable[object]], wait_ready)
+                    if "utterance_id" in inspect.signature(wait_ready).parameters:
+                        speech_ready = bool(
+                            await ready_waiter(
+                                timeout_s=readiness_timeout_s,
+                                utterance_id=utterance_id,
+                            )
+                        )
+                    else:
+                        speech_ready = bool(await ready_waiter(timeout_s=readiness_timeout_s))
+        except Exception as exc:
+            _log.warning("could not queue reply audio: %s", exc, exc_info=True)
+    if mode == "voice_ready":
+        if wants_speech and not speech_ready:
+            _log.warning("voice-ready presentation fell back to text because TTS was unavailable")
+        publish_reply()
     bus.publish(
         AvatarCue(
             ts=_now(),
@@ -238,9 +298,4 @@ async def _run_llm_path(
             duration_ms=reply.duration_ms,
         )
     )
-    if speech is not None and reply.text:
-        try:
-            await speech.say(reply.text)
-        except Exception as exc:
-            _log.warning("could not queue reply audio: %s", exc, exc_info=True)
     return reply.text or None

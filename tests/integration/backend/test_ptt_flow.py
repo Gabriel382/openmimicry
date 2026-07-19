@@ -10,6 +10,7 @@ matters here.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import Any
 
 import pytest
@@ -28,10 +29,8 @@ async def _collect(bus, kinds: set[str], *, timeout: float = 2.0):
             if not (kinds - {e.kind for e in collected}):
                 return
 
-    try:
+    with suppress(TimeoutError):
         await asyncio.wait_for(_drain(), timeout=timeout)
-    except asyncio.TimeoutError:
-        pass
     return collected
 
 

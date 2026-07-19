@@ -54,7 +54,14 @@ def test_llm_token_projects_bubble_partial() -> None:
 
 def test_llm_reply_complete_projects_bubble_final() -> None:
     out = project(LLMReplyComplete(ts=_ts(), full_text="Hello"))
-    assert out == {"type": "bubble.text", "text": "Hello", "complete": True}
+    assert out == {
+        "type": "bubble.text",
+        "text": "Hello",
+        "complete": True,
+        "presentation_mode": "parallel",
+        "speech_expected": False,
+        "utterance_id": None,
+    }
 
 
 def test_llm_start_resets_an_incomplete_previous_bubble() -> None:
@@ -83,7 +90,14 @@ def test_text_and_voice_turns_project_into_conversation_history() -> None:
 def test_complete_reply_updates_bubble_and_conversation_history() -> None:
     messages = project_messages(LLMReplyComplete(ts=_ts(), full_text="Hello"))
 
-    assert messages[0] == {"type": "bubble.text", "text": "Hello", "complete": True}
+    assert messages[0] == {
+        "type": "bubble.text",
+        "text": "Hello",
+        "complete": True,
+        "presentation_mode": "parallel",
+        "speech_expected": False,
+        "utterance_id": None,
+    }
     assert messages[1]["type"] == "conversation.turn"
     assert messages[1]["role"] == "assistant"
     assert messages[1]["text"] == "Hello"

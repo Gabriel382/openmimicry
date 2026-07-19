@@ -102,9 +102,7 @@ def test_known_gesture_attaches_clip_name() -> None:
 
 def test_unknown_gesture_omits_the_field() -> None:
     pack = _vrm_pack()
-    directive = AvatarDirective(
-        state="idle", emotion="happy", gesture="definitely-not-a-gesture"
-    )
+    directive = AvatarDirective(state="idle", emotion="happy", gesture="definitely-not-a-gesture")
     msg = build_threejs_projection(directive, pack)
     assert "gestureClip" not in msg
 
@@ -148,9 +146,7 @@ def test_gaze_field_propagates_when_set() -> None:
 def test_default_gaze_can_be_overridden_via_runtime_cfg() -> None:
     pack = _vrm_pack()
     directive = AvatarDirective(state="idle")
-    msg = build_threejs_projection(
-        directive, pack, runtime_cfg={"default_gaze": "neutral"}
-    )
+    msg = build_threejs_projection(directive, pack, runtime_cfg={"default_gaze": "neutral"})
     assert msg["gazeTarget"] == "neutral"
 
 

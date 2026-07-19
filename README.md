@@ -16,7 +16,7 @@
 
 </div>
 
-OpenMimicry is a transparent desktop overlay that connects an animated character to an LLM, a voice stack, and external agentic task runtimes — all swappable, all behind one frozen `AvatarRuntimeAdapter` Protocol. Five avatar modalities ship (Sprite2D, Three.js/VRM, Live3D, Unity bridge, generic External), three task runtimes (Local shell with allowlist, Claude Code CLI, MCP agent), an isolated Faster-Whisper/Piper voice runtime with mocks and legacy adapters, and an optional MediaPipe-driven vision pipeline that maps hand / body / head gestures to avatar reactions.
+OpenMimicry is a transparent desktop overlay that connects an animated character to an LLM, a voice stack, optional long-term memory, and external agentic task runtimes. Five avatar modalities ship (Sprite2D, Three.js/VRM, Live3D, Unity bridge, generic External), together with isolated Faster-Whisper speech recognition, commercial/system and opt-in community voice providers, and an optional MediaPipe-driven vision pipeline.
 
 ---
 
@@ -32,11 +32,12 @@ The result is a portfolio-quality reference for the pattern: contracts as the sp
 
 - **5 avatar modalities, 1 Protocol.** Sprite2D · Three.js (VRM/glTF) · Live3D (mouth / idle / gaze drivers over Three.js) · Unity bridge · External (renderer-agnostic WS).
 - **3 LLM backends, 1 LLMAdapter.** Mock · LiteLLM (any provider) · LLMRouter (primary + fallback).
-- **Fail-safe voice.** Mock · isolated Faster-Whisper/Piper · explicit legacy Realtime adapters. Audio runs outside the backend process and can never suppress a text reply.
+- **Fail-safe voice.** Isolated Faster-Whisper input; OS-native commercial-default TTS; community Piper; consent-gated local Chatterbox cloning; and ElevenLabs BYOK. Audio failure never suppresses the text path.
+- **Optional memory.** Off by default. Deterministic SQLite needs no memory LLM; Hindsight and independently selected LLM extraction are explicit opt-ins. Raw audio is never stored.
 - **3 task runtimes + router.** Mock · LocalShell (allowlist-or-reject, audit log) · ClaudeCodeAdapter · MCPAgentAdapter, all behind a capability-based `TaskRouter`.
 - **Vision (optional, off by default).** MediaPipe Hands / Pose / Face → gesture + movement classifiers → `AvatarDirective` overrides. Consent-gated. Frames never leave the process.
 - **Transparent desktop companion.** Tauri 2 shell with a click-through avatar, top controls, bottom message composer, global hotkeys, mood-pixel tray icon, and a localhost browser dashboard.
-- **Hermetic tests.** Every adapter has a mock that runs with zero optional dependencies. Contract tests parametrise across every registered implementation. ~250 Python tests + Vitest frontend tests + Rust shell tests.
+- **Hermetic tests.** Every core adapter has a zero-network mock. Contract, unit, integration, frontend, configuration, and security tests run without audio hardware.
 
 <table>
 <tr><td align="center">
@@ -107,7 +108,7 @@ Window geometry, colors, avatar scale, and reply reading time remain in
 `config/theme.yml`.
 
 The dashboard also shows the exact active LLM model. The OpenRouter voice
-profile starts on `openrouter/openai/gpt-4o-mini`; its optional local backend is
+profiles start on `openrouter/openai/gpt-oss-20b`; the optional local backend is
 Ollama `gpt-oss:20b`. Accepted turns are processed in order and only the last
 four completed exchanges are used as conversational context.
 
@@ -115,9 +116,10 @@ Import Sprite2D characters from **Avatar settings → Import character ZIP**.
 See [`docs/character_packs.md`](docs/character_packs.md#import-from-the-dashboard)
 for the required `pack.yaml` and sprite layout.
 
-For OpenRouter plus free local Faster-Whisper STT and Piper TTS on Windows, see
-[`docs/V1.5.1_WINDOWS_TESTING.md`](docs/V1.5.1_WINDOWS_TESTING.md). The launcher
-runs a multi-turn voice preflight before enabling the runtime.
+For the v1.6 interaction, memory, character, provider, and voice additions, see
+the [v1.6 design appendix](docs/design/OpenMimicry-v1.6.0-Appendix.md) and
+[acceptance guide](docs/V1.6.0_ACCEPTANCE.md). The proven v1.5.1 Piper launcher
+remains available as a community profile.
 
 ### Docker (backend-only smoke)
 
@@ -144,6 +146,23 @@ OPENMIMICRY_PROFILE=full make backend
 make install PROFILE=voice
 OPENMIMICRY_PROFILE=voice make backend
 
+# commercially oriented local voice (no Piper dependency)
+make install PROFILE=openrouter-commercial
+OPENMIMICRY_PROFILE=openrouter-commercial make backend
+
+# free, local, consent-gated voice cloning (large optional ML install)
+make install PROFILE=openrouter-chatterbox
+OPENMIMICRY_PROFILE=openrouter-chatterbox make backend
+
+# Windows uses the same voice launcher for Piper and Chatterbox. It reads the
+# dashboard selection, repairs the matching profile, prewarms it, and starts.
+.\scripts\win\install.bat openrouter-chatterbox
+powershell -ExecutionPolicy Bypass -File .\scripts\win\start-openrouter-voice.ps1
+
+# paid/BYOK voice selected in an ElevenLabs account
+make install PROFILE=openrouter-elevenlabs
+OPENMIMICRY_PROFILE=openrouter-elevenlabs make backend
+
 # Three.js avatar with a VRM model
 # (drop a real VRM at characters/octomimic_vrm/octomimic.vrm — see that pack's README)
 make install PROFILE=threejs
@@ -154,6 +173,13 @@ OPENMIMICRY_PROFILE=vision make backend
 ```
 
 Profile YAML lives in [`config/profiles/`](config/profiles).
+
+The standard Windows voice launcher reads `config/user.yaml`: Piper keeps the
+`openrouter-voice` profile, while a dashboard-selected Chatterbox reference
+automatically uses `openrouter-chatterbox`. Chatterbox preserves any verified
+working CUDA runtime, repairs incomplete Torch triplets when necessary, keeps
+Apple MPS on macOS, validates/repairs the real Perth watermark implementation,
+and applies the NumPy 2 correction only in its worker.
 
 ---
 
@@ -195,7 +221,7 @@ Profile YAML lives in [`config/profiles/`](config/profiles).
 └───────┘ └────────────┘ └────────────┘ └──────────────┘ └─────────────────┘ └──────────┘
 ```
 
-The single immutable interface is [`docs/contracts.md`](docs/contracts.md). Any change to a Protocol or schema requires the change-control procedure in §11 — `schema_version` stays at `1` for every additive amendment shipped through v1.0.
+The immutable interfaces live in [`docs/contracts.md`](docs/contracts.md). Configuration schema v2 adds named LLM backends, response presentation, optional memory, clone consent metadata, and distribution profiles. A deterministic in-memory v1→v2 migration preserves old files without rewriting them.
 
 ### Wire protocol (frontend ↔ backend)
 
@@ -223,7 +249,7 @@ Full spec: [`docs/contracts.md`](docs/contracts.md) §9. Additive amendments for
 
 ```
 openmimicry/
-├── packages/                       # 8 publishable Python packages
+├── packages/                       # 9 publishable Python packages
 │   ├── openmimicry-core/           # Foundation — frozen contracts + schemas + runtime
 │   ├── openmimicry-llm/            # Cognition — M1
 │   ├── openmimicry-voice/          # M2 — source of truth for STT + TTS adapters
@@ -231,6 +257,7 @@ openmimicry/
 │   ├── openmimicry-tts/            # Effector-layer facade over openmimicry-voice (TTS)
 │   ├── openmimicry-avatar/         # Effectors — M3/M4/M9/M10/M11/M12 + AvatarDirector
 │   ├── openmimicry-tasks/          # Effectors — M5
+│   ├── openmimicry-memory/         # Optional SQLite/Hindsight memory
 │   └── openmimicry-vision/         # Sensors — M13 (optional, off by default)
 ├── apps/
 │   ├── backend/                    # M6 — FastAPI process; wiring.py is the assembly point
@@ -295,7 +322,7 @@ make desktop                     # cargo tauri dev
 make test                        # full pytest + vitest
 make ci                          # lint + typecheck + check-imports + test
 make docker-up                   # docker compose up backend
-make release-preview             # show the v1.0 publish plan (dry run)
+make release-preview             # show the v1.6.4 publish plan (dry run)
 ```
 
 Windows users: equivalent `.bat` wrappers live in [`scripts/win/`](scripts/win/) (e.g. `scripts\win\install.bat`).
@@ -319,6 +346,12 @@ bash scripts/cleanup-legacy.sh --apply
 - **Per-modality briefs**: [`docs/modules/`](docs/modules/) — one numbered plan per M*
 - **Avatar specifics**: [`docs/character_packs.md`](docs/character_packs.md), [`docs/avatar_modalities.md`](docs/avatar_modalities.md), [`docs/desktop_overlay.md`](docs/desktop_overlay.md)
 - **Voice modes**: [`docs/voice_modes.md`](docs/voice_modes.md)
+- **v1.6 appendix**: [`docs/design/OpenMimicry-v1.6.0-Appendix.md`](docs/design/OpenMimicry-v1.6.0-Appendix.md)
+- **v1.6.4 Perth startup repair**: [`OpenMimicry-v1.6.4-Release-Notes.md`](OpenMimicry-v1.6.4-Release-Notes.md)
+- **v1.6.3 unified Chatterbox setup**: [`OpenMimicry-v1.6.3-Release-Notes.md`](OpenMimicry-v1.6.3-Release-Notes.md)
+- **v1.6.2 Chatterbox reliability**: [`OpenMimicry-v1.6.2-Release-Notes.md`](OpenMimicry-v1.6.2-Release-Notes.md)
+- **Memory and voice providers**: [`docs/memory.md`](docs/memory.md), [`docs/voice_providers.md`](docs/voice_providers.md)
+- **Licensing profiles**: [`docs/licensing.md`](docs/licensing.md), [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - **Tasks**: [`docs/task_delegation.md`](docs/task_delegation.md)
 - **External renderers**: [`docs/external_runtimes.md`](docs/external_runtimes.md)
 - **Configuration**: [`docs/configuration.md`](docs/configuration.md), [`docs/testing_and_ci.md`](docs/testing_and_ci.md), [`docs/migration.md`](docs/migration.md)
@@ -331,7 +364,7 @@ bash scripts/cleanup-legacy.sh --apply
 
 ## License
 
-[MIT](LICENSE) — including every bundled character pack unless its `pack.yaml` says otherwise.
+[MIT](LICENSE) for OpenMimicry's own source. Optional providers, transitive packages, imported character assets, voice models, and cloud services retain their own terms; review [`docs/licensing.md`](docs/licensing.md) before a commercial distribution.
 
 ---
 

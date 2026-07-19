@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from openmimicry.avatar.pack import ValidationReport, validate_pack
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures" / "packs"
@@ -30,10 +29,7 @@ def test_broken_manifest_reports_errors() -> None:
     assert report.ok is False
     assert report.errors
     # ValidationError content surfaces.
-    assert any(
-        "schema validation" in e or "folder does not exist" in e
-        for e in report.errors
-    )
+    assert any("schema validation" in e or "folder does not exist" in e for e in report.errors)
 
 
 def test_missing_directory_reports_error(tmp_path: Path) -> None:

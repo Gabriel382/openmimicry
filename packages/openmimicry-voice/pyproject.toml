@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-voice"
-version = "1.5.1"
+version = "1.6.4"
 description = "OpenMimicry voice: isolated Faster-Whisper/Piper runtime, legacy realtime adapters, and controllers."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,10 +16,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=1.0.0",
+    "openmimicry-core>=1.6.4",
 ]
 
 [project.optional-dependencies]
@@ -34,9 +35,13 @@ realtimetts = [
 voice = [
     "faster-whisper>=1.2.1",
     "numpy>=1.26",
-    "piper-tts>=1.5.0",
     "sounddevice>=0.5",
 ]
+piper-community = ["piper-tts==1.4.2"]
+# The profile installer validates Perth's real watermark constructor and, only
+# when the stale PyPI wheel exposes None, installs the immutable compatible
+# upstream revision without changing the Torch/audio dependency graph.
+clone-chatterbox = ["chatterbox-tts==0.1.7", "numpy>=1.26"]
 legacy-realtime = [
     "RealtimeSTT[faster-whisper]>=0.3",
     "RealtimeTTS[system]>=0.4",
@@ -59,6 +64,7 @@ isolated-faster-whisper = "openmimicry.voice.stt.isolated_faster_whisper:make_is
 mock = "openmimicry.voice.mocks:make_mock_tts_adapter"
 realtimetts = "openmimicry.voice.tts.realtimetts_adapter:make_realtimetts_adapter"
 isolated-piper = "openmimicry.voice.tts.isolated_piper:make_isolated_piper_adapter"
+system-command = "openmimicry.voice.tts.system_command:SystemCommandTTSAdapter"
 
 [project.entry-points."openmimicry.contracts.speech_controller"]
 default = "openmimicry.voice.controllers.speech:make_speech_controller"

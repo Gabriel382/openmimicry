@@ -100,7 +100,9 @@ async def test_say_publishes_started_and_finished(controller) -> None:
     events = await events_task
     kinds = [type(e).__name__ for e in events]
 
-    assert kinds[0] == "TTSStarted"
+    assert kinds[0] == "TTSQueued"
+    assert "TTSReady" in kinds
+    assert "TTSStarted" in kinds
     assert "TTSFinished" in kinds
     assert tts.spoken == ["hi"]
 

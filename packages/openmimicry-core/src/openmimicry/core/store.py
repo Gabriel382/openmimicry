@@ -26,6 +26,7 @@ from .schemas.events import (
     TaskCompleted,
     TaskSubmitted,
     TaskUpdatedEvent,
+    TTSFailed,
     TTSFinished,
     TTSInterrupted,
     TTSStarted,
@@ -66,11 +67,7 @@ class RuntimeStore(BaseModel):
         # User text
         if isinstance(event, UserTextSubmitted):
             return self.model_copy(update={"last_user_text": event.text})
-        if (
-            isinstance(event, UserSpeechFinal)
-            and event.reason == "normal"
-            and event.accepted
-        ):
+        if isinstance(event, UserSpeechFinal) and event.reason == "normal" and event.accepted:
             return self.model_copy(update={"last_user_text": event.text})
 
         # Assistant text
@@ -80,7 +77,7 @@ class RuntimeStore(BaseModel):
         # TTS lifecycle
         if isinstance(event, TTSStarted):
             return self.model_copy(update={"is_speaking": True})
-        if isinstance(event, (TTSFinished, TTSInterrupted)):
+        if isinstance(event, (TTSFinished, TTSInterrupted, TTSFailed)):
             return self.model_copy(update={"is_speaking": False})
 
         # Wake

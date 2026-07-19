@@ -96,6 +96,12 @@ Open `http://127.0.0.1:8000/dashboard`, find **Avatar settings**, choose
 pack**. The ZIP may place `pack.yaml` at its root or inside one top-level
 folder, but it must contain exactly one manifest.
 
+Download `OpenMimicry-character-template-v1.6.0.zip` from `examples/` (or use
+the dashboard's **Download template** button) for a validated starting point.
+The dashboard's simple creator can also build a complete pack from a required
+idle image and optional speaking image; it fills the remaining lifecycle
+states with safe fallbacks. Use a new pack ID for every installed revision.
+
 Minimal importable ZIP:
 
 ```text

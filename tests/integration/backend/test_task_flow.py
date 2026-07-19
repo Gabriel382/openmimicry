@@ -12,6 +12,7 @@ see ``test_chat_flow.py`` for the same rationale.
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
 from typing import Any
 
 import pytest
@@ -37,10 +38,8 @@ async def _collect(bus, n_max: int, *, timeout: float = 2.0) -> list[RuntimeEven
             if len(collected) >= n_max:
                 return
 
-    try:
+    with suppress(TimeoutError):
         await asyncio.wait_for(_drain(), timeout=timeout)
-    except asyncio.TimeoutError:
-        pass
     return collected
 
 

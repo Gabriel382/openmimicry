@@ -62,4 +62,4 @@ __all__ = [
     "detect_task_intent",
 ]
 
-__version__ = "1.5.1"
+__version__ = "1.6.4"

@@ -15,6 +15,7 @@ export interface SpeechBubbleProps {
   timing?: {
     base_ms: number;
     ms_per_character: number;
+    min_ms?: number;
     max_ms: number;
   };
 }

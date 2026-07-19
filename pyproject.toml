@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry"
-version = "1.5.1"
+version = "1.6.4"
 description = "A modular avatar interface layer for LLMs, voice systems, and agentic task runtimes."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -46,6 +46,7 @@ dev = [
     "pytest-xdist>=3",
     "pre-commit>=3",
     "watchfiles>=0.24",
+    "packaging>=24",
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "httpx>=0.27",
@@ -71,21 +72,10 @@ extend-exclude = [
     "src-tauri/target",
     "packages/*/build",
     "packages/*/dist",
-    # ---------------------------------------------------------------
-    # Legacy prototype directories (scheduled for removal during the
-    # migration to packages/openmimicry-*). They predate the modular
-    # ruff config; touching them is a migration concern, not a lint
-    # concern.
-    # ---------------------------------------------------------------
-    "core",
-    "backends",
-    "backend",
-    "avatar",
-    "tts",
-    "frontend",
-    "src-tauri",
     # `apps/` is selectively included — apps/backend/src is linted,
-    # apps/desktop (Tauri shell) is excluded.
+    # apps/desktop (Tauri shell) is excluded. Legacy root prototype
+    # directories no longer exist; basename excludes such as `core` or
+    # `tts` would also hide the current package source by accident.
     "apps/desktop",
     "openmimicry.egg-info",
     # Legacy scripts that import from the prototype `core`/`backends`
@@ -178,6 +168,7 @@ include = [
     "apps/backend/src",
     "tests",
     "scripts/check_imports.py",
+    "scripts/check_versions.py",
     "scripts/doctor.py",
     "scripts/m1_demo.py",
 ]

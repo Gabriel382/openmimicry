@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-tts"
-version = "1.5.1"
+version = "1.6.4"
 description = "OpenMimicry effector layer: isolated Piper TTS, legacy adapter, and mocks."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,16 +19,16 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=1.0.0",
-    "openmimicry-voice>=1.0.0",
+    "openmimicry-core>=1.6.4",
+    "openmimicry-voice>=1.6.4",
 ]
 
 [project.optional-dependencies]
 # Heavy TTS deps remain in the source package and are lazy-imported.
 # Installing the `realtimetts` extra here is equivalent to installing
 # it on openmimicry-voice — kept for ergonomic parity.
-realtimetts = ["openmimicry-voice[realtimetts]>=1.0.0"]
-voice = ["openmimicry-voice[voice]>=1.5.1"]
+realtimetts = ["openmimicry-voice[realtimetts]>=1.6.4"]
+voice = ["openmimicry-voice[voice]>=1.6.4"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",

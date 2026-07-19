@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
 
 import yaml
 from openmimicry.core.schemas import CharacterPack, EmotionFrames
@@ -40,9 +39,7 @@ _log = logging.getLogger(__name__)
 
 
 # Image extensions considered "frames" when ``frames`` is a folder.
-_FRAME_EXTENSIONS: frozenset[str] = frozenset(
-    {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-)
+_FRAME_EXTENSIONS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
 
 
 class PackLoadError(Exception):
@@ -70,9 +67,7 @@ def load_pack(pack_dir: Path | str) -> CharacterPack:
     try:
         pack = CharacterPack.model_validate(raw)
     except ValidationError as exc:
-        raise PackLoadError(
-            f"{manifest} failed schema validation:\n{exc}"
-        ) from exc
+        raise PackLoadError(f"{manifest} failed schema validation:\n{exc}") from exc
 
     # Walk emotions; resolve frames/speaking_frames; apply fallback rules.
     resolved: dict[str, EmotionFrames] = {}
@@ -119,9 +114,7 @@ def resolve_frames(pack_dir: Path | str, frames: str | list[str]) -> list[str]:
     return _resolve_one(Path(pack_dir).expanduser(), frames, kind="frames", state="?")
 
 
-def _resolve_one(
-    root: Path, value: str | list[str], *, kind: str, state: str
-) -> list[str]:
+def _resolve_one(root: Path, value: str | list[str], *, kind: str, state: str) -> list[str]:
     if isinstance(value, list):
         out: list[str] = []
         for item in value:

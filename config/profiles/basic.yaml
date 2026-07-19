@@ -1,5 +1,5 @@
 # Explicit alias for the safe defaults in config/app.yaml.
-schema_version: 1
+schema_version: 2
 
 llm:
   adapter: mock

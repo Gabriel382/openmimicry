@@ -1,0 +1,3 @@
+# Optional external memory service client; the default local SQLite provider
+# needs no dependency beyond OpenMimicry's existing Pydantic runtime.
+hindsight-client>=0.8.2,<1

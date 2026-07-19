@@ -27,7 +27,7 @@ export interface AppearanceConfig {
     composer_gap: number;
   };
   behaviour: {
-    bubble: { base_ms: number; ms_per_character: number; max_ms: number };
+    bubble: { base_ms: number; ms_per_character: number; min_ms?: number; max_ms: number };
     controls: {
       show: boolean;
       show_drag_handle: boolean;
@@ -64,7 +64,7 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
     composer_gap: 6,
   },
   behaviour: {
-    bubble: { base_ms: 2500, ms_per_character: 55, max_ms: 30000 },
+    bubble: { base_ms: 1500, ms_per_character: 55, min_ms: 2500, max_ms: 30000 },
     controls: {
       show: true,
       show_drag_handle: true,

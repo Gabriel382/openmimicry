@@ -36,6 +36,7 @@ from openmimicry.core.schemas import (
     TaskCompleted,
     TranscriptPreview,
     TTSChunkSpoken,
+    TTSFailed,
     TTSFinished,
     TTSInterrupted,
     TTSStarted,
@@ -224,7 +225,7 @@ class AvatarDirector:
                 return "speaking", True
             return None, False
 
-        if isinstance(event, (TTSFinished, TTSInterrupted)):
+        if isinstance(event, (TTSFinished, TTSInterrupted, TTSFailed)):
             # thinking/speaking -> idle; others -> no-op.
             if s in ("thinking", "speaking"):
                 return "idle", False

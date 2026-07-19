@@ -1,8 +1,8 @@
 """Schema-version migrations.
 
-The current schema version is **1**. Migrations are looked up by
-``(from_version, to_version)`` and chained when needed. Empty for now — v2
-will register a callable here when the contract bumps.
+Migrations are pure, deterministic transformations. They never write the
+source file; callers that choose to persist a migration must create a backup
+and perform their own atomic replacement.
 """
 
 from __future__ import annotations
@@ -70,3 +70,41 @@ def migrate(data: dict[str, Any], from_version: int, to_version: int) -> dict[st
         current_data = fn(current_data)
         current += 1
     return current_data
+
+
+@register_migration(from_version=1, to_version=2)
+def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Add v1.6 optional sections without enabling new data processing."""
+
+    migrated = dict(data)
+    voice = migrated.get("voice") if isinstance(migrated.get("voice"), dict) else {}
+    modes = voice.get("modes") if isinstance(voice.get("modes"), dict) else {}
+    text_enabled = bool(modes.get("text_always_on", True))
+    voice_enabled = bool(modes.get("agent_voice", True))
+    if text_enabled and voice_enabled:
+        mode = "parallel"
+    elif text_enabled:
+        mode = "text_only"
+    else:
+        mode = "voice_only" if voice_enabled else "text_only"
+
+    migrated.setdefault(
+        "interaction",
+        {
+            "response_presentation": {
+                "mode": mode,
+                "dismiss_policy": "after_both",
+                "minimum_ms": 2500,
+                "base_ms": 1500,
+                "ms_per_character": 55,
+                "maximum_ms": 30000,
+                "allow_accessibility_captions": True,
+            },
+            "show_rejected_wake_transcripts": True,
+            "restore_geometry": True,
+        },
+    )
+    migrated.setdefault("memory", {"enabled": False, "provider": "none"})
+    migrated.setdefault("distribution", {"profile": "commercial"})
+    migrated["schema_version"] = 2
+    return migrated
