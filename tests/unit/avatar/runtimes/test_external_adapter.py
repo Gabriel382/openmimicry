@@ -8,6 +8,7 @@ counters (``ack`` / ``ready`` / ``error``), and the shutdown frame.
 from __future__ import annotations
 
 import asyncio
+import inspect
 
 import pytest
 from openmimicry.avatar.runtimes.external.adapter import ExternalAvatarAdapter
@@ -19,10 +20,14 @@ from openmimicry.core.schemas import AvatarDirective
 async def _wait_for(predicate, *, timeout: float = 1.0, step: float = 0.01) -> bool:
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
-        if predicate():
+        result = predicate()
+        if inspect.isawaitable(result):
+            result = await result
+        if result:
             return True
         await asyncio.sleep(step)
-    return predicate()
+    result = predicate()
+    return bool(await result if inspect.isawaitable(result) else result)
 
 
 def test_adapter_satisfies_avatar_runtime_protocol() -> None:

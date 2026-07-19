@@ -68,9 +68,7 @@ class ExternalAvatarAdapter:
         }
         self._runtime_cfg: dict[str, Any] = dict(runtime_cfg or {})
         self._client: ExternalClient | None = client
-        self._url = url or str(
-            self._runtime_cfg.get("url") or "ws://127.0.0.1:8765"
-        )
+        self._url = url or str(self._runtime_cfg.get("url") or "ws://127.0.0.1:8765")
         self._queue: asyncio.Queue[ExternalFrame] = asyncio.Queue(maxsize=queue_max)
         self._sender_task: asyncio.Task[None] | None = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -130,9 +128,7 @@ class ExternalAvatarAdapter:
 
     async def stop_speaking(self) -> None:
         await self._ensure_started()
-        self._enqueue(
-            {"type": "avatar.directive", "runtime": "external", "speaking": False}
-        )
+        self._enqueue({"type": "avatar.directive", "runtime": "external", "speaking": False})
 
     async def set_visibility(self, visible: bool) -> None:
         await self._ensure_started()
@@ -218,16 +214,14 @@ class ExternalAvatarAdapter:
             try:
                 await client.send(frame)
             except ExternalClientError as exc:
-                _log.info(
-                    "ExternalAvatarAdapter: send failed, will reconnect: %s", exc
-                )
+                _log.info("ExternalAvatarAdapter: send failed, will reconnect: %s", exc)
                 with contextlib.suppress(asyncio.QueueFull):
                     self._queue.put_nowait(frame)
                 with contextlib.suppress(Exception):
                     await client.aclose()
                 self._client = None
                 await asyncio.sleep(self._backoff_delay())
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning(
                     "ExternalAvatarAdapter: unexpected send error: %s",
                     exc,
@@ -246,7 +240,7 @@ class ExternalAvatarAdapter:
                     self._consume_reverse(frame)
             except ExternalClientError as exc:
                 _log.info("ExternalAvatarAdapter: reader transport error: %s", exc)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 _log.warning(
                     "ExternalAvatarAdapter: reader crashed: %s",
                     exc,

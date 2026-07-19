@@ -29,8 +29,8 @@ from ..threejs.projection import build_threejs_projection
 
 __all__ = [
     "DEFAULT_BLEND_WINDOW_MS",
-    "MouthDriver",
     "GazeDriver",
+    "MouthDriver",
     "build_live3d_projection",
     "resolve_live_config",
 ]
@@ -93,9 +93,7 @@ def resolve_live_config(
     blend_window_ms = _coerce_int(
         cfg.get("blend_window_ms"), default=DEFAULT_BLEND_WINDOW_MS, lo=0, hi=10_000
     )
-    intensity = _clamp01(
-        directive.intensity if directive.intensity is not None else 1.0
-    )
+    intensity = _clamp01(directive.intensity if directive.intensity is not None else 1.0)
 
     block: dict[str, Any] = {
         "mouth_driver": mouth_driver,
@@ -151,12 +149,8 @@ def _idle_block(cfg: dict[str, Any]) -> dict[str, Any]:
         "breathing_period_ms": _coerce_int(
             raw.get("breathing_period_ms"), default=4200, lo=500, hi=20_000
         ),
-        "saccade_min_ms": _coerce_int(
-            raw.get("saccade_min_ms"), default=900, lo=100, hi=20_000
-        ),
-        "saccade_max_ms": _coerce_int(
-            raw.get("saccade_max_ms"), default=2200, lo=100, hi=20_000
-        ),
+        "saccade_min_ms": _coerce_int(raw.get("saccade_min_ms"), default=900, lo=100, hi=20_000),
+        "saccade_max_ms": _coerce_int(raw.get("saccade_max_ms"), default=2200, lo=100, hi=20_000),
     }
 
 

@@ -25,6 +25,7 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any, cast
+from uuid import uuid4
 
 from openmimicry.core.bus import EventBus
 from openmimicry.core.contracts import STTAdapter, TTSAdapter
@@ -32,8 +33,11 @@ from openmimicry.core.schemas import (
     STTConfig,
     TranscriptPreview,
     TTSConfig,
+    TTSFailed,
     TTSFinished,
     TTSInterrupted,
+    TTSQueued,
+    TTSReady,
     TTSStarted,
     UserSpeechFinal,
     UserSpeechStarted,
@@ -85,6 +89,7 @@ class SpeechController:
         self._cfg: VoiceConfig = config or VoiceConfig()
 
         self._current_tts_task: asyncio.Task[None] | None = None
+        self._current_utterance_id: str | None = None
         self._speech_ready: asyncio.Future[bool] | None = None
         self._live_listener_task: asyncio.Task[None] | None = None
         self._barge_in_task: asyncio.Task[None] | None = None
@@ -95,7 +100,6 @@ class SpeechController:
         self._configured_wake_aliases: list[str] = _normalise_wake_names(self._cfg.stt.wake.aliases)
         self._live_wake_names: list[str] = []
         self._resume_listening_after_ptt: tuple[str, list[str]] | None = None
-        self._resume_listening_after_tts: tuple[str, list[str]] | None = None
         self._started: bool = False
         self._stt_ready: bool = False
         self._tts_ready: bool = False
@@ -142,6 +146,12 @@ class SpeechController:
         """Seconds of silence required before STT finalises an utterance."""
 
         return self._cfg.stt.post_speech_silence_duration
+
+    @property
+    def speech_readiness_timeout_s(self) -> float:
+        """Maximum bounded wait for this profile's first audio frame."""
+
+        return self._cfg.tts.readiness_timeout_s
 
     @property
     def stt(self) -> STTAdapter:
@@ -226,7 +236,12 @@ class SpeechController:
 
     # --------------------------------------------------------- TTS / barge-in
 
-    async def say(self, text_or_stream: str | AsyncIterable[str]) -> None:
+    async def say(
+        self,
+        text_or_stream: str | AsyncIterable[str],
+        *,
+        utterance_id: str | None = None,
+    ) -> str:
         """Speak ``text_or_stream``. Cancels any in-flight utterance first."""
         await self.interrupt()
         # Default laptop/speaker operation must not leave STT listening to the
@@ -241,15 +256,24 @@ class SpeechController:
         ):
             resume = (self._listening_mode, list(self._live_wake_names))
             await self._stop_passive_listening()
-        self._resume_listening_after_tts = resume
-        self._speech_ready = asyncio.get_running_loop().create_future()
+        utterance_id = utterance_id or uuid4().hex
+        ready = asyncio.get_running_loop().create_future()
+        self._current_utterance_id = utterance_id
+        self._speech_ready = ready
+        self._bus.publish(TTSQueued(ts=_now(), utterance_id=utterance_id))
         self._current_tts_task = asyncio.create_task(
-            self._speak_once(text_or_stream), name="openmimicry.voice.say"
+            self._speak_once(text_or_stream, utterance_id, ready, resume),
+            name=f"openmimicry.voice.say.{utterance_id[:8]}",
         )
+        return utterance_id
 
-    async def wait_until_speech_ready(self, *, timeout_s: float = 10.0) -> bool:
+    async def wait_until_speech_ready(
+        self, *, timeout_s: float = 10.0, utterance_id: str | None = None
+    ) -> bool:
         """Wait until the TTS adapter reports that speaker playback began."""
 
+        if utterance_id is not None and utterance_id != self._current_utterance_id:
+            return False
         ready = self._speech_ready
         if ready is None:
             return False
@@ -263,7 +287,13 @@ class SpeechController:
             _log.warning("SpeechController: TTS readiness wait failed: %s", exc)
             return False
 
-    async def _speak_once(self, text_or_stream: str | AsyncIterable[str]) -> None:
+    async def _speak_once(
+        self,
+        text_or_stream: str | AsyncIterable[str],
+        utterance_id: str,
+        ready_future: asyncio.Future[bool],
+        resume_listening: tuple[str, list[str]] | None,
+    ) -> None:
         tts_config = TTSConfig(
             engine=self._cfg.tts.engine,
             voice=self._cfg.tts.voice,
@@ -271,6 +301,7 @@ class SpeechController:
             interruptible=self._cfg.tts.interruptible,
         )
         cancelled = False
+        failure_message: str | None = None
         play_task: asyncio.Task[None] | None = None
         try:
             play_task = asyncio.create_task(
@@ -283,7 +314,9 @@ class SpeechController:
             waiter = getattr(self._tts, "wait_until_ready", None)
             if callable(waiter):
                 ready_task = asyncio.create_task(
-                    cast(Callable[..., Awaitable[Any]], waiter)(timeout_s=30.0),
+                    cast(Callable[..., Awaitable[Any]], waiter)(
+                        timeout_s=self._cfg.tts.readiness_timeout_s
+                    ),
                     name="openmimicry.voice.tts_ready",
                 )
                 done, _pending = await asyncio.wait(
@@ -296,12 +329,15 @@ class SpeechController:
                         await ready_task
             else:
                 audio_ready = True
-            self._resolve_speech_ready(audio_ready)
+            self._resolve_speech_ready(ready_future, audio_ready)
             # Speaking is a playback state, not a synthesis/queue state.  A
             # failed or stale TTS job must never replace listening/thinking.
             if audio_ready and self._current_tts_task is asyncio.current_task():
                 self._tts_ready = True
-                self._bus.publish(TTSStarted(ts=_now()))
+                self._bus.publish(TTSReady(ts=_now(), utterance_id=utterance_id))
+                self._bus.publish(TTSStarted(ts=_now(), utterance_id=utterance_id))
+            elif not audio_ready:
+                failure_message = "Text-to-speech playback did not become ready."
             timeout_s = _playback_timeout_seconds(text_or_stream)
             try:
                 async with asyncio.timeout(timeout_s):
@@ -311,6 +347,7 @@ class SpeechController:
                     "SpeechController: TTS playback exceeded %.1fs; forcing recovery",
                     timeout_s,
                 )
+                failure_message = f"Text-to-speech playback exceeded {timeout_s:.1f}s."
                 if not play_task.done():
                     play_task.cancel()
                 with suppress(Exception):
@@ -326,10 +363,11 @@ class SpeechController:
             if play_task is not None:
                 with suppress(asyncio.CancelledError, Exception):
                     await play_task
-            self._resolve_speech_ready(False)
+            self._resolve_speech_ready(ready_future, False)
             raise
         except Exception as exc:
             self._tts_ready = False
+            failure_message = str(exc) or type(exc).__name__
             _log.warning("SpeechController: tts.speak raised: %s", exc, exc_info=True)
             if play_task is not None and not play_task.done():
                 play_task.cancel()
@@ -338,18 +376,28 @@ class SpeechController:
             if play_task is not None:
                 with suppress(asyncio.CancelledError, Exception):
                     await play_task
-            self._resolve_speech_ready(False)
+            self._resolve_speech_ready(ready_future, False)
         finally:
-            self._resolve_speech_ready(False)
+            self._resolve_speech_ready(ready_future, False)
             if cancelled:
-                self._bus.publish(TTSInterrupted(ts=_now()))
+                self._bus.publish(TTSInterrupted(ts=_now(), utterance_id=utterance_id))
+            elif failure_message is not None:
+                self._bus.publish(
+                    TTSFailed(
+                        ts=_now(),
+                        utterance_id=utterance_id,
+                        message=failure_message,
+                    )
+                )
             else:
-                self._bus.publish(TTSFinished(ts=_now()))
-            resume = self._resume_listening_after_tts
-            self._resume_listening_after_tts = None
-            if resume is not None and self._started and not self._ptt_active:
+                self._bus.publish(TTSFinished(ts=_now(), utterance_id=utterance_id))
+            if self._current_utterance_id == utterance_id:
+                self._current_utterance_id = None
+                self._current_tts_task = None
+                self._speech_ready = None
+            if resume_listening is not None and self._started and not self._ptt_active:
                 try:
-                    await self._restore_passive_listening(resume)
+                    await self._restore_passive_listening(resume_listening)
                 except Exception as exc:
                     _log.warning(
                         "SpeechController: could not restore listening after TTS: %s",
@@ -357,8 +405,8 @@ class SpeechController:
                         exc_info=True,
                     )
 
-    def _resolve_speech_ready(self, ready: bool) -> None:
-        future = self._speech_ready
+    @staticmethod
+    def _resolve_speech_ready(future: asyncio.Future[bool], ready: bool) -> None:
         if future is not None and not future.done():
             future.set_result(ready)
 
@@ -372,6 +420,7 @@ class SpeechController:
 
         task = self._current_tts_task
         self._current_tts_task = None
+        self._current_utterance_id = None
         if task is None or task.done():
             # Even if no task is alive, stop the adapter so its internal
             # state matches (mocks and real adapters both honour this).

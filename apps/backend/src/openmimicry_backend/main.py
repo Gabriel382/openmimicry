@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from openmimicry.core import AppConfig, TaskHandle, UserSpeechFinal
+from openmimicry.core import AppConfig, LLMMessage, TaskHandle, UserSpeechFinal
 from openmimicry.core.config import load as load_config
 
 from .appearance import load_appearance
@@ -35,9 +35,13 @@ from .routes import (
     dashboard_router,
     diagnostics_router,
     health_router,
+    interaction_router,
     llm_router,
+    memory_router,
     mode_router,
     pack_router,
+    personality_router,
+    voice_clone_router,
 )
 from .routes.chat import run_chat_turn
 from .wiring import Wiring, build_runtime
@@ -59,7 +63,10 @@ def _module_available(module_name: str) -> bool:
 def _load_app_config() -> tuple[AppConfig, str | None]:
     """Load :class:`AppConfig` from ``OPENMIMICRY_CONFIG_PATH`` or defaults."""
     path_env = os.environ.get("OPENMIMICRY_CONFIG_PATH")
-    return load_config(path_env), path_env
+    # v1 files are upgraded in memory only. The loader never overwrites the
+    # user's source file, so rollback remains a matter of selecting the old
+    # executable/config again.
+    return load_config(path_env, allow_migrate=True), path_env
 
 
 @asynccontextmanager
@@ -67,7 +74,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the runtime, start the orchestrator + speech, tear it all down."""
     config, config_path = _load_app_config()
     appearance = load_appearance()
-    character_registry = CharacterRegistry(config.avatar.pack_roots)
+    presentation = config.interaction.response_presentation
+    appearance = appearance.model_copy(
+        update={
+            "behaviour": appearance.behaviour.model_copy(
+                update={
+                    "bubble": appearance.behaviour.bubble.model_copy(
+                        update={
+                            "base_ms": presentation.base_ms,
+                            "ms_per_character": presentation.ms_per_character,
+                            "min_ms": presentation.minimum_ms,
+                            "max_ms": presentation.maximum_ms,
+                        }
+                    )
+                }
+            )
+        }
+    )
+    character_registry = CharacterRegistry(
+        config.avatar.pack_roots,
+        reject_licenses=(
+            config.distribution.reject_licenses
+            if config.distribution.profile == "commercial"
+            else None
+        ),
+    )
 
     bridge = BroadcastBridge()
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
@@ -82,17 +113,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "stt_model": getattr(wiring.speech, "stt_model", config.voice.stt.model),
         "post_speech_silence_duration": wiring.speech.post_speech_silence_duration,
     }
+    presentation_state = {"value": config.interaction.response_presentation}
 
     async def _run_ordered_turn(text: str, history) -> str | None:
-        return await run_chat_turn(
+        memory_context = await wiring.memory.context(text)
+        augmented_history = list(history)
+        if memory_context:
+            augmented_history.append(LLMMessage(role="system", content=memory_context))
+        reply = await run_chat_turn(
             text,
             bus=wiring.bus,
             llm=wiring.llm,
             tasks=wiring.tasks,
             speech=wiring.speech if mode_state["agent_voice"] else None,
             intent_fn=wiring.intent,
-            history=history,
+            history=augmented_history,
+            presentation=presentation_state["value"],
+            voice_enabled=bool(mode_state["agent_voice"]),
         )
+        if reply and config.memory.enabled:
+            wiring.memory.observe(
+                text,
+                reply,
+                source=f"conversation:{diagnostics.session_id}",
+            )
+        return reply
 
     conversation = ConversationCoordinator(
         run_turn=_run_ordered_turn,
@@ -145,6 +190,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 and Path(f"{tts_model}.json").is_file()
             )
             real_output = real_output and bool(getattr(wiring.speech, "tts_ready", False))
+        elif tts_name == "elevenlabs":
+            real_output = bool(getattr(wiring.tts, "has_credentials", False))
         return {
             **mode_state,
             "listening_mode": getattr(wiring.speech, "listening_mode", "off"),
@@ -185,6 +232,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await wiring.tasks.cancel(TaskHandle.model_validate(raw_handle))
 
     app.state.wiring = wiring
+    app.state.config = config
+    app.state.presentation_state = presentation_state
     app.state.bridge = bridge
     app.state.handle_user_text = _handle_user_text
     app.state.apply_mode_toggle = _apply_mode_toggle
@@ -194,6 +243,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cancel_task = _cancel_task
     app.state.conversation = conversation
     app.state.character_registry = character_registry
+    app.state.memory = wiring.memory
     app.state.diagnostics = diagnostics
 
     speech_subscription = wiring.bus.subscribe()
@@ -239,6 +289,7 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
     await asyncio.gather(
         wiring.orchestrator.stop(),
         wiring.speech.stop(),
+        wiring.memory.close(),
         return_exceptions=True,
     )
     await wiring.runtime.stop()
@@ -247,7 +298,7 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.5.1",
+        version="1.6.4",
         lifespan=lifespan,
     )
 
@@ -257,6 +308,10 @@ def create_app() -> FastAPI:
     app.include_router(diagnostics_router)
     app.include_router(mode_router)
     app.include_router(llm_router)
+    app.include_router(interaction_router)
+    app.include_router(memory_router)
+    app.include_router(personality_router)
+    app.include_router(voice_clone_router)
     app.include_router(pack_router)
     app.include_router(admin_router)
     app.include_router(appearance_router)

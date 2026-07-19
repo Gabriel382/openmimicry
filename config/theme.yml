@@ -44,8 +44,9 @@ layout:
 behaviour:
   bubble:
     # Display duration = min(max_ms, base_ms + characters * ms_per_character).
-    base_ms: 2500
+    base_ms: 1500
     ms_per_character: 55
+    min_ms: 2500
     max_ms: 30000
   controls:
     show: true

@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 # Concrete imports — the rest of the backend may NOT do this.
 from openmimicry.avatar import (
@@ -50,6 +50,8 @@ from openmimicry.llm import (
     LLMSwitchboard,
     MockLLMAdapter,
 )
+from openmimicry.memory import HindsightMemory, LocalSQLiteMemory, MemoryService, NullMemory
+from openmimicry.memory.extractors import LLMExtractor
 from openmimicry.tasks import (
     ClaudeCodeAdapter,
     LocalShellAdapter,
@@ -59,6 +61,10 @@ from openmimicry.tasks import (
     detect_task_intent,
 )
 from openmimicry.voice import (
+    ChatterboxSettings,
+    ChatterboxTTSAdapter,
+    ElevenLabsSettings,
+    ElevenLabsTTSAdapter,
     IsolatedFasterWhisperAdapter,
     IsolatedFasterWhisperSettings,
     IsolatedPiperSettings,
@@ -67,6 +73,7 @@ from openmimicry.voice import (
     MockTTSAdapter,
     RealtimeSTTAdapter,
     RealtimeTTSAdapter,
+    SystemCommandTTSAdapter,
 )
 from openmimicry.voice import (
     SpeechController as ConcreteSpeechController,
@@ -107,6 +114,7 @@ class Wiring:
     avatar_runtime: AvatarRuntimeAdapter
     orchestrator: Any
     tasks: TaskRuntimeAdapter
+    memory: MemoryService
     adapters_by_family: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     bridge: Any = None
     intent: IntentClassifier = detect_task_intent
@@ -133,6 +141,7 @@ async def build_runtime(
     await runtime.start()
 
     llm = _build_llm(config)
+    memory = _build_memory(config, llm)
     stt = _build_stt(config)
     tts = _build_tts(config)
     speech: SpeechController = ConcreteSpeechController(
@@ -168,6 +177,7 @@ async def build_runtime(
         avatar_runtime=avatar_runtime,
         orchestrator=orchestrator,
         tasks=task_router,
+        memory=memory,
         adapters_by_family={
             "llm": {llm.name: llm},
             "stt": {stt.name: stt},
@@ -256,6 +266,64 @@ def _build_stt(config: AppConfig) -> STTAdapter:
     raise WiringError(f"unknown voice.stt.adapter: {name!r}")
 
 
+class _MemoryLLMCompletion:
+    """Turn a selected streaming adapter into the memory extractor surface."""
+
+    def __init__(self, adapter: LLMAdapter) -> None:
+        self._adapter = adapter
+
+    async def complete(self, prompt: str) -> str:
+        from openmimicry.core import LLMMessage
+
+        parts: list[str] = []
+        async for chunk in self._adapter.generate(
+            [
+                LLMMessage(
+                    role="system",
+                    content="You extract durable user memories into strict JSON.",
+                ),
+                LLMMessage(role="user", content=prompt),
+            ],
+            stream=True,
+            temperature=0.0,
+        ):
+            parts.append(chunk.delta)
+        return "".join(parts)
+
+
+def _build_memory(config: AppConfig, llm: LLMAdapter) -> MemoryService:
+    memory = config.memory
+    if not memory.enabled or memory.provider == "none":
+        provider = NullMemory()
+    elif memory.provider == "local":
+        provider = LocalSQLiteMemory(
+            memory.database_path,
+            retention_days=memory.retention_days,
+        )
+    elif memory.provider == "hindsight":
+        if memory.endpoint is None:
+            raise WiringError("memory.endpoint is required for Hindsight")
+        provider = HindsightMemory(base_url=memory.endpoint)
+    else:  # pragma: no cover - Pydantic rejects unknown providers.
+        raise WiringError(f"unknown memory.provider: {memory.provider!r}")
+
+    llm_extractor = None
+    if memory.enabled and memory.extraction_mode == "llm":
+        selected: LLMAdapter = llm
+        backend_getter = getattr(llm, "backend", None)
+        backend_name = memory.llm_backend or config.llm.roles.memory_extract
+        if callable(backend_getter):
+            selected = cast(LLMAdapter, backend_getter(backend_name))
+        llm_extractor = LLMExtractor(_MemoryLLMCompletion(selected))
+    return MemoryService(
+        provider=provider,
+        retrieval_limit=memory.retrieval_limit,
+        retrieval_deadline_ms=memory.retrieval_deadline_ms,
+        extraction=memory.extraction_mode,
+        llm_extractor=llm_extractor,
+    )
+
+
 def _build_tts(config: AppConfig) -> TTSAdapter:
     name = config.voice.tts.adapter
     if name == "mock":
@@ -266,6 +334,37 @@ def _build_tts(config: AppConfig) -> TTSAdapter:
         )
     if name == "realtimetts":
         return RealtimeTTSAdapter()
+    if name == "system-command":
+        return SystemCommandTTSAdapter()
+    if name == "elevenlabs":
+        clone = config.voice.tts.clone
+        if clone is None or clone.provider != "elevenlabs":
+            raise WiringError("voice.tts.adapter=elevenlabs requires an elevenlabs clone config")
+        secret_name = (
+            config.voice.tts.secret.name
+            if config.voice.tts.secret is not None and config.voice.tts.secret.source == "env"
+            else "ELEVENLABS_API_KEY"
+        )
+        return ElevenLabsTTSAdapter(
+            ElevenLabsSettings(
+                voice_id=clone.voice_id,
+                api_key_env=secret_name,
+                endpoint=config.voice.tts.endpoint or "https://api.elevenlabs.io",
+            )
+        )
+    if name == "chatterbox-local":
+        clone = config.voice.tts.clone
+        if clone is None or clone.provider != "chatterbox-local" or not clone.reference_path:
+            raise WiringError(
+                "voice.tts.adapter=chatterbox-local requires reference_path and consent_record"
+            )
+        return ChatterboxTTSAdapter(
+            ChatterboxSettings(
+                reference_path=clone.reference_path,
+                consent_record=clone.consent_record,
+                startup_timeout_s=config.voice.tts.readiness_timeout_s,
+            )
+        )
     raise WiringError(f"unknown voice.tts.adapter: {name!r}")
 
 

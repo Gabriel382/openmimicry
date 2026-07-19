@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import uuid
 from typing import Any
 
 from openmimicry.core.schemas import AvatarDirective
@@ -127,9 +126,7 @@ class UnityAvatarAdapter:
 
     async def stop_speaking(self) -> None:
         await self._ensure_started()
-        self._enqueue(
-            {"type": "avatar.directive", "runtime": "unity", "speaking": False}
-        )
+        self._enqueue({"type": "avatar.directive", "runtime": "unity", "speaking": False})
 
     async def set_visibility(self, visible: bool) -> None:
         await self._ensure_started()
@@ -211,9 +208,7 @@ class UnityAvatarAdapter:
             try:
                 await transport.send(frame)
             except UnityTransportError as exc:
-                _log.info(
-                    "UnityAvatarAdapter: send failed, will reconnect: %s", exc
-                )
+                _log.info("UnityAvatarAdapter: send failed, will reconnect: %s", exc)
                 # Re-queue the frame at the front so it isn't lost.
                 with contextlib.suppress(asyncio.QueueFull):
                     self._queue.put_nowait(frame)
@@ -221,10 +216,8 @@ class UnityAvatarAdapter:
                     await transport.aclose()
                 self._transport = None
                 await asyncio.sleep(self._backoff_delay())
-            except Exception as exc:  # noqa: BLE001
-                _log.warning(
-                    "UnityAvatarAdapter: unexpected send error: %s", exc, exc_info=True
-                )
+            except Exception as exc:
+                _log.warning("UnityAvatarAdapter: unexpected send error: %s", exc, exc_info=True)
                 await asyncio.sleep(self._backoff_delay())
 
     async def _reader_loop(self) -> None:
@@ -238,10 +231,8 @@ class UnityAvatarAdapter:
                     self._consume_reverse(frame)
             except UnityTransportError as exc:
                 _log.info("UnityAvatarAdapter: reader transport error: %s", exc)
-            except Exception as exc:  # noqa: BLE001
-                _log.warning(
-                    "UnityAvatarAdapter: reader crashed: %s", exc, exc_info=True
-                )
+            except Exception as exc:
+                _log.warning("UnityAvatarAdapter: reader crashed: %s", exc, exc_info=True)
             # When the iterator ends, wait for the next reconnect.
             await asyncio.sleep(0.05)
 

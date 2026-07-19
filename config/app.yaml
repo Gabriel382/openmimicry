@@ -1,5 +1,5 @@
 # Safe default: a complete Sprite2D desktop with no keys or audio downloads.
-schema_version: 1
+schema_version: 2
 
 app:
   log_level: INFO
@@ -17,12 +17,32 @@ voice:
       enabled: false
   tts:
     adapter: mock
+    readiness_timeout_s: 30
   modes:
     text_always_on: true
     continuous_listening: false
     live_wake: false
     agent_voice: false
     barge_in_enabled: false
+
+interaction:
+  response_presentation:
+    mode: parallel
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+# Memory is deliberately opt-in. Enabling it changes data retention behavior.
+memory:
+  enabled: false
+  provider: none
+
+# The default dependency set is suitable for later commercial distribution.
+distribution:
+  profile: commercial
 
 avatar:
   runtime: sprite2d

@@ -214,7 +214,7 @@ def test_artifact_round_trip() -> None:
 
 def test_app_config_default_tree_is_complete() -> None:
     cfg = AppConfig()
-    assert cfg.schema_version == 1
+    assert cfg.schema_version == 2
     assert cfg.app.log_level == "INFO"
     assert cfg.app.log_format == "json"
     assert cfg.llm.adapter == "litellm"
@@ -225,6 +225,9 @@ def test_app_config_default_tree_is_complete() -> None:
     assert cfg.avatar.runtime == "sprite2d"
     assert cfg.tasks.default_runtime == "mcp_agent"
     assert cfg.ui.overlay.click_through_default is True
+    assert cfg.interaction.response_presentation.mode == "parallel"
+    assert cfg.memory.enabled is False
+    assert cfg.distribution.profile == "commercial"
 
 
 def test_app_config_round_trips_to_dict() -> None:

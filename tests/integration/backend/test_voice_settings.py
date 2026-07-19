@@ -39,9 +39,7 @@ def test_end_of_speech_pause_is_updated_live_and_persisted(
     user_config = tmp_path / "user.yaml"
     monkeypatch.setenv("OPENMIMICRY_USER_CONFIG", str(user_config))
 
-    response = client.post(
-        "/voice/settings", json={"post_speech_silence_duration": 1.4}
-    )
+    response = client.post("/voice/settings", json={"post_speech_silence_duration": 1.4})
 
     assert response.status_code == 200
     assert response.json()["post_speech_silence_duration"] == 1.4
@@ -51,9 +49,7 @@ def test_end_of_speech_pause_is_updated_live_and_persisted(
 
 
 def test_end_of_speech_pause_is_bounded(client: TestClient) -> None:
-    response = client.post(
-        "/voice/settings", json={"post_speech_silence_duration": 4.0}
-    )
+    response = client.post("/voice/settings", json={"post_speech_silence_duration": 4.0})
     assert response.status_code == 422
 
 

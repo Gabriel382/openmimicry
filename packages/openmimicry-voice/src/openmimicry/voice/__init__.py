@@ -34,6 +34,8 @@ from .stt.realtimestt_adapter import (
     RealtimeSTTSettings,
     RealtimeSTTUnavailable,
 )
+from .tts.chatterbox import ChatterboxSettings, ChatterboxTTSAdapter
+from .tts.elevenlabs import ElevenLabsSettings, ElevenLabsTTSAdapter
 from .tts.isolated_piper import (
     IsolatedPiperSettings,
     IsolatedPiperTTSAdapter,
@@ -44,8 +46,13 @@ from .tts.realtimetts_adapter import (
     RealtimeTTSSettings,
     RealtimeTTSUnavailable,
 )
+from .tts.system_command import SystemCommandTTSAdapter, SystemTTSUnavailable
 
 __all__ = [
+    "ChatterboxSettings",
+    "ChatterboxTTSAdapter",
+    "ElevenLabsSettings",
+    "ElevenLabsTTSAdapter",
     "IsolatedFasterWhisperAdapter",
     "IsolatedFasterWhisperSettings",
     "IsolatedPiperSettings",
@@ -62,8 +69,10 @@ __all__ = [
     "RealtimeTTSUnavailable",
     "STTAdapter",
     "SpeechController",
+    "SystemCommandTTSAdapter",
+    "SystemTTSUnavailable",
     "TTSAdapter",
     "WakeController",
 ]
 
-__version__ = "1.5.1"
+__version__ = "1.6.4"

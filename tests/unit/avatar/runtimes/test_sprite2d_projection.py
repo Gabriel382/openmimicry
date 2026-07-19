@@ -51,7 +51,6 @@ def test_speaking_falls_back_to_base_when_speaking_frames_missing() -> None:
     """If a pack has no speaking_frames for the state, fall back to base."""
     pack = load_pack(FIXTURES / "missing_speaking")
     directive = AvatarDirective(state="idle", speaking=True)
-    msg = build_sprite2d_projection(directive, pack)
     # The loader already filled speaking_frames with base frames, so the
     # selection should match the base frames.
     base = frames_for_directive(AvatarDirective(state="idle", speaking=False), pack)
@@ -85,8 +84,6 @@ def test_static_url_rewrites_paths(pack) -> None:
 
 def test_custom_url_prefix(pack) -> None:
     directive = AvatarDirective(state="idle", speaking=False)
-    msg = build_sprite2d_projection(
-        directive, pack, static_url_prefix="/assets/packs"
-    )
+    msg = build_sprite2d_projection(directive, pack, static_url_prefix="/assets/packs")
     for url in msg["frames"]:
         assert url.startswith("/assets/packs/good_pack/")

@@ -13,7 +13,8 @@ def test_voice_extra_installs_isolated_runtime_dependencies() -> None:
     extras = package["project"]["optional-dependencies"]
 
     assert "faster-whisper>=1.2.1" in extras["voice"]
-    assert "piper-tts>=1.5.0" in extras["voice"]
+    assert "piper-tts==1.4.2" in extras["piper-community"]
+    assert not any("piper" in dependency for dependency in extras["voice"])
     assert "sounddevice>=0.5" in extras["voice"]
     assert "RealtimeSTT[faster-whisper]>=0.3" in extras["legacy-realtime"]
 
@@ -21,7 +22,7 @@ def test_voice_extra_installs_isolated_runtime_dependencies() -> None:
 def test_launcher_captures_native_stderr_before_checking_exit_code() -> None:
     script = (ROOT / "scripts/win/start-openrouter-voice.ps1").read_text(encoding="utf-8")
 
-    assert "function Test-VoiceImports" in script
+    assert "function Invoke-NativeCapture" in script
     assert '$ErrorActionPreference = "Continue"' in script
     assert "2>&1" in script
     assert "2>$null" not in script
@@ -35,6 +36,23 @@ def test_launcher_captures_native_stderr_before_checking_exit_code() -> None:
     assert "Get-NetTCPConnection -LocalPort $backendPort -State Listen" in script
     assert "Close the old OpenMimicry backend" in script
     assert '& ".\\scripts\\win\\backend.bat" "--no-reload"' in script
+    assert "start-openrouter-chatterbox.ps1" not in script
+
+
+def test_standard_voice_launcher_detects_repairs_and_prewarms_chatterbox() -> None:
+    script = (ROOT / "scripts/win/start-openrouter-voice.ps1").read_text(encoding="utf-8")
+
+    assert "chatterbox-local" in script
+    assert "OPENMIMICRY_USER_CONFIG" in script
+    assert '"openrouter-chatterbox"' in script
+    assert "install_chatterbox_runtime.py" in script
+    assert '"--check-only"' in script
+    assert '"openmimicry.voice.workers.chatterbox_job"' in script
+    assert '"--preflight", "--device", "auto"' in script
+    assert "chatterbox-preflight-v1.6.4.ok" in script
+    assert 'OPENMIMICRY__VOICE__TTS__READINESS_TIMEOUT_S = "180"' in script
+    assert '& ".\\scripts\\win\\backend.bat" "--no-reload"' in script
+    assert not (ROOT / "scripts/win/start-openrouter-chatterbox.ps1").exists()
 
 
 def test_windows_backend_supports_voice_safe_no_reload_mode() -> None:

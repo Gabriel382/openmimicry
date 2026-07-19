@@ -21,11 +21,21 @@ set "PY=%VENV%\Scripts\python.exe"
 "%PY%" -m pip install --upgrade pip setuptools wheel || goto :error
 "%PY%" -m pip install -e packages\openmimicry-core      || goto :error
 "%PY%" -m pip install -e packages\openmimicry-llm       || goto :error
+"%PY%" -m pip install -e packages\openmimicry-memory    || goto :error
 "%PY%" -m pip install -e packages\openmimicry-voice     || goto :error
-if /i "%PROFILE%"=="voice" "%PY%" -m pip install -e "packages\openmimicry-voice[voice]" || goto :error
+if /i "%PROFILE%"=="voice" "%PY%" -m pip install -e "packages\openmimicry-voice[voice,piper-community]" || goto :error
 if /i "%PROFILE%"=="openrouter-voice" (
     "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
+    "%PY%" -m pip install -e "packages\openmimicry-voice[voice,piper-community]" || goto :error
+)
+if /i "%PROFILE%"=="openrouter-commercial" (
+    "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
     "%PY%" -m pip install -e "packages\openmimicry-voice[voice]" || goto :error
+)
+if /i "%PROFILE%"=="openrouter-chatterbox" (
+    "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
+    "%PY%" -m pip install -e "packages\openmimicry-voice[voice,clone-chatterbox]" || goto :error
+    "%PY%" scripts\install_chatterbox_runtime.py --python "%PY%" || goto :error
 )
 "%PY%" -m pip install -e packages\openmimicry-avatar    || goto :error
 "%PY%" -m pip install -e packages\openmimicry-tasks     || goto :error

@@ -106,16 +106,14 @@ async def test_apply_directive_without_pack_drops_quietly() -> None:
 async def test_apply_directive_never_raises_on_unknown_gesture() -> None:
     bridge = FakeBridge()
     adapter = Live3DAvatarAdapter(pack=_pack(), ws_bridge=bridge)
-    await adapter.apply_directive(
-        AvatarDirective(state="idle", gesture="not-a-real-gesture")
-    )
+    await adapter.apply_directive(AvatarDirective(state="idle", gesture="not-a-real-gesture"))
     assert len(bridge.published) == 1
     assert "gestureClip" not in bridge.published[0]
 
 
 async def test_bridge_errors_dont_propagate() -> None:
     class BoomBridge:
-        async def publish(self, message):  # noqa: ANN001
+        async def publish(self, message):
             raise RuntimeError("network down")
 
     adapter = Live3DAvatarAdapter(pack=_pack(), ws_bridge=BoomBridge())
@@ -161,9 +159,7 @@ async def test_healthcheck_and_shutdown_are_idempotent() -> None:
 async def test_load_character_warns_on_non_3d_kind_but_still_loads() -> None:
     bridge = FakeBridge()
     adapter = Live3DAvatarAdapter(ws_bridge=bridge)
-    await adapter.load_character(
-        "good_pack", {"pack_path": str(FIXTURES / "good_pack")}
-    )
+    await adapter.load_character("good_pack", {"pack_path": str(FIXTURES / "good_pack")})
     # First publish is the idle directive applied during load_character.
     assert len(bridge.published) == 1
     assert bridge.published[0]["runtime"] == "live3d"

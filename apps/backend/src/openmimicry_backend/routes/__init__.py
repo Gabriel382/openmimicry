@@ -13,9 +13,13 @@ from .chat import router as chat_router
 from .dashboard import router as dashboard_router
 from .diagnostics import router as diagnostics_router
 from .health import router as health_router
+from .interaction import router as interaction_router
 from .llm import router as llm_router
+from .memory import router as memory_router
 from .mode import router as mode_router
 from .pack import router as pack_router
+from .personality import router as personality_router
+from .voice_clone import router as voice_clone_router
 
 __all__ = [
     "admin_router",
@@ -24,7 +28,11 @@ __all__ = [
     "dashboard_router",
     "diagnostics_router",
     "health_router",
+    "interaction_router",
     "llm_router",
+    "memory_router",
     "mode_router",
     "pack_router",
+    "personality_router",
+    "voice_clone_router",
 ]

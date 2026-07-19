@@ -33,8 +33,11 @@ __all__ = [
     "RuntimeEvent",
     "RuntimeEventAdapter",
     "TTSChunkSpoken",
+    "TTSFailed",
     "TTSFinished",
     "TTSInterrupted",
+    "TTSQueued",
+    "TTSReady",
     "TTSStarted",
     "TaskCompleted",
     "TaskSubmitted",
@@ -100,6 +103,9 @@ class LLMTokenStreamed(_Event):
 class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
+    presentation_mode: Literal["parallel", "voice_ready", "text_only", "voice_only"] = "parallel"
+    speech_expected: bool = False
+    speech_utterance_id: str | None = None
 
 
 class AvatarCue(_Event):
@@ -117,20 +123,40 @@ class AvatarCue(_Event):
     duration_ms: int = 1800
 
 
+class TTSQueued(_Event):
+    kind: Literal["tts_queued"] = "tts_queued"
+    utterance_id: str
+
+
+class TTSReady(_Event):
+    kind: Literal["tts_ready"] = "tts_ready"
+    utterance_id: str
+
+
 class TTSStarted(_Event):
     kind: Literal["tts_start"] = "tts_start"
+    utterance_id: str | None = None
 
 
 class TTSChunkSpoken(_Event):
     kind: Literal["tts_chunk"] = "tts_chunk"
+    utterance_id: str | None = None
 
 
 class TTSFinished(_Event):
     kind: Literal["tts_done"] = "tts_done"
+    utterance_id: str | None = None
 
 
 class TTSInterrupted(_Event):
     kind: Literal["tts_interrupted"] = "tts_interrupted"
+    utterance_id: str | None = None
+
+
+class TTSFailed(_Event):
+    kind: Literal["tts_failed"] = "tts_failed"
+    utterance_id: str | None = None
+    message: str = "Text-to-speech playback did not start."
 
 
 class TaskSubmitted(_Event):
@@ -213,10 +239,13 @@ RuntimeEvent = Annotated[
     | LLMTokenStreamed
     | LLMReplyComplete
     | AvatarCue
+    | TTSQueued
+    | TTSReady
     | TTSStarted
     | TTSChunkSpoken
     | TTSFinished
     | TTSInterrupted
+    | TTSFailed
     | TaskSubmitted
     | TaskUpdatedEvent
     | TaskCompleted

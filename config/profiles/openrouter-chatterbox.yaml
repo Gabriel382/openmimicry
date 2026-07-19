@@ -1,0 +1,83 @@
+# Opt-in local voice cloning. Requires a consented reference recording.
+schema_version: 2
+
+llm:
+  active_backend: openrouter
+  history_turns: 4
+  backends:
+    openrouter:
+      adapter: litellm
+      provider: openrouter
+      model: openrouter/openai/gpt-oss-20b
+      api_key_env: OPENROUTER_API_KEY
+      temperature: 0.6
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      provider: ollama
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      temperature: 0.6
+      request_timeout_s: 180
+
+voice:
+  stt:
+    adapter: isolated-faster-whisper
+    language: en
+    model: medium.en
+    realtime_model_type: medium.en
+    use_main_model_for_realtime: true
+    device: auto
+    compute_type: auto
+    beam_size: 5
+    speech_threshold: 0.015
+    vad: silero
+    post_speech_silence_duration: 1.0
+    wake:
+      enabled: true
+      names: [Mimi, Hey Mimi]
+      aliases: [Me me]
+      sensitivity: 0.6
+  tts:
+    adapter: chatterbox-local
+    engine: chatterbox-turbo
+    voice: cloned-local
+    rate: 1.0
+    interruptible: true
+    readiness_timeout_s: 180
+    clone:
+      provider: chatterbox-local
+      voice_id: local-reference
+      consent_record: "Replace with the speaker's dated consent record"
+      reference_path: ~/.openmimicry/voices/reference.wav
+      store_reference_locally: true
+  modes:
+    text_always_on: true
+    continuous_listening: false
+    live_wake: false
+    agent_voice: true
+    barge_in_enabled: false
+
+interaction:
+  response_presentation:
+    mode: voice_ready
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+memory:
+  enabled: false
+  provider: none
+
+distribution:
+  profile: community
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

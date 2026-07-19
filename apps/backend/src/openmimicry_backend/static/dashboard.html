@@ -65,6 +65,23 @@
         <p id="voice-adapters" class="muted">Input: unknown · Output: unknown</p>
         <p id="voice-result" class="voice-result" aria-live="polite">PTT is idle.</p>
         <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the configured name, for example “Mimi, what time is it?”. <strong>Push-to-talk</strong> starts recording while the toolbar microphone or Ctrl+Space is held, then transcribes after release; it does not require the name.</p>
+        <details>
+          <summary>Configure a custom/cloned voice</summary>
+          <form id="voice-clone-form" class="settings-form">
+            <label><span>Provider</span><select id="clone-provider"><option value="chatterbox-local">Chatterbox local (free, optional install)</option><option value="elevenlabs">ElevenLabs voice id (paid/BYOK)</option></select></label>
+            <label><span>Consent record</span><input id="clone-consent" required minlength="10" maxlength="256" placeholder="Speaker consented on YYYY-MM-DD" /></label>
+            <label><span>Reference WAV/MP3 (local)</span><input id="clone-reference" type="file" accept="audio/wav,audio/mpeg,.wav,.mp3" /></label>
+            <label><span>ElevenLabs voice id</span><input id="clone-voice-id" maxlength="128" /></label>
+            <button type="submit">Save custom voice</button>
+          </form>
+          <form id="voice-token-form" class="settings-form" autocomplete="off">
+            <label><span>ElevenLabs session token</span><input id="voice-token" type="password" maxlength="8192" autocomplete="off" /></label>
+            <button type="submit">Use for this session</button>
+            <button id="voice-token-clear" type="button" class="secondary">Clear session token</button>
+          </form>
+          <p id="voice-credential-status" class="muted">Voice token: environment or session only</p>
+          <p class="field-hint">Local cloning stores the consented reference under the private OpenMimicry data directory and requires <code>openmimicry-voice[clone-chatterbox]</code>. ElevenLabs uses a voice already created in your account plus <code>ELEVENLABS_API_KEY</code>. No reference is uploaded by OpenMimicry. Restart the backend after changing providers.</p>
+        </details>
         <p id="voice-error" class="error" role="alert"></p>
       </section>
 
@@ -82,8 +99,21 @@
           <button type="submit">Validate &amp; import</button>
         </form>
         <p class="field-hint">The ZIP must contain exactly one <code>pack.yaml</code> plus its sprite folders. Imported packs appear in the selector above.</p>
+        <details>
+          <summary>Create a simple 2D character</summary>
+          <form id="pack-create-form" class="settings-form">
+            <label><span>Pack id</span><input id="create-pack-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_character" /></label>
+            <label><span>Name</span><input id="create-pack-name" required maxlength="128" /></label>
+            <label><span>Author / owner</span><input id="create-pack-author" required maxlength="128" /></label>
+            <label><span>License / ownership</span><input id="create-pack-license" required maxlength="128" value="Proprietary (user-owned)" /></label>
+            <label><span>Idle sprite (required)</span><input id="create-pack-idle" type="file" required accept="image/png,image/webp,image/jpeg,image/gif" /></label>
+            <label><span>Speaking sprite (optional)</span><input id="create-pack-speaking" type="file" accept="image/png,image/webp,image/jpeg,image/gif" /></label>
+            <button type="submit">Create pack</button>
+          </form>
+          <p class="field-hint">The wizard creates every lifecycle folder from the idle image and uses the optional speaking image during TTS. For full animation, download the <a href="/pack/template">v1.6 template ZIP</a>, replace its numbered transparent sprites, and import it above.</p>
+        </details>
         <p id="settings-error" class="error" role="alert"></p>
-        <p class="muted">Window geometry, colors, toolbar visibility, and bubble timing remain in <code>config/theme.yml</code>.</p>
+        <p class="muted">Only import artwork you own or may redistribute. Commercial-profile imports reject configured incompatible or unknown license labels.</p>
       </section>
 
       <section class="card">
@@ -92,8 +122,67 @@
           <label><span>Backend</span><select id="llm-backend"></select></label>
           <button type="submit">Switch backend</button>
         </form>
-        <p class="field-hint">OpenRouter uses <code>OPENROUTER_API_KEY</code>. Ollama is local and expects the configured model at <code>127.0.0.1:11434</code>. A switch applies to the next turn.</p>
+        <form id="llm-model-form" class="settings-form">
+          <label><span>Model</span><select id="llm-model-select"></select></label>
+          <button type="button" id="llm-discover">Load available models</button>
+          <span></span><button type="submit">Use model</button>
+        </form>
+        <form id="llm-token-form" class="settings-form" autocomplete="off">
+          <label><span>Session API token</span><input id="llm-token" type="password" maxlength="8192" autocomplete="new-password" placeholder="Not saved to disk" /></label>
+          <button type="submit">Use until exit</button>
+          <span id="llm-credential-status" class="field-hint">Checking credential source…</span>
+          <button type="button" id="llm-token-clear" class="quiet">Clear session token</button>
+        </form>
+        <p class="field-hint">OpenRouter may use <code>OPENROUTER_API_KEY</code> or the session-only token above. Ollama discovery reads installed models from the local <code>/api/tags</code> endpoint. Backend/model switches apply to the next turn.</p>
         <p id="llm-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Reply presentation</h2><span class="badge">v1.6</span></div>
+        <form id="interaction-form" class="settings-form">
+          <label><span>Text and voice</span><select id="presentation-mode"><option value="parallel">Show text and voice in parallel</option><option value="voice_ready">Show text when voice is ready</option><option value="text_only">Text only</option><option value="voice_only">Voice only</option></select></label>
+          <label><span>Minimum display (ms)</span><input id="bubble-min" type="number" min="0" max="60000" step="100" /></label>
+          <label><span>Base display (ms)</span><input id="bubble-base" type="number" min="0" max="60000" step="100" /></label>
+          <label><span>Per character (ms)</span><input id="bubble-per-character" type="number" min="0" max="1000" step="1" /></label>
+          <label><span>Maximum display (ms)</span><input id="bubble-max" type="number" min="1000" max="300000" step="100" /></label>
+          <button type="submit">Save presentation</button>
+        </form>
+        <p class="field-hint">With parallel voice, a reply remains visible until both playback has ended and the reading timer has elapsed. A TTS failure releases the audio hold and keeps text available.</p>
+        <p id="interaction-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Personality</h2><span class="badge">prompt</span></div>
+        <form id="personality-form">
+          <label for="personality-prompt">System prompt</label>
+          <textarea id="personality-prompt" rows="7" maxlength="20000" aria-label="Assistant personality system prompt"></textarea>
+          <button type="submit">Save personality</button>
+        </form>
+        <p class="field-hint">The avatar emotion/action JSON contract is appended separately and remains allow-listed, so editing personality cannot introduce unsupported animations.</p>
+        <p id="personality-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Long-term memory</h2><span id="memory-status" class="badge">checking</span></div>
+        <p id="memory-summary" class="field-hint">Memory is optional and disabled by default.</p>
+        <form id="memory-settings-form" class="settings-form">
+          <label><span>Enabled</span><select id="memory-enabled"><option value="false">Off (no retention)</option><option value="true">On</option></select></label>
+          <label><span>Provider</span><select id="memory-provider"><option value="none">None (memory off)</option><option value="local">Local SQLite</option><option value="hindsight">Hindsight service</option></select></label>
+          <label><span>Extraction</span><select id="memory-extraction"><option value="deterministic">Deterministic explicit facts</option><option value="llm">Independent LLM extraction</option></select></label>
+          <label><span>Memory LLM backend</span><select id="memory-llm-backend"><option value="">Conversation backend/default</option></select></label>
+          <label><span>Retrieval deadline (ms)</span><input id="memory-deadline" type="number" min="25" max="5000" step="25" /></label>
+          <label><span>Retention days</span><input id="memory-retention" type="number" min="1" max="36500" step="1" /></label>
+          <label><span>Hindsight endpoint</span><input id="memory-endpoint" maxlength="2048" placeholder="http://127.0.0.1:8888" /></label>
+          <button type="submit">Save memory settings</button>
+        </form>
+        <div class="voice-actions">
+          <button id="memory-refresh" type="button" class="quiet">Refresh records</button>
+          <a class="quiet diagnostics-download" href="/memory/export">Export JSON</a>
+          <button id="memory-clear" type="button" class="quiet">Delete all</button>
+        </div>
+        <div id="memory-records" class="memory-records"><p class="empty">No retained facts.</p></div>
+        <p class="field-hint">Turning memory on defaults to private Local SQLite storage. Selecting None turns memory off. Changes require a backend restart. Retrieval is deadline-bounded; writes happen after the reply. Raw audio is never stored. Hindsight retention/deletion policy is managed by its external service.</p>
+        <p id="memory-error" class="error" role="alert"></p>
       </section>
 
       <section class="card tasks-card">

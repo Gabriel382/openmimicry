@@ -22,6 +22,8 @@ _IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 _MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 _MAX_EXPANDED_BYTES = 256 * 1024 * 1024
 _MAX_ENTRIES = 2500
+_MAX_CREATOR_IMAGE_BYTES = 8 * 1024 * 1024
+_SPRITE_STATES = ("idle", "listening", "thinking", "speaking", "happy", "error")
 
 
 class CharacterImportError(ValueError):
@@ -29,10 +31,16 @@ class CharacterImportError(ValueError):
 
 
 class CharacterRegistry:
-    def __init__(self, roots: list[str]) -> None:
+    def __init__(
+        self,
+        roots: list[str],
+        *,
+        reject_licenses: list[str] | None = None,
+    ) -> None:
         if not roots:
             raise CharacterImportError("avatar.pack_roots must contain a destination")
         self.roots = [Path(raw).expanduser().resolve() for raw in roots]
+        self.reject_licenses = [item.casefold() for item in (reject_licenses or [])]
 
     @property
     def import_root(self) -> Path:
@@ -57,6 +65,7 @@ class CharacterRegistry:
                         "id": pack.id,
                         "name": pack.name,
                         "kind": pack.kind,
+                        "license": pack.license or "unknown",
                         "path": str(manifest.parent),
                     },
                 )
@@ -112,6 +121,7 @@ class CharacterRegistry:
 
                 pack_root = extraction.joinpath(*manifest_parent.parts)
                 pack = self._validate_pack(pack_root)
+                self._validate_license(pack)
                 destination = root / pack.id
                 if destination.exists():
                     raise CharacterImportError(
@@ -122,8 +132,107 @@ class CharacterRegistry:
                     "id": pack.id,
                     "name": pack.name,
                     "kind": pack.kind,
+                    "license": pack.license or "unknown",
                     "path": str(destination),
                 }
+
+    def create_sprite_pack(
+        self,
+        *,
+        pack_id: str,
+        name: str,
+        author: str,
+        license_name: str,
+        sprites: dict[str, bytes],
+        fps: int = 6,
+    ) -> dict[str, str]:
+        """Create a conservative static/single-frame Sprite2D pack atomically."""
+
+        if not _PACK_ID.fullmatch(pack_id):
+            raise CharacterImportError(
+                "pack id must use 1-64 lowercase letters, numbers, '-' or '_'"
+            )
+        if not name.strip() or len(name) > 128:
+            raise CharacterImportError("character name must contain 1-128 characters")
+        if not author.strip() or len(author) > 128:
+            raise CharacterImportError("author/owner must contain 1-128 characters")
+        if not license_name.strip() or len(license_name) > 128:
+            raise CharacterImportError("license or ownership statement is required")
+        if "idle" not in sprites:
+            raise CharacterImportError("an idle PNG/WebP/JPEG/GIF sprite is required")
+        if set(sprites).difference(_SPRITE_STATES):
+            raise CharacterImportError("sprites contains an unsupported lifecycle state")
+        for state, image in sprites.items():
+            if not image or len(image) > _MAX_CREATOR_IMAGE_BYTES:
+                raise CharacterImportError(f"{state} sprite exceeds the 8 MiB limit")
+            _detect_image_extension(image)
+
+        destination = self.import_root / pack_id
+        if destination.exists():
+            raise CharacterImportError(
+                f"character pack {pack_id!r} is already installed; choose a new id"
+            )
+        with tempfile.TemporaryDirectory(
+            prefix=".openmimicry-create-", dir=self.import_root
+        ) as tmp:
+            pack_root = Path(tmp) / pack_id
+            pack_root.mkdir()
+            emotions: dict[str, dict[str, object]] = {}
+            idle = sprites["idle"]
+            speaking = sprites.get("speaking", idle)
+            for state in _SPRITE_STATES:
+                state_image = sprites.get(state, idle)
+                state_dir = pack_root / state
+                speaking_dir = pack_root / f"{state}_speaking"
+                state_dir.mkdir()
+                speaking_dir.mkdir()
+                state_ext = _detect_image_extension(state_image)
+                speaking_ext = _detect_image_extension(speaking)
+                (state_dir / f"000{state_ext}").write_bytes(state_image)
+                (speaking_dir / f"000{speaking_ext}").write_bytes(speaking)
+                emotions[state] = {
+                    "frames": state,
+                    "speaking_frames": f"{state}_speaking",
+                    "fps": fps,
+                    "loop": state not in {"happy", "error"},
+                }
+            manifest = {
+                "schema_version": 1,
+                "id": pack_id,
+                "name": name.strip(),
+                "author": author.strip(),
+                "license": license_name.strip(),
+                "kind": "sprite2d",
+                "preview": f"idle/000{_detect_image_extension(idle)}",
+                "default_state": "idle",
+                "default_emotion": "neutral",
+                "transition_ms": 120,
+                "emotions": emotions,
+                "metadata": {"created_by": "OpenMimicry v1.6 character creator"},
+            }
+            (pack_root / "pack.yaml").write_text(
+                yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+            pack = self._validate_pack(pack_root)
+            self._validate_license(pack)
+            os.replace(pack_root, destination)
+        return {
+            "id": pack.id,
+            "name": pack.name,
+            "kind": pack.kind,
+            "license": pack.license or "unknown",
+            "path": str(destination),
+        }
+
+    def _validate_license(self, pack: CharacterPack) -> None:
+        if not self.reject_licenses:
+            return
+        license_name = (pack.license or "unknown").casefold()
+        if any(rejected in license_name for rejected in self.reject_licenses):
+            raise CharacterImportError(
+                f"character license {pack.license or 'unknown'!r} is rejected by the active distribution profile"
+            )
 
     @staticmethod
     def _safe_member_name(member: zipfile.ZipInfo) -> PurePosixPath:
@@ -186,3 +295,15 @@ class CharacterRegistry:
                 raise CharacterImportError(
                     f"emotions.{state_name}.{field} folder has no images: {raw}"
                 )
+
+
+def _detect_image_extension(content: bytes) -> str:
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return ".gif"
+    if content.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp"
+    raise CharacterImportError("sprite is not a supported PNG, WebP, JPEG, or GIF image")

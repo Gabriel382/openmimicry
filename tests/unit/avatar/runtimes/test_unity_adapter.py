@@ -13,8 +13,8 @@ The adapter is driven against ``MockUnityTransport`` end-to-end:
 from __future__ import annotations
 
 import asyncio
+import inspect
 
-import pytest
 from openmimicry.avatar.runtimes.unity.adapter import UnityAvatarAdapter
 from openmimicry.avatar.runtimes.unity.transports import MockUnityTransport
 from openmimicry.core.contracts import AvatarRuntimeAdapter
@@ -24,10 +24,14 @@ from openmimicry.core.schemas import AvatarDirective
 async def _wait_for(predicate, *, timeout: float = 1.0, step: float = 0.01) -> bool:
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
-        if predicate():
+        result = predicate()
+        if inspect.isawaitable(result):
+            result = await result
+        if result:
             return True
         await asyncio.sleep(step)
-    return predicate()
+    result = predicate()
+    return bool(await result if inspect.isawaitable(result) else result)
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +178,7 @@ async def test_queue_drops_oldest_when_unity_is_unreachable(caplog) -> None:
     t = MockUnityTransport(fail_until_attempt=10_000)
     adapter = UnityAvatarAdapter(transport=t, queue_max=4)
     try:
-        for i in range(20):
+        for _i in range(20):
             await adapter.apply_directive(AvatarDirective(state="idle"))
             # Yield so the sender has a chance to wake up between adds.
             await asyncio.sleep(0)
@@ -183,10 +187,7 @@ async def test_queue_drops_oldest_when_unity_is_unreachable(caplog) -> None:
         await adapter.shutdown()
 
     # The one-shot warning was emitted at least once.
-    assert any(
-        "queue full" in record.getMessage().lower()
-        for record in caplog.records
-    )
+    assert any("queue full" in record.getMessage().lower() for record in caplog.records)
 
 
 # ---------------------------------------------------------------------------

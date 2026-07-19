@@ -41,8 +41,11 @@ from openmimicry.core.schemas import (
     TaskUpdatedEvent,
     TranscriptPreview,
     TTSChunkSpoken,
+    TTSFailed,
     TTSFinished,
     TTSInterrupted,
+    TTSQueued,
+    TTSReady,
     TTSStarted,
     UserSpeechFinal,
     UserSpeechStarted,
@@ -78,10 +81,15 @@ def project(event: RuntimeEvent) -> dict[str, Any] | None:
         }
 
     if isinstance(event, LLMReplyComplete):
+        if event.presentation_mode == "voice_only":
+            return None
         return {
             "type": "bubble.text",
             "text": event.full_text,
             "complete": True,
+            "presentation_mode": event.presentation_mode,
+            "speech_expected": event.speech_expected,
+            "utterance_id": event.speech_utterance_id,
         }
 
     if isinstance(event, TaskSubmitted):
@@ -155,9 +163,12 @@ def project(event: RuntimeEvent) -> dict[str, Any] | None:
         | UserSpeechStarted
         | UserSpeechFinal
         | LLMStarted
+        | TTSQueued
+        | TTSReady
         | TTSStarted
         | TTSChunkSpoken
-        | TTSFinished,
+        | TTSFinished
+        | TTSFailed,
     ):
         return None
 
@@ -177,6 +188,43 @@ def project_messages(event: RuntimeEvent) -> list[dict[str, Any]]:
     """
 
     event_id = f"{event.kind}:{event.ts.isoformat()}"
+
+    speech_status: str | None = None
+    if isinstance(event, TTSQueued):
+        speech_status = "queued"
+    elif isinstance(event, TTSReady):
+        speech_status = "ready"
+    elif isinstance(event, TTSStarted):
+        speech_status = "started"
+    elif isinstance(event, TTSFinished):
+        speech_status = "finished"
+    elif isinstance(event, TTSInterrupted):
+        speech_status = "interrupted"
+    elif isinstance(event, TTSFailed):
+        speech_status = "failed"
+    if speech_status is not None:
+        utterance_id = getattr(event, "utterance_id", None)
+        messages = [
+            {
+                "type": "speech.status",
+                "utterance_id": utterance_id,
+                "status": speech_status,
+            }
+        ]
+        compatibility = project(event)
+        if compatibility is not None:
+            messages.append(compatibility)
+        if isinstance(event, TTSFailed):
+            messages.append(
+                {
+                    "type": "system.notice",
+                    "level": "error",
+                    "message": event.message,
+                    "where": "voice.tts",
+                    "recoverable": True,
+                }
+            )
+        return messages
 
     if isinstance(event, LLMStarted):
         return [

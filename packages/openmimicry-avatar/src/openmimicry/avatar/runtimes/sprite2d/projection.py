@@ -81,9 +81,7 @@ def build_sprite2d_projection(
     }
 
 
-def frames_for_directive(
-    directive: AvatarDirective, pack: CharacterPack
-) -> list[str]:
+def frames_for_directive(directive: AvatarDirective, pack: CharacterPack) -> list[str]:
     """Helper: return just the frame list (filesystem paths) for ``directive``.
 
     Useful for tests; the adapter's hot path goes through

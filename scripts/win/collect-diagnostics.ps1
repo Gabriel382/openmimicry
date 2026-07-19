@@ -4,7 +4,7 @@ Set-Location $repoRoot
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $outputDir = Join-Path $repoRoot "diagnostics"
-$outputPath = Join-Path $outputDir "OpenMimicry-diagnostics-v1.5.1-$timestamp.zip"
+$outputPath = Join-Path $outputDir "OpenMimicry-diagnostics-v1.6.0-$timestamp.zip"
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
 try {

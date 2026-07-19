@@ -98,15 +98,13 @@ class ThreeJSAvatarAdapter:
                 pack.id,
             )
 
-        if pack.kind not in _THREEJS_FRIENDLY_KINDS:
-            if not self._warned_unknown_kind:
-                self._warned_unknown_kind = True
-                _log.warning(
-                    "ThreeJSAvatarAdapter: pack.kind=%r is not vrm/gltf; "
-                    "frontend may fail to load %r",
-                    pack.kind,
-                    pack.id,
-                )
+        if pack.kind not in _THREEJS_FRIENDLY_KINDS and not self._warned_unknown_kind:
+            self._warned_unknown_kind = True
+            _log.warning(
+                "ThreeJSAvatarAdapter: pack.kind=%r is not vrm/gltf; frontend may fail to load %r",
+                pack.kind,
+                pack.id,
+            )
 
         self._pack = pack
         # Merge any runtime overrides from the pack config so the
@@ -121,9 +119,7 @@ class ThreeJSAvatarAdapter:
         """Build the projection and publish it. Never raises."""
         pack = self._pack
         if pack is None:
-            _log.warning(
-                "ThreeJSAvatarAdapter: apply_directive without a loaded pack; dropping"
-            )
+            _log.warning("ThreeJSAvatarAdapter: apply_directive without a loaded pack; dropping")
             return
 
         try:
@@ -133,23 +129,17 @@ class ThreeJSAvatarAdapter:
                 static_url_prefix=self._url_prefix,
                 runtime_cfg=self._runtime_cfg,
             )
-        except Exception as exc:  # noqa: BLE001 — never raise
-            _log.warning(
-                "ThreeJSAvatarAdapter: projection failed: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            _log.warning("ThreeJSAvatarAdapter: projection failed: %s", exc, exc_info=True)
             return
 
         try:
             await self._bridge.publish(message)
-        except Exception as exc:  # noqa: BLE001 — transport issues shouldn't poison the bus
-            _log.warning(
-                "ThreeJSAvatarAdapter: bridge.publish failed: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            _log.warning("ThreeJSAvatarAdapter: bridge.publish failed: %s", exc, exc_info=True)
 
     async def set_text(self, text: str) -> None:
-        await self._bridge.publish(
-            {"type": "bubble.text", "text": text, "complete": True}
-        )
+        await self._bridge.publish({"type": "bubble.text", "text": text, "complete": True})
 
     async def start_speaking(self, text: str | None = None) -> None:
         await self._bridge.publish(

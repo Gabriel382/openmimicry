@@ -43,9 +43,7 @@ async def _make_started_orch():
     bus = EventBus()
     runtime = MockAvatarRuntimeAdapter()
     director = AvatarDirector(config=AvatarConfig(pack="octomimic"))
-    orch = AvatarOrchestrator(
-        director=director, runtime=runtime, bus=bus, config=director.config
-    )
+    orch = AvatarOrchestrator(director=director, runtime=runtime, bus=bus, config=director.config)
     await orch.start()
     return orch, bus, runtime, director
 
@@ -100,9 +98,7 @@ async def test_hold_and_return_for_happy() -> None:
     director = AvatarDirector(
         config=AvatarConfig(celebration_ms=50)  # short for the test
     )
-    orch = AvatarOrchestrator(
-        director=director, runtime=runtime, bus=bus, config=director.config
-    )
+    orch = AvatarOrchestrator(director=director, runtime=runtime, bus=bus, config=director.config)
     await orch.start()
     try:
         bus.publish(TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT))
@@ -164,9 +160,7 @@ async def test_runtime_apply_error_is_logged_not_raised(
     bus = EventBus()
     runtime = Boom()
     director = AvatarDirector()
-    orch = AvatarOrchestrator(
-        director=director, runtime=runtime, bus=bus, config=director.config
-    )
+    orch = AvatarOrchestrator(director=director, runtime=runtime, bus=bus, config=director.config)
     await orch.start()
     try:
         with caplog.at_level("WARNING"):

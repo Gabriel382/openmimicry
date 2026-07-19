@@ -17,6 +17,10 @@ Ships:
 # From this repository on Windows: install the complete tested voice profile.
 .\scripts\win\install.bat openrouter-voice
 
+# Local cloning uses the ordinary profile install and the same voice launcher:
+.\scripts\win\install.bat openrouter-chatterbox
+powershell -ExecutionPolicy Bypass -File .\scripts\win\start-openrouter-voice.ps1
+
 # Package-development equivalent, using this checkout rather than a registry release.
 python -m pip install -e "packages/openmimicry-voice[voice]"
 ```
@@ -26,6 +30,13 @@ the repository `.venv`. The launcher downloads the free
 `en_US-lessac-medium` voice and runs `scripts/voice_doctor.py` before enabling
 voice. Legacy realtime dependencies are available separately with
 `openmimicry-voice[legacy-realtime]`.
+
+The standard launcher detects the dashboard-selected adapter. For Chatterbox,
+it verifies or repairs the opt-in clone runtime and prewarms the model once.
+It preserves a complete working CUDA triplet and changes only the Torch
+triplet when repair is necessary. NumPy 2 reference conditioning is normalized
+inside the isolated worker; the installer never patches third-party source
+under `.venv`.
 
 ## Usage
 

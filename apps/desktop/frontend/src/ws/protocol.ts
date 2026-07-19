@@ -107,6 +107,15 @@ export interface BubbleTextMessage {
   complete: boolean;
   /** A new LLM turn started; clear any incomplete text from the prior turn. */
   reset?: boolean;
+  presentation_mode?: "parallel" | "voice_ready" | "text_only" | "voice_only";
+  speech_expected?: boolean;
+  utterance_id?: string | null;
+}
+
+export interface SpeechStatusMessage {
+  type: "speech.status";
+  utterance_id: string | null;
+  status: "queued" | "ready" | "started" | "finished" | "interrupted" | "failed";
 }
 
 export interface ConversationTurnMessage {
@@ -162,6 +171,7 @@ export type ServerMessage =
   | AvatarDirectiveMessage
   | TranscriptPreviewMessage
   | BubbleTextMessage
+  | SpeechStatusMessage
   | ConversationTurnMessage
   | TaskCardMessage
   | SystemNoticeMessage;
@@ -222,6 +232,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     t === "avatar.directive" ||
     t === "transcript.preview" ||
     t === "bubble.text" ||
+    t === "speech.status" ||
     t === "conversation.turn" ||
     t === "task.card" ||
     t === "system.notice"

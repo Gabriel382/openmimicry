@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openmimicry-memory"
+version = "1.6.4"
+description = "Optional, provider-neutral long-term memory for OpenMimicry."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Gabriel Henrique" }]
+dependencies = ["pydantic>=2.7"]
+
+[project.optional-dependencies]
+hindsight = ["hindsight-client>=0.8.2,<1"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["openmimicry*"]

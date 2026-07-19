@@ -178,9 +178,9 @@ class WSUnityTransport:
                 ),
                 timeout=self._connect_timeout_s,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise UnityTransportError(f"WS connect timed out for {self._url}") from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise UnityTransportError(f"WS connect failed: {exc}") from exc
         self._open = True
 
@@ -191,9 +191,9 @@ class WSUnityTransport:
         payload = json.dumps(frame, default=str)
         try:
             await asyncio.wait_for(ws.send(payload), timeout=self._send_timeout_s)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise UnityTransportError("WS send timed out") from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._open = False
             raise UnityTransportError(f"WS send failed: {exc}") from exc
 
@@ -205,7 +205,7 @@ class WSUnityTransport:
             return
         try:
             await ws.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("WSUnityTransport close raised: %s", exc)
 
     def incoming(self) -> AsyncIterator[UnityFrame]:
@@ -224,7 +224,7 @@ class WSUnityTransport:
                 except json.JSONDecodeError as exc:
                     _log.warning("WSUnityTransport: dropped malformed frame: %s", exc)
                     continue
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.info("WSUnityTransport: incoming() ended: %s", exc)
             self._open = False
             return
@@ -236,7 +236,6 @@ def _import_websockets() -> Any:
         import websockets  # type: ignore[import-not-found]
     except ImportError as exc:
         raise UnityTransportUnavailable(
-            "websockets is not installed. Install with "
-            "`pip install \"openmimicry-avatar[unity]\"`."
+            'websockets is not installed. Install with `pip install "openmimicry-avatar[unity]"`.'
         ) from exc
     return websockets

@@ -12,6 +12,21 @@ let wakeNames = ["Mimi", "Hey Mimi"];
 let wakeAliases = ["Me me"];
 let sttModel = "medium.en";
 let postSpeechSilenceDuration = 1.0;
+let memoryLLMBackend = "";
+
+async function apiError(response) {
+  let detail = "";
+  try {
+    const payload = await response.json();
+    if (typeof payload.detail === "string") detail = payload.detail;
+    else if (Array.isArray(payload.detail)) {
+      detail = payload.detail.map((item) => item.message || item.msg || String(item)).join("; ");
+    }
+  } catch (_error) {
+    // A proxy or older backend can still return a plain-text response.
+  }
+  return `${response.status}: ${detail || response.statusText || "Request failed"}`;
+}
 
 function send(message) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -249,10 +264,170 @@ async function refreshLLMSettings() {
       option.textContent = `${name} — ${profile.model}`;
       select.append(option);
     }
+    const memoryBackend = byId("memory-llm-backend");
+    memoryBackend.replaceChildren();
+    const defaultMemoryBackend = document.createElement("option");
+    defaultMemoryBackend.value = "";
+    defaultMemoryBackend.textContent = "Conversation backend/default";
+    memoryBackend.append(defaultMemoryBackend);
+    for (const name of Object.keys(data.backends || {})) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      memoryBackend.append(option);
+    }
+    memoryBackend.value = memoryLLMBackend;
     select.value = data.active_backend;
     byId("llm-model").textContent = data.active_model || "unknown";
+    const modelSelect = byId("llm-model-select");
+    modelSelect.replaceChildren();
+    const currentModel = document.createElement("option");
+    currentModel.value = data.active_model || "";
+    currentModel.textContent = data.active_model || "Load available models";
+    modelSelect.append(currentModel);
+    const credentials = data.backends?.[data.active_backend]?.credentials || {};
+    byId("llm-credential-status").textContent = credentials.session
+      ? "Using a session-only token (cleared on exit)."
+      : credentials.environment
+        ? "Using the configured environment variable."
+        : "No credential detected for this backend.";
   } catch (error) {
     target.textContent = String(error);
+  }
+}
+
+async function discoverLLMModels() {
+  const target = byId("llm-error");
+  target.textContent = "Loading provider catalog…";
+  try {
+    const backend = byId("llm-backend").value;
+    const response = await fetch(`/llm/catalog?backend=${encodeURIComponent(backend)}`);
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    const select = byId("llm-model-select");
+    select.replaceChildren();
+    for (const model of data.models || []) {
+      const option = document.createElement("option");
+      option.value = model.runtime_model;
+      option.textContent = model.name === model.id ? model.id : `${model.name} — ${model.id}`;
+      select.append(option);
+    }
+    target.textContent = data.models?.length ? "" : "The provider returned no installed/available models.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
+async function refreshInteractionSettings() {
+  try {
+    const response = await fetch("/interaction/settings");
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    byId("presentation-mode").value = data.mode;
+    byId("bubble-min").value = String(data.minimum_ms);
+    byId("bubble-base").value = String(data.base_ms);
+    byId("bubble-per-character").value = String(data.ms_per_character);
+    byId("bubble-max").value = String(data.maximum_ms);
+  } catch (error) {
+    byId("interaction-error").textContent = String(error);
+  }
+}
+
+async function refreshMemory() {
+  const target = byId("memory-error");
+  target.textContent = "";
+  try {
+    const settingsResponse = await fetch("/memory/settings");
+    if (!settingsResponse.ok) throw new Error(`${settingsResponse.status}: ${await settingsResponse.text()}`);
+    const settings = await settingsResponse.json();
+    byId("memory-enabled").value = String(Boolean(settings.enabled));
+    byId("memory-provider").value = settings.provider || "none";
+    byId("memory-extraction").value = settings.extraction || "deterministic";
+    byId("memory-deadline").value = String(settings.retrieval_deadline_ms || 150);
+    byId("memory-retention").value = String(settings.retention_days || 365);
+    byId("memory-endpoint").value = settings.endpoint || "";
+    memoryLLMBackend = settings.llm_backend || "";
+    byId("memory-llm-backend").value = memoryLLMBackend;
+    byId("memory-status").textContent = settings.enabled ? `${settings.provider} · ${settings.count}` : "off";
+    byId("memory-summary").textContent = settings.enabled
+      ? `${settings.extraction} extraction · ${settings.retrieval_deadline_ms} ms retrieval deadline · raw audio off`
+      : "Disabled: no long-term facts are retained or retrieved.";
+    syncMemoryControls("refresh");
+    const response = await fetch("/memory/records?limit=100");
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    const root = byId("memory-records");
+    root.replaceChildren();
+    if (!data.records?.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "No retained facts.";
+      root.append(empty);
+      return;
+    }
+    for (const record of data.records) {
+      const row = document.createElement("div");
+      row.className = "memory-record";
+      const predicate = document.createElement("input");
+      predicate.value = record.predicate;
+      predicate.setAttribute("aria-label", "Memory predicate");
+      const value = document.createElement("input");
+      value.value = record.value;
+      value.setAttribute("aria-label", "Memory value");
+      const save = document.createElement("button");
+      save.type = "button";
+      save.textContent = "Save";
+      save.addEventListener("click", async () => {
+        const update = await fetch(`/memory/records/${encodeURIComponent(record.id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject: record.subject,
+            predicate: predicate.value,
+            value: value.value,
+            confidence: record.confidence,
+          }),
+        });
+        if (!update.ok) target.textContent = `${update.status}: ${await update.text()}`;
+        else await refreshMemory();
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "quiet";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        const deletion = await fetch(`/memory/records/${encodeURIComponent(record.id)}`, { method: "DELETE" });
+        if (!deletion.ok) target.textContent = `${deletion.status}: ${await deletion.text()}`;
+        else await refreshMemory();
+      });
+      row.append(predicate, value, save, remove);
+      root.append(row);
+    }
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
+function syncMemoryControls(source) {
+  const enabled = byId("memory-enabled");
+  const provider = byId("memory-provider");
+  if (source === "enabled" && enabled.value === "true" && provider.value === "none") {
+    provider.value = "local";
+  }
+  if (source === "provider" && provider.value === "none") {
+    enabled.value = "false";
+  }
+  byId("memory-endpoint").disabled = provider.value !== "hindsight";
+}
+
+async function refreshPersonality() {
+  try {
+    const response = await fetch("/personality/settings");
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    byId("personality-prompt").value = data.system_prompt || "";
+  } catch (error) {
+    byId("personality-error").textContent = String(error);
   }
 }
 
@@ -355,6 +530,70 @@ byId("speech-pause-form").addEventListener("submit", async (event) => {
     target.textContent = String(error);
   }
 });
+byId("voice-clone-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("voice-error");
+  const provider = byId("clone-provider").value;
+  const consent = byId("clone-consent").value.trim();
+  try {
+    let response;
+    if (provider === "chatterbox-local") {
+      const reference = byId("clone-reference").files?.[0];
+      if (!reference) throw new Error("Choose a consented WAV or MP3 reference recording.");
+      response = await fetch(
+        `/voice/clone/reference?filename=${encodeURIComponent(reference.name)}&consent_record=${encodeURIComponent(consent)}`,
+        { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: reference },
+      );
+    } else {
+      response = await fetch("/voice/clone/remote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, voice_id: byId("clone-voice-id").value.trim(), consent_record: consent }),
+      });
+    }
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    target.textContent = "Custom voice saved. Restart the backend after installing the selected optional provider.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("voice-token-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("voice-error");
+  const tokenInput = byId("voice-token");
+  try {
+    const response = await fetch("/voice/credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "set", token: tokenInput.value }),
+    });
+    tokenInput.value = "";
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    byId("voice-credential-status").textContent = data.credentials?.session
+      ? "Voice token: active for this process only"
+      : "Voice token: not active";
+    target.textContent = "ElevenLabs token accepted for this backend session.";
+  } catch (error) {
+    tokenInput.value = "";
+    target.textContent = String(error);
+  }
+});
+byId("voice-token-clear").addEventListener("click", async () => {
+  const target = byId("voice-error");
+  try {
+    const response = await fetch("/voice/credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear" }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    byId("voice-credential-status").textContent = "Voice token: session token cleared";
+    target.textContent = "";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
 byId("refresh-health").addEventListener("click", refreshHealth);
 
 byId("pack-import-form").addEventListener("submit", async (event) => {
@@ -379,6 +618,46 @@ byId("pack-import-form").addEventListener("submit", async (event) => {
   }
 });
 
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result || "")));
+    reader.addEventListener("error", () => reject(reader.error || new Error("Could not read image")));
+    reader.readAsDataURL(file);
+  });
+}
+
+byId("pack-create-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("settings-error");
+  const idle = byId("create-pack-idle").files?.[0];
+  const speaking = byId("create-pack-speaking").files?.[0];
+  if (!idle) { target.textContent = "Choose an idle sprite."; return; }
+  target.textContent = "Creating character pack…";
+  try {
+    const sprites = { idle: await readFileAsDataURL(idle) };
+    if (speaking) sprites.speaking = await readFileAsDataURL(speaking);
+    const response = await fetch("/pack/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: byId("create-pack-id").value,
+        name: byId("create-pack-name").value,
+        author: byId("create-pack-author").value,
+        license: byId("create-pack-license").value,
+        sprites,
+      }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    const data = await response.json();
+    await refreshPacks();
+    byId("pack").value = data.pack.id;
+    target.textContent = `Created ${data.pack.name}. Click Apply pack to activate it.`;
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+
 byId("llm-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("llm-error");
@@ -396,6 +675,154 @@ byId("llm-form").addEventListener("submit", async (event) => {
   }
 });
 
+byId("llm-backend").addEventListener("change", () => {
+  byId("llm-model-select").replaceChildren();
+  byId("llm-credential-status").textContent = "Switch the backend to inspect credentials.";
+});
+byId("llm-discover").addEventListener("click", discoverLLMModels);
+byId("llm-model-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("llm-error");
+  target.textContent = "";
+  try {
+    const response = await fetch("/llm/model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        backend: byId("llm-backend").value,
+        model: byId("llm-model-select").value,
+      }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    await refreshLLMSettings();
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("llm-token-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("llm-error");
+  const tokenInput = byId("llm-token");
+  try {
+    const response = await fetch("/llm/credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ backend: byId("llm-backend").value, action: "set", token: tokenInput.value }),
+    });
+    tokenInput.value = "";
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    await refreshLLMSettings();
+    target.textContent = "";
+  } catch (error) {
+    tokenInput.value = "";
+    target.textContent = String(error);
+  }
+});
+byId("llm-token-clear").addEventListener("click", async () => {
+  const target = byId("llm-error");
+  try {
+    const response = await fetch("/llm/credentials", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ backend: byId("llm-backend").value, action: "clear" }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    await refreshLLMSettings();
+    target.textContent = "";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("interaction-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("interaction-error");
+  try {
+    const response = await fetch("/interaction/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: byId("presentation-mode").value,
+        dismiss_policy: "after_both",
+        minimum_ms: Number(byId("bubble-min").value),
+        base_ms: Number(byId("bubble-base").value),
+        ms_per_character: Number(byId("bubble-per-character").value),
+        maximum_ms: Number(byId("bubble-max").value),
+        allow_accessibility_captions: true,
+      }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    target.textContent = "Saved. The next reply uses these settings.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("memory-refresh").addEventListener("click", refreshMemory);
+byId("memory-enabled").addEventListener("change", () => syncMemoryControls("enabled"));
+byId("memory-provider").addEventListener("change", () => syncMemoryControls("provider"));
+byId("memory-settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("memory-error");
+  const enabled = byId("memory-enabled").value === "true";
+  const provider = byId("memory-provider").value;
+  try {
+    if (enabled && provider === "none") {
+      throw new Error("Select Local SQLite or Hindsight before enabling long-term memory.");
+    }
+    if (enabled && provider === "hindsight" && !byId("memory-endpoint").value.trim()) {
+      throw new Error("Enter the Hindsight endpoint before enabling Hindsight memory.");
+    }
+    const response = await fetch("/memory/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled,
+        provider,
+        database_path: "~/.openmimicry/memory/memory.sqlite3",
+        endpoint: byId("memory-endpoint").value.trim() || null,
+        retrieval_limit: 6,
+        retrieval_deadline_ms: Number(byId("memory-deadline").value),
+        retention_days: Number(byId("memory-retention").value),
+        extraction_mode: byId("memory-extraction").value,
+        llm_backend: byId("memory-llm-backend").value || null,
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    target.textContent = "Saved. Restart the backend to activate the memory provider.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("memory-clear").addEventListener("click", async () => {
+  if (!window.confirm("Delete every retained OpenMimicry memory? This cannot be undone.")) return;
+  const target = byId("memory-error");
+  try {
+    const response = await fetch("/memory/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    await refreshMemory();
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("personality-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("personality-error");
+  try {
+    const response = await fetch("/personality/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ system_prompt: byId("personality-prompt").value }),
+    });
+    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+    target.textContent = "Saved. The next interaction uses this personality.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+
 renderVoice();
 renderConversation();
 renderTasks();
@@ -403,4 +830,7 @@ refreshHealth();
 refreshVoiceSettings();
 refreshPacks().catch((error) => { byId("settings-error").textContent = String(error); });
 refreshLLMSettings();
+refreshInteractionSettings();
+refreshMemory();
+refreshPersonality();
 connect();

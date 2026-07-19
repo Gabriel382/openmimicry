@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-stt"
-version = "1.5.1"
+version = "1.6.4"
 description = "OpenMimicry sensor layer: isolated Faster-Whisper STT, legacy adapter, controllers, and mocks."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,16 +19,16 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=1.0.0",
-    "openmimicry-voice>=1.0.0",
+    "openmimicry-core>=1.6.4",
+    "openmimicry-voice>=1.6.4",
 ]
 
 [project.optional-dependencies]
 # Heavy STT deps are still lazy-imported via the voice package. Installing
 # the `realtimestt` extra here is equivalent to installing it on
 # openmimicry-voice — kept for ergonomic parity.
-realtimestt = ["openmimicry-voice[realtimestt]>=1.0.0"]
-voice = ["openmimicry-voice[voice]>=1.5.1"]
+realtimestt = ["openmimicry-voice[realtimestt]>=1.6.4"]
+voice = ["openmimicry-voice[voice]>=1.6.4"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",

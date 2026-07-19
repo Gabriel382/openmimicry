@@ -10,7 +10,7 @@
 # `ConsentRequired` on the bus; the desktop frontend renders the
 # consent dialog and only then does the camera open.
 
-schema_version: 1
+schema_version: 2
 
 app:
   log_level: INFO

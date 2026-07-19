@@ -113,9 +113,7 @@ def build_threejs_projection(
     return message
 
 
-def clip_fallback_chain(
-    state: State, emotion: Emotion, speaking: bool
-) -> list[str]:
+def clip_fallback_chain(state: State, emotion: Emotion, speaking: bool) -> list[str]:
     """Return the ordered list of clip names to try.
 
     Convention (mirrors ``docs/character_packs.md`` §4): the frontend

@@ -111,7 +111,7 @@ def main() -> int:
     voice_dir = Path(args.voice_dir).expanduser().resolve()
     model = voice_dir / f"{args.voice}.onnx"
     report: dict[str, object] = {
-        "version": "1.5.1",
+        "version": "1.6.0",
         "passed": False,
         "voice": args.voice,
         "stt_model": args.stt_model,

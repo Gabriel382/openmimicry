@@ -20,7 +20,7 @@ import yaml
 from openmimicry.core.schemas import CharacterPack
 from pydantic import ValidationError
 
-from .loader import _FRAME_EXTENSIONS  # noqa: PLC2701 — same package
+from .loader import _FRAME_EXTENSIONS
 
 __all__ = ["ValidationReport", "validate_pack"]
 
@@ -59,9 +59,7 @@ def validate_pack(pack_dir: Path | str) -> ValidationReport:
 
     manifest = root / "pack.yaml"
     if not manifest.is_file():
-        return ValidationReport(
-            path=str(root), ok=False, errors=[f"missing pack.yaml in {root}"]
-        )
+        return ValidationReport(path=str(root), ok=False, errors=[f"missing pack.yaml in {root}"])
 
     try:
         raw = yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}
@@ -93,19 +91,13 @@ def validate_pack(pack_dir: Path | str) -> ValidationReport:
             errors.append(base_problem)
 
         if ef.speaking_frames is None:
-            warnings.append(
-                f"emotions.{state}: missing speaking_frames; will fall back to base."
-            )
+            warnings.append(f"emotions.{state}: missing speaking_frames; will fall back to base.")
         else:
-            speaking_problem = _check(
-                root, ef.speaking_frames, kind="speaking_frames", state=state
-            )
+            speaking_problem = _check(root, ef.speaking_frames, kind="speaking_frames", state=state)
             if speaking_problem:
                 warnings.append(speaking_problem + " (will fall back to base)")
 
-    return ValidationReport(
-        path=str(root), ok=not errors, errors=errors, warnings=warnings
-    )
+    return ValidationReport(path=str(root), ok=not errors, errors=errors, warnings=warnings)
 
 
 def _check(root: Path, value: str | list[str], *, kind: str, state: str) -> str | None:
@@ -114,17 +106,13 @@ def _check(root: Path, value: str | list[str], *, kind: str, state: str) -> str 
         for item in value:
             p = (root / item).resolve() if not Path(item).is_absolute() else Path(item)
             if not p.is_file():
-                return (
-                    f"emotions.{state}.{kind}: missing file: {p}"
-                )
+                return f"emotions.{state}.{kind}: missing file: {p}"
         return None
 
     folder = (root / value).resolve() if not Path(value).is_absolute() else Path(value)
     if not folder.is_dir():
         return f"emotions.{state}.{kind}: folder does not exist: {folder}"
-    has_any = any(
-        p.is_file() and p.suffix.lower() in _FRAME_EXTENSIONS for p in folder.iterdir()
-    )
+    has_any = any(p.is_file() and p.suffix.lower() in _FRAME_EXTENSIONS for p in folder.iterdir())
     if not has_any:
         return f"emotions.{state}.{kind}: folder has no image files: {folder}"
     return None
