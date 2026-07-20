@@ -123,16 +123,18 @@ Status legend: **✅ validated**, **🟢 implemented**, **🟡 partial / validat
 
 ### Release progression
 
-| Stage | Main objective | State |
-|---|---|---:|
-| v0.1.x | Establish the protocol-oriented core and a basic text runtime | ✅ Completed |
-| v0.2.x | Add speech contracts and the first voice loop | ✅ Completed |
-| v0.3.x | Add avatar contracts, character packs, and Sprite2D behavior | ✅ Completed |
-| v0.4.x | Integrate the backend, frontend, and native desktop surfaces | ✅ Completed |
+| Stage           | Main objective                                                                           |             State |
+| --------------- | ---------------------------------------------------------------------------------------- | ----------------: |
+| v0.1.x          | Establish the protocol-oriented core and a basic text runtime                            |       ✅ Completed |
+| v0.2.x          | Add speech contracts and the first voice loop                                            |       ✅ Completed |
+| v0.3.x          | Add avatar contracts, character packs, and Sprite2D behavior                             |       ✅ Completed |
+| v0.4.x          | Integrate the backend, frontend, and native desktop surfaces                             |       ✅ Completed |
 | **v0.5.1 beta** | Validate the complete 2D companion with OpenRouter, Ollama, and Chatterbox on Windows 11 | ✅ Current release |
-| v0.6.x | Complete provider and cross-platform validation | ⏳ Next |
-| v0.7.x | Harden tasks, consent, diagnostics, memory, and optional modalities | ⏳ Planned |
-| v1.0.0 | Publish a stable, coherent, cross-platform contract and release surface | ⏳ Target |
+| v0.6.x          | Implement and validate 3D avatar support                                                 |            ⏳ Next |
+| v0.7.x          | Complete provider and cross-platform validation                                          |         ⏳ Planned |
+| v0.8.x          | Add parallel task execution and orchestration                                            |         ⏳ Planned |
+| **v1.0.0**      | Deliver a fully tested, stable, coherent, cross-platform release                         |         🎯 Target |
+
 
 ---
 
@@ -496,13 +498,24 @@ Before opening a pull request, read [`CONTRIBUTING.md`](CONTRIBUTING.md), keep c
 
 ## Star history
 
-<a href="https://star-history.com/#Gabriel382/openmimicry&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Gabriel382/openmimicry&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Gabriel382/openmimicry&type=Date" />
-    <img alt="OpenMimicry Star History Chart" src="https://api.star-history.com/svg?repos=Gabriel382/openmimicry&type=Date" />
-  </picture>
-</a>
+<p align="center">
+  <a href="https://www.star-history.com/#Gabriel382/OpenMimicry&Date">
+    <picture>
+      <source
+        media="(prefers-color-scheme: dark)"
+        srcset="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date&theme=dark"
+      />
+      <source
+        media="(prefers-color-scheme: light)"
+        srcset="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date"
+      />
+      <img
+        alt="OpenMimicry Star History Chart"
+        src="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date"
+      />
+    </picture>
+  </a>
+</p>
 
 ---
 
