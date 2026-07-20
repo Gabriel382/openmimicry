@@ -21,12 +21,6 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
-      // WebSocket bridge to the M6 backend.
-      "/ws": {
-        target: BACKEND_HOST.replace(/^http/, "ws"),
-        ws: true,
-        changeOrigin: true,
-      },
       // Static character assets (sprite frames, VRM meshes).
       "/static": {
         target: BACKEND_HOST,
@@ -41,6 +35,7 @@ export default defineConfig({
       "/runtime": { target: BACKEND_HOST, changeOrigin: true },
       "/admin": { target: BACKEND_HOST, changeOrigin: true },
       "/config": { target: BACKEND_HOST, changeOrigin: true },
+      "/appearance": { target: BACKEND_HOST, changeOrigin: true },
     },
   },
   build: {

@@ -13,4 +13,5 @@ tts:
 
 ui:
   active_character: octomimic
-  show_panel_on_start: true
+  show_panel_on_start: false
+  dashboard_url: http://127.0.0.1:8000/dashboard

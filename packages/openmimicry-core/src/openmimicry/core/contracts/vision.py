@@ -102,11 +102,13 @@ class LandmarkDetector(Protocol):
     config block."""
 
     async def warmup(self) -> None: ...
+
     """Allocate the underlying model. Called once on ``start()``."""
 
     async def shutdown(self) -> None: ...
 
     async def detect(self, frame_bgr: object) -> object: ...
+
     """Run one detection. ``frame_bgr`` is an ``ndarray`` (HxWx3, BGR);
     the return type is modality-specific. The adapter knows how to
     unpack it because it bound the detector to the right modality at

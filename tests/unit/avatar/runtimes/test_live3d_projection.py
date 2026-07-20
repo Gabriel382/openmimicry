@@ -110,17 +110,13 @@ def test_idle_block_has_breathing_and_saccade_defaults() -> None:
 
 def test_directive_gaze_propagates_into_live_block() -> None:
     pack = _vrm_pack()
-    msg = build_live3d_projection(
-        AvatarDirective(state="idle", gaze="away"), pack
-    )
+    msg = build_live3d_projection(AvatarDirective(state="idle", gaze="away"), pack)
     assert msg["live"]["gaze_target"] == "away"
 
 
 def test_directive_intensity_clamped_into_live_block() -> None:
     pack = _vrm_pack()
-    msg = build_live3d_projection(
-        AvatarDirective(state="idle", intensity=2.0), pack
-    )
+    msg = build_live3d_projection(AvatarDirective(state="idle", intensity=2.0), pack)
     assert msg["live"]["intensity"] == 1.0
 
 
@@ -137,9 +133,7 @@ def test_unknown_mouth_driver_falls_back_to_amplitude() -> None:
 
 
 def test_unknown_gaze_driver_falls_back_to_smooth() -> None:
-    live = resolve_live_config(
-        AvatarDirective(state="idle"), runtime_cfg={"gaze_driver": "yeet"}
-    )
+    live = resolve_live_config(AvatarDirective(state="idle"), runtime_cfg={"gaze_driver": "yeet"})
     assert live["gaze_driver"] == "smooth"
 
 

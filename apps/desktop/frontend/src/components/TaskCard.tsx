@@ -23,7 +23,10 @@ export function TaskCard(props: TaskCardProps): JSX.Element {
   if (cards.length === 0) {
     return (
       <div className={`task-card task-card--empty ${props.className ?? ""}`} role="list">
-        <span className="task-card__empty-note">No tasks running.</span>
+        <span className="task-card__empty-note">
+          No tasks running. Tasks appear only when a delegation phrase is detected,
+          for example “run local shell to …” or “ask the MCP agent to …”.
+        </span>
       </div>
     );
   }

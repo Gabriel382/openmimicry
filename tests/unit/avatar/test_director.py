@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 import pytest
 from openmimicry.avatar.director import AvatarDirector
 from openmimicry.core.schemas import (
-    AvatarDirective,
+    AvatarCue,
     ErrorEvent,
     LLMReplyComplete,
     LLMStarted,
@@ -29,6 +29,7 @@ from openmimicry.core.schemas import (
     TTSChunkSpoken,
     TTSFinished,
     TTSStarted,
+    TurnStateChanged,
     UserSpeechStarted,
 )
 from openmimicry.core.schemas.app import AvatarConfig
@@ -62,7 +63,13 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("idle", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
     ("idle", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("idle", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
-    ("idle", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), "happy", False),
+    (
+        "idle",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        "happy",
+        False,
+    ),
     # ---- listening ----
     ("listening", "UserSpeechStarted", UserSpeechStarted(ts=_ts()), None, False),
     ("listening", "LLMStarted", LLMStarted(ts=_ts()), "thinking", False),
@@ -70,15 +77,27 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("listening", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
     ("listening", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("listening", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
-    ("listening", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), "happy", False),
+    (
+        "listening",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        "happy",
+        False,
+    ),
     # ---- thinking ----
     ("thinking", "UserSpeechStarted", UserSpeechStarted(ts=_ts()), "listening", False),
     ("thinking", "LLMStarted", LLMStarted(ts=_ts()), None, False),
     ("thinking", "TTSStarted", TTSStarted(ts=_ts()), "speaking", True),
     ("thinking", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
-    ("thinking", "TTSFinished", TTSFinished(ts=_ts()), "idle", False),
+    ("thinking", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("thinking", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
-    ("thinking", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), "happy", False),
+    (
+        "thinking",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        "happy",
+        False,
+    ),
     # ---- speaking ----
     ("speaking", "UserSpeechStarted", UserSpeechStarted(ts=_ts()), "listening", False),
     ("speaking", "LLMStarted", LLMStarted(ts=_ts()), None, False),
@@ -86,7 +105,13 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("speaking", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), "speaking", True),
     ("speaking", "TTSFinished", TTSFinished(ts=_ts()), "idle", False),
     ("speaking", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
-    ("speaking", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), "happy", False),
+    (
+        "speaking",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        "happy",
+        False,
+    ),
     # ---- happy ----
     ("happy", "UserSpeechStarted", UserSpeechStarted(ts=_ts()), "listening", False),
     ("happy", "LLMStarted", LLMStarted(ts=_ts()), "thinking", False),
@@ -94,7 +119,13 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("happy", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
     ("happy", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("happy", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
-    ("happy", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), None, False),
+    (
+        "happy",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        None,
+        False,
+    ),
     # ---- error ----
     ("error", "UserSpeechStarted", UserSpeechStarted(ts=_ts()), "listening", False),
     ("error", "LLMStarted", LLMStarted(ts=_ts()), "thinking", False),
@@ -102,7 +133,13 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("error", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
     ("error", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("error", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), None, False),
-    ("error", "TaskCompleted", TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT), None, False),
+    (
+        "error",
+        "TaskCompleted",
+        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT),
+        None,
+        False,
+    ),
 ]
 
 
@@ -121,9 +158,7 @@ def test_state_machine_table_cell(
     director = _make_director(prior_state)
     directive = director.on_event(event)
     if expected_state is None:
-        assert directive is None, (
-            f"({prior_state}, {event_label}) expected no-op, got {directive}"
-        )
+        assert directive is None, f"({prior_state}, {event_label}) expected no-op, got {directive}"
         # state should be unchanged.
         assert director.state == prior_state
     else:
@@ -137,9 +172,7 @@ def test_state_machine_table_cell(
 
 def test_happy_directive_carries_hold_and_return() -> None:
     director = AvatarDirector(config=AvatarConfig(celebration_ms=1500))
-    directive = director.on_event(
-        TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT)
-    )
+    directive = director.on_event(TaskCompleted(ts=_ts(), handle=_HANDLE, result=_RESULT))
     assert directive is not None
     assert directive.state == "happy"
     assert directive.emotion == "happy"
@@ -149,9 +182,7 @@ def test_happy_directive_carries_hold_and_return() -> None:
 
 def test_error_directive_carries_hold_and_return() -> None:
     director = AvatarDirector(config=AvatarConfig(error_ms=900))
-    directive = director.on_event(
-        ErrorEvent(ts=_ts(), where="llm", message="boom")
-    )
+    directive = director.on_event(ErrorEvent(ts=_ts(), where="llm", message="boom"))
     assert directive is not None
     assert directive.state == "error"
     assert directive.emotion == "worried"
@@ -177,13 +208,64 @@ def test_text_propagation_from_llm_reply() -> None:
     assert directive.text == "hello"
 
 
-def test_emotion_mapping_is_default_neutral_for_idle() -> None:
-    director = AvatarDirector(
-        config=AvatarConfig(default_state="thinking")
-    )
-    # Force a transition that yields "idle".
+def test_stale_tts_completion_does_not_clear_thinking() -> None:
+    director = AvatarDirector(config=AvatarConfig(default_state="thinking"))
     director._state = "thinking"  # type: ignore[attr-defined]
     directive = director.on_event(TTSFinished(ts=_ts()))
+    assert directive is None
+    assert director.state == "thinking"
+
+
+def test_authoritative_turn_thinking_overrides_previous_speech() -> None:
+    director = _make_director("speaking")
+    directive = director.on_event(
+        TurnStateChanged(
+            ts=_ts(),
+            turn_id="turn-2",
+            sequence=2,
+            state="thinking",
+            source="text",
+        )
+    )
     assert directive is not None
-    assert directive.state == "idle"
-    assert directive.emotion == "neutral"
+    assert directive.state == "thinking"
+    assert directive.speaking is False
+
+    assert director.on_event(TTSFinished(ts=_ts(), utterance_id="old")) is None
+    assert director.state == "thinking"
+
+
+def test_rejected_turn_never_changes_avatar_state() -> None:
+    director = _make_director("speaking")
+    directive = director.on_event(
+        TurnStateChanged(
+            ts=_ts(),
+            turn_id="rejected",
+            sequence=3,
+            state="rejected",
+            source="text",
+            reason="turn_in_progress",
+            active_turn_id="active",
+        )
+    )
+    assert directive is None
+    assert director.state == "speaking"
+
+
+def test_structured_llm_cue_maps_to_2d_state_and_keeps_action() -> None:
+    director = _make_director("idle")
+    directive = director.on_event(
+        AvatarCue(
+            ts=_ts(),
+            emotion="happy",
+            action="wave",
+            intensity=0.8,
+            duration_ms=2200,
+        )
+    )
+    assert directive is not None
+    assert directive.state == "happy"
+    assert directive.emotion == "happy"
+    assert directive.gesture == "wave"
+    assert directive.duration_ms == 2200
+    assert directive.next_state == "idle"

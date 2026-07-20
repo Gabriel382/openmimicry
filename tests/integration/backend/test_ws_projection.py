@@ -33,7 +33,7 @@ from openmimicry.core import (
     UserTextSubmitted,
     WakeDetected,
 )
-from openmimicry_backend.projection import project
+from openmimicry_backend.projection import project, project_messages
 
 pytestmark = pytest.mark.integration
 
@@ -54,7 +54,53 @@ def test_llm_token_projects_bubble_partial() -> None:
 
 def test_llm_reply_complete_projects_bubble_final() -> None:
     out = project(LLMReplyComplete(ts=_ts(), full_text="Hello"))
-    assert out == {"type": "bubble.text", "text": "Hello", "complete": True}
+    assert out == {
+        "type": "bubble.text",
+        "text": "Hello",
+        "complete": True,
+        "presentation_mode": "parallel",
+        "speech_expected": False,
+        "utterance_id": None,
+    }
+
+
+def test_llm_start_resets_an_incomplete_previous_bubble() -> None:
+    assert project_messages(LLMStarted(ts=_ts())) == [
+        {"type": "bubble.text", "text": "", "complete": False, "reset": True}
+    ]
+
+
+def test_text_and_voice_turns_project_into_conversation_history() -> None:
+    text_turn = project_messages(UserTextSubmitted(ts=_ts(), text="typed question"))
+    voice_messages = project_messages(
+        UserSpeechFinal(ts=_ts(), text="spoken question", reason="normal")
+    )
+
+    assert text_turn[0]["type"] == "conversation.turn"
+    assert text_turn[0]["source"] == "text"
+    assert text_turn[0]["text"] == "typed question"
+    assert voice_messages[0]["message"] == "speech_result"
+    assert voice_messages[0]["voice_result"]["text"] == "spoken question"
+    assert voice_messages[0]["voice_result"]["reason"] == "normal"
+    assert voice_messages[0]["voice_result"]["accepted"] is True
+    assert voice_messages[1]["type"] == "conversation.turn"
+    assert voice_messages[1]["source"] == "voice"
+
+
+def test_complete_reply_updates_bubble_and_conversation_history() -> None:
+    messages = project_messages(LLMReplyComplete(ts=_ts(), full_text="Hello"))
+
+    assert messages[0] == {
+        "type": "bubble.text",
+        "text": "Hello",
+        "complete": True,
+        "presentation_mode": "parallel",
+        "speech_expected": False,
+        "utterance_id": None,
+    }
+    assert messages[1]["type"] == "conversation.turn"
+    assert messages[1]["role"] == "assistant"
+    assert messages[1]["text"] == "Hello"
 
 
 def test_task_submitted_projects_task_card_queued() -> None:
@@ -111,9 +157,7 @@ def test_config_updated_projects_info_notice_with_diff() -> None:
 
 
 def test_error_event_projects_error_notice() -> None:
-    out = project(
-        ErrorEvent(ts=_ts(), where="backend.x", message="boom", recoverable=False)
-    )
+    out = project(ErrorEvent(ts=_ts(), where="backend.x", message="boom", recoverable=False))
     assert out is not None
     assert out["type"] == "system.notice"
     assert out["level"] == "error"

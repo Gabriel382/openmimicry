@@ -1,0 +1,3 @@
+-r commercial.in
+# MIT upstream, large ML closure, and an upstream Git dependency. Opt-in only.
+chatterbox-tts==0.1.7

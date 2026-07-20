@@ -13,7 +13,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 // Tauri 2.x: `emit` lives on the `Emitter` trait, `listen` on
 // `Listener`. Both must be in scope at call sites.
-use tauri::{AppHandle, Emitter, Event, Listener, Manager, Runtime};
+use tauri::{AppHandle, Event, Listener, Runtime};
 
 /// RGBA colour for an emotion. Order matches the frozen emotion enum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,10 +89,8 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
             on_menu_event(app, event.id().as_ref());
         })
         .on_tray_icon_event(|_tray, event| {
-            // Reserved for future left-click handling. Tauri 2 distinguishes
-            // tap/press/release; we only need taps and only on demand.
             if let TrayIconEvent::DoubleClick { .. } = event {
-                // no-op for now
+                let _ = crate::commands::open_backend_dashboard();
             }
         })
         .build(app)?;
@@ -119,57 +117,22 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 }
 
 fn build_menu<R: Runtime>(app: &AppHandle<R>) -> Result<Menu<R>> {
-    let show_panel = MenuItem::with_id(app, "show_panel", "Show panel", true, None::<&str>)?;
-    let toggle_interact = MenuItem::with_id(
+    let dashboard = MenuItem::with_id(
         app,
-        "toggle_interact",
-        "Toggle overlay interact",
-        true,
-        None::<&str>,
-    )?;
-    let mute_mic = MenuItem::with_id(app, "mute_mic", "Mute mic", true, None::<&str>)?;
-    let mute_voice = MenuItem::with_id(app, "mute_voice", "Mute voice", true, None::<&str>)?;
-    let pause_wake = MenuItem::with_id(
-        app,
-        "pause_live_wake",
-        "Pause live wake",
+        "open_dashboard",
+        "Open dashboard",
         true,
         None::<&str>,
     )?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &show_panel,
-            &toggle_interact,
-            &mute_mic,
-            &mute_voice,
-            &pause_wake,
-            &quit,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&dashboard, &quit])?;
     Ok(menu)
 }
 
 fn on_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     match id {
-        "show_panel" => {
-            if let Some(w) = app.get_webview_window("panel") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }
-        "toggle_interact" => {
-            let _ = app.emit("tray:toggle_interact", ());
-        }
-        "mute_mic" => {
-            let _ = app.emit("tray:mute_mic", ());
-        }
-        "mute_voice" => {
-            let _ = app.emit("tray:mute_voice", ());
-        }
-        "pause_live_wake" => {
-            let _ = app.emit("tray:pause_live_wake", ());
+        "open_dashboard" => {
+            let _ = crate::commands::open_backend_dashboard();
         }
         "quit" => {
             app.exit(0);

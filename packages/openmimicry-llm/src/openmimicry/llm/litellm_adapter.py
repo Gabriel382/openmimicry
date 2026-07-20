@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 from openmimicry.core.schemas import LLMChunk, LLMMessage, LLMUsage, ToolSpec
@@ -46,6 +46,7 @@ class LiteLLMSettings:
     api_base: str | None = None
     api_key_env: str | None = None
     request_timeout_s: int = 60
+    web_search: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -91,10 +92,50 @@ class LiteLLMAdapter:
                 request_timeout_s=(
                     settings.request_timeout_s if request_timeout_s is None else request_timeout_s
                 ),
+                web_search=settings.web_search,
                 extra=dict(settings.extra),
             )
         self._settings = settings
+        self._session_api_key: str | None = None
         self._closed: bool = False
+
+    @property
+    def model(self) -> str:
+        return self._settings.model
+
+    @property
+    def has_session_api_key(self) -> bool:
+        return self._session_api_key is not None
+
+    def set_session_api_key(self, value: str) -> None:
+        """Use an in-process credential until shutdown; never persist it."""
+
+        token = value.strip()
+        if not token or len(token) > 8192:
+            raise ValueError("API token must contain 1 to 8192 characters")
+        self._session_api_key = token
+
+    def clear_session_api_key(self) -> None:
+        self._session_api_key = None
+
+    def select_model(self, model: str) -> None:
+        selected = model.strip()
+        if not selected or len(selected) > 256:
+            raise ValueError("model must contain 1 to 256 characters")
+        self._settings = replace(self._settings, model=selected)
+
+    @property
+    def web_search_enabled(self) -> bool:
+        return self._settings.web_search
+
+    @property
+    def web_search_supported(self) -> bool:
+        return self._settings.model.startswith("openrouter/")
+
+    def set_web_search(self, enabled: bool) -> None:
+        if enabled and not self.web_search_supported:
+            raise ValueError("web search is currently available only for OpenRouter backends")
+        self._settings = replace(self._settings, web_search=bool(enabled))
 
     # ------------------------------------------------------------------ API
 
@@ -128,9 +169,16 @@ class LiteLLMAdapter:
             raise LLMTransportError("LiteLLMAdapter is closed")
 
         litellm = _import_litellm()
+        # LiteLLM otherwise prints a generic GitHub feedback footer for some
+        # provider exceptions. OpenMimicry records the real classified error in
+        # its diagnostics and UI, so suppress that unrelated console noise.
+        if hasattr(litellm, "suppress_debug_info"):
+            litellm.suppress_debug_info = True
 
         kwargs: dict[str, Any] = {
-            "model": self._settings.model,
+            "model": _online_model(self._settings.model)
+            if self._settings.web_search
+            else self._settings.model,
             "messages": [_to_litellm_message(m) for m in messages],
             "stream": stream,
             "timeout": self._settings.request_timeout_s,
@@ -141,7 +189,9 @@ class LiteLLMAdapter:
             kwargs["max_tokens"] = max_tokens
         if self._settings.api_base:
             kwargs["api_base"] = self._settings.api_base
-        if self._settings.api_key_env:
+        if self._session_api_key is not None:
+            kwargs["api_key"] = self._session_api_key
+        elif self._settings.api_key_env:
             key = os.environ.get(self._settings.api_key_env)
             if not key:
                 raise LLMAuthError(
@@ -206,6 +256,14 @@ def _import_litellm() -> Any:
             'litellm is not installed. Install with `pip install "openmimicry-llm[litellm]"`.'
         ) from exc
     return litellm
+
+
+def _online_model(model: str) -> str:
+    """Enable OpenRouter web grounding without provider-specific SDK kwargs."""
+
+    if not model.startswith("openrouter/"):
+        raise LLMTransportError("web search is enabled for a non-OpenRouter model")
+    return model if model.endswith(":online") else f"{model}:online"
 
 
 def _to_litellm_message(msg: LLMMessage) -> dict[str, Any]:

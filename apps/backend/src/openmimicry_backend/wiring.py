@@ -19,20 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
-
-from openmimicry.core import (
-    AppConfig,
-    AvatarRuntimeAdapter,
-    EventBus,
-    LLMAdapter,
-    Runtime,
-    SpeechController,
-    STTAdapter,
-    TaskRequest,
-    TaskRuntimeAdapter,
-    TTSAdapter,
-)
+from typing import Any, cast
 
 # Concrete imports — the rest of the backend may NOT do this.
 from openmimicry.avatar import (
@@ -45,7 +32,26 @@ from openmimicry.avatar import (
     ThreeJSAvatarAdapter,
     UnityAvatarAdapter,
 )
-from openmimicry.llm import LiteLLMAdapter, LiteLLMSettings, MockLLMAdapter
+from openmimicry.core import (
+    AppConfig,
+    AvatarRuntimeAdapter,
+    EventBus,
+    LLMAdapter,
+    Runtime,
+    SpeechController,
+    STTAdapter,
+    TaskRequest,
+    TaskRuntimeAdapter,
+    TTSAdapter,
+)
+from openmimicry.llm import (
+    LiteLLMAdapter,
+    LiteLLMSettings,
+    LLMSwitchboard,
+    MockLLMAdapter,
+)
+from openmimicry.memory import HindsightMemory, LocalSQLiteMemory, MemoryService, NullMemory
+from openmimicry.memory.extractors import LLMExtractor
 from openmimicry.tasks import (
     ClaudeCodeAdapter,
     LocalShellAdapter,
@@ -55,10 +61,21 @@ from openmimicry.tasks import (
     detect_task_intent,
 )
 from openmimicry.voice import (
+    ChatterboxSettings,
+    ChatterboxTTSAdapter,
+    ElevenLabsSettings,
+    ElevenLabsTTSAdapter,
+    IsolatedFasterWhisperAdapter,
+    IsolatedFasterWhisperSettings,
+    IsolatedPiperSettings,
+    IsolatedPiperTTSAdapter,
     MockSTTAdapter,
     MockTTSAdapter,
     RealtimeSTTAdapter,
     RealtimeTTSAdapter,
+    SystemCommandTTSAdapter,
+)
+from openmimicry.voice import (
     SpeechController as ConcreteSpeechController,
 )
 
@@ -97,9 +114,13 @@ class Wiring:
     avatar_runtime: AvatarRuntimeAdapter
     orchestrator: Any
     tasks: TaskRuntimeAdapter
+    memory: MemoryService
     adapters_by_family: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     bridge: Any = None
     intent: IntentClassifier = detect_task_intent
+    runtime_factories: Mapping[str, Callable[[], AvatarRuntimeAdapter]] = field(
+        default_factory=dict
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +141,7 @@ async def build_runtime(
     await runtime.start()
 
     llm = _build_llm(config)
+    memory = _build_memory(config, llm)
     stt = _build_stt(config)
     tts = _build_tts(config)
     speech: SpeechController = ConcreteSpeechController(
@@ -137,6 +159,13 @@ async def build_runtime(
 
     task_router = _build_task_router(config)
 
+    runtime_names = ("sprite2d", "threejs", "live3d", "unity", "external")
+    runtime_factories: dict[str, Callable[[], AvatarRuntimeAdapter]] = {}
+    for runtime_name in runtime_names:
+        runtime_factories[runtime_name] = lambda selected=runtime_name: _build_named_avatar_runtime(
+            selected, config, ws_bridge=ws_bridge
+        )
+
     return Wiring(
         runtime=runtime,
         bus=bus,
@@ -148,6 +177,7 @@ async def build_runtime(
         avatar_runtime=avatar_runtime,
         orchestrator=orchestrator,
         tasks=task_router,
+        memory=memory,
         adapters_by_family={
             "llm": {llm.name: llm},
             "stt": {stt.name: stt},
@@ -156,6 +186,7 @@ async def build_runtime(
             "tasks": dict(_describe_task_adapters(task_router)),
         },
         bridge=ws_bridge,
+        runtime_factories=runtime_factories,
     )
 
 
@@ -165,6 +196,33 @@ async def build_runtime(
 
 
 def _build_llm(config: AppConfig) -> LLMAdapter:
+    if config.llm.backends:
+        backends: dict[str, LLMAdapter] = {}
+        models: dict[str, str] = {}
+        for backend_name, backend in config.llm.backends.items():
+            if backend.adapter == "mock":
+                adapter: LLMAdapter = MockLLMAdapter()
+            elif backend.adapter == "litellm":
+                adapter = LiteLLMAdapter(
+                    settings=LiteLLMSettings(
+                        model=backend.model,
+                        api_base=backend.api_base,
+                        api_key_env=backend.api_key_env,
+                        request_timeout_s=backend.request_timeout_s,
+                        temperature=backend.temperature,
+                        max_tokens=backend.max_tokens,
+                        web_search=backend.web_search,
+                    )
+                )
+            else:
+                raise WiringError(
+                    f"unknown llm.backends.{backend_name}.adapter: {backend.adapter!r}"
+                )
+            backends[backend_name] = adapter
+            models[backend_name] = backend.model
+        active = config.llm.active_backend or next(iter(backends))
+        return LLMSwitchboard(backends=backends, models=models, active=active)
+
     name = config.llm.adapter
     if name == "mock":
         return MockLLMAdapter()
@@ -176,6 +234,7 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
             request_timeout_s=config.llm.request_timeout_s,
             temperature=config.llm.temperature,
             max_tokens=config.llm.max_tokens,
+            web_search=config.llm.web_search,
         )
         return LiteLLMAdapter(settings=settings)
     raise WiringError(f"unknown llm.adapter: {name!r}")
@@ -185,23 +244,133 @@ def _build_stt(config: AppConfig) -> STTAdapter:
     name = config.voice.stt.adapter
     if name == "mock":
         return MockSTTAdapter()
+    if name == "isolated-faster-whisper":
+        return IsolatedFasterWhisperAdapter(
+            settings=IsolatedFasterWhisperSettings(
+                device=config.voice.stt.device,
+                compute_type=config.voice.stt.compute_type,
+                beam_size=config.voice.stt.beam_size,
+                speech_threshold=config.voice.stt.speech_threshold,
+            )
+        )
     if name == "realtimestt":
-        return RealtimeSTTAdapter()
+        from openmimicry.voice import RealtimeSTTSettings
+
+        return RealtimeSTTAdapter(
+            settings=RealtimeSTTSettings(
+                model=config.voice.stt.model,
+                realtime_model_type=config.voice.stt.realtime_model_type,
+                use_main_model_for_realtime=config.voice.stt.use_main_model_for_realtime,
+                language=config.voice.stt.language,
+                sample_rate=config.voice.stt.sample_rate,
+            )
+        )
     raise WiringError(f"unknown voice.stt.adapter: {name!r}")
+
+
+class _MemoryLLMCompletion:
+    """Turn a selected streaming adapter into the memory extractor surface."""
+
+    def __init__(self, adapter: LLMAdapter) -> None:
+        self._adapter = adapter
+
+    async def complete(self, prompt: str) -> str:
+        from openmimicry.core import LLMMessage
+
+        parts: list[str] = []
+        async for chunk in self._adapter.generate(
+            [
+                LLMMessage(
+                    role="system",
+                    content="You extract durable user memories into strict JSON.",
+                ),
+                LLMMessage(role="user", content=prompt),
+            ],
+            stream=True,
+            temperature=0.0,
+        ):
+            parts.append(chunk.delta)
+        return "".join(parts)
+
+
+def _build_memory(config: AppConfig, llm: LLMAdapter) -> MemoryService:
+    memory = config.memory
+    if not memory.enabled or memory.provider == "none":
+        provider = NullMemory()
+    elif memory.provider == "local":
+        provider = LocalSQLiteMemory(
+            memory.database_path,
+            retention_days=memory.retention_days,
+        )
+    elif memory.provider == "hindsight":
+        if memory.endpoint is None:
+            raise WiringError("memory.endpoint is required for Hindsight")
+        provider = HindsightMemory(base_url=memory.endpoint)
+    else:  # pragma: no cover - Pydantic rejects unknown providers.
+        raise WiringError(f"unknown memory.provider: {memory.provider!r}")
+
+    llm_extractor = None
+    if memory.enabled and memory.extraction_mode == "llm":
+        selected: LLMAdapter = llm
+        backend_getter = getattr(llm, "backend", None)
+        backend_name = memory.llm_backend or config.llm.roles.memory_extract
+        if callable(backend_getter):
+            selected = cast(LLMAdapter, backend_getter(backend_name))
+        llm_extractor = LLMExtractor(_MemoryLLMCompletion(selected))
+    return MemoryService(
+        provider=provider,
+        retrieval_limit=memory.retrieval_limit,
+        retrieval_deadline_ms=memory.retrieval_deadline_ms,
+        extraction=memory.extraction_mode,
+        llm_extractor=llm_extractor,
+    )
 
 
 def _build_tts(config: AppConfig) -> TTSAdapter:
     name = config.voice.tts.adapter
     if name == "mock":
         return MockTTSAdapter()
+    if name == "isolated-piper":
+        return IsolatedPiperTTSAdapter(
+            settings=IsolatedPiperSettings(data_dir=config.voice.tts.data_dir)
+        )
     if name == "realtimetts":
         return RealtimeTTSAdapter()
+    if name == "system-command":
+        return SystemCommandTTSAdapter()
+    if name == "elevenlabs":
+        clone = config.voice.tts.clone
+        if clone is None or clone.provider != "elevenlabs":
+            raise WiringError("voice.tts.adapter=elevenlabs requires an elevenlabs clone config")
+        secret_name = (
+            config.voice.tts.secret.name
+            if config.voice.tts.secret is not None and config.voice.tts.secret.source == "env"
+            else "ELEVENLABS_API_KEY"
+        )
+        return ElevenLabsTTSAdapter(
+            ElevenLabsSettings(
+                voice_id=clone.voice_id,
+                api_key_env=secret_name,
+                endpoint=config.voice.tts.endpoint or "https://api.elevenlabs.io",
+            )
+        )
+    if name == "chatterbox-local":
+        clone = config.voice.tts.clone
+        if clone is None or clone.provider != "chatterbox-local" or not clone.reference_path:
+            raise WiringError(
+                "voice.tts.adapter=chatterbox-local requires reference_path and consent_record"
+            )
+        return ChatterboxTTSAdapter(
+            ChatterboxSettings(
+                reference_path=clone.reference_path,
+                consent_record=clone.consent_record,
+                startup_timeout_s=config.voice.tts.readiness_timeout_s,
+            )
+        )
     raise WiringError(f"unknown voice.tts.adapter: {name!r}")
 
 
-def _build_avatar_runtime(
-    config: AppConfig, *, ws_bridge: Any | None
-) -> AvatarRuntimeAdapter:
+def _build_avatar_runtime(config: AppConfig, *, ws_bridge: Any | None) -> AvatarRuntimeAdapter:
     name = config.avatar.runtime
     if name == "mock":
         return MockAvatarRuntimeAdapter()
@@ -220,6 +389,33 @@ def _build_avatar_runtime(
         runtime_cfg = config.avatar.runtimes.get("external", {})
         return ExternalAvatarAdapter(runtime_cfg=runtime_cfg)
     raise WiringError(f"unknown avatar.runtime: {name!r}")
+
+
+def _build_named_avatar_runtime(
+    name: str,
+    config: AppConfig,
+    *,
+    ws_bridge: Any | None,
+) -> AvatarRuntimeAdapter:
+    """Build a runtime by explicit name for ``POST /runtime/swap``."""
+
+    if name == "sprite2d":
+        return Sprite2DAvatarAdapter(ws_bridge=ws_bridge)
+    if name == "threejs":
+        return ThreeJSAvatarAdapter(
+            ws_bridge=ws_bridge,
+            runtime_cfg=config.avatar.runtimes.get("threejs", {}),
+        )
+    if name == "live3d":
+        return Live3DAvatarAdapter(
+            ws_bridge=ws_bridge,
+            runtime_cfg=config.avatar.runtimes.get("live3d", {}),
+        )
+    if name == "unity":
+        return UnityAvatarAdapter(runtime_cfg=config.avatar.runtimes.get("unity", {}))
+    if name == "external":
+        return ExternalAvatarAdapter(runtime_cfg=config.avatar.runtimes.get("external", {}))
+    raise WiringError(f"unknown avatar runtime: {name!r}")
 
 
 def _build_task_router(config: AppConfig) -> TaskRouter:
@@ -248,9 +444,7 @@ def _build_task_adapter(name: str, adapter_kind: str) -> Any:
         return ClaudeCodeAdapter()
     if adapter_kind == "mcp_agent":
         return MCPAgentAdapter()
-    raise WiringError(
-        f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}"
-    )
+    raise WiringError(f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}")
 
 
 def _describe_task_adapters(router: TaskRouter) -> Mapping[str, Any]:

@@ -10,8 +10,10 @@ fn state_roundtrips_through_disk() {
         st.overlay_position = Some((42, 84));
         st.emotion = Some("listening".to_string());
         st.runtime = Some("sprite2d".to_string());
-        st.panel_visible = true;
         st.interactive = true;
+        st.controls_gap = Some(8);
+        st.composer_gap = Some(10);
+        st.position_locked = true;
     })
     .unwrap();
     drop(s);
@@ -21,8 +23,10 @@ fn state_roundtrips_through_disk() {
     assert_eq!(again.overlay_position, Some((42, 84)));
     assert_eq!(again.emotion.as_deref(), Some("listening"));
     assert_eq!(again.runtime.as_deref(), Some("sprite2d"));
-    assert!(again.panel_visible);
     assert!(again.interactive);
+    assert_eq!(again.controls_gap, Some(8));
+    assert_eq!(again.composer_gap, Some(10));
+    assert!(again.position_locked);
 }
 
 #[test]

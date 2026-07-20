@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenMimicry Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23ff8a3d'/%3E%3Ccircle cx='32' cy='28' r='13' fill='white'/%3E%3Ccircle cx='32' cy='28' r='5' fill='%23843f20'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LOCAL CONTROL BOARD</p>
+        <h1>OpenMimicry</h1>
+      </div>
+      <div class="connection"><span id="connection-dot"></span><span id="connection">Connecting</span></div>
+    </header>
+
+    <main class="dashboard">
+      <section class="card conversation-card">
+        <div class="card-heading"><h2>Conversation</h2><span id="avatar-state" class="badge">idle</span></div>
+        <div id="conversation-history" class="conversation-history" aria-live="polite">
+          <p class="empty">Typed and recognized voice turns appear here.</p>
+        </div>
+        <div id="reply" class="reply" aria-live="polite">The latest reply appears here.</div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" autocomplete="off" placeholder="Message OpenMimicry…" aria-label="Message" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Voice</h2><span id="voice-health" class="badge">checking</span></div>
+        <div class="voice-actions">
+          <button id="ptt" class="mode-button" type="button">Hold to talk</button>
+          <button id="wake-listen" class="mode-button" type="button" aria-pressed="false">Wake listen: off</button>
+          <button id="agent-voice" class="mode-button" type="button" aria-pressed="true">Agent voice: on</button>
+        </div>
+        <form id="wake-name-form" class="wake-name-form">
+          <label for="wake-name">Wake name</label>
+          <input id="wake-name" maxlength="40" value="Mimi" autocomplete="off" aria-label="Wake name" />
+          <button type="submit">Save name</button>
+          <label for="wake-aliases">Recognition aliases</label>
+          <input id="wake-aliases" maxlength="160" value="Me me" autocomplete="off" aria-label="Wake-name recognition aliases" placeholder="Me me, Mee mee" />
+          <span></span>
+        </form>
+        <form id="stt-quality-form" class="wake-name-form">
+          <label for="stt-model">Recognition quality</label>
+          <select id="stt-model" aria-label="Speech recognition quality">
+            <option value="medium.en">Recommended CPU — medium.en</option>
+            <option value="distil-large-v3">Recommended NVIDIA — distil-large-v3</option>
+            <option value="large-v3">Maximum multilingual accuracy — large-v3</option>
+            <option value="small.en">Low-memory — small.en</option>
+            <option value="base.en">Fast — base.en</option>
+            <option value="tiny.en">Minimum resources — tiny.en</option>
+          </select>
+          <button type="submit">Warm model</button>
+        </form>
+        <p class="field-hint">medium.en is the stronger CPU default. distil-large-v3 is recommended with a compatible NVIDIA GPU. “Warm model” replaces the isolated worker now, before the next recording.</p>
+        <form id="speech-pause-form" class="wake-name-form">
+          <label for="speech-pause">End-of-speech pause</label>
+          <input id="speech-pause" type="number" min="0.2" max="3" step="0.1" value="1.0" inputmode="decimal" aria-label="End-of-speech pause in seconds" />
+          <button type="submit">Save pause</button>
+        </form>
+        <p class="field-hint">Seconds of silence required before a phrase is submitted. Increase it if normal pauses cut you off; decrease it for faster replies.</p>
+        <p id="voice-adapters" class="muted">Input: unknown · Output: unknown</p>
+        <p id="voice-result" class="voice-result" aria-live="polite">PTT is idle.</p>
+        <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the configured name, for example “Mimi, what time is it?”. <strong>Push-to-talk</strong> starts recording while the toolbar microphone or Ctrl+Space is held, then transcribes after release; it does not require the name.</p>
+        <div class="settings-form">
+          <label><span>Saved voice</span><select id="voice-profile-select"><option value="">No saved voice profiles</option></select></label>
+          <button id="voice-profile-activate" type="button">Use selected voice</button>
+          <label><span>Include reference in export</span><input id="voice-export-reference" type="checkbox" /></label>
+          <button id="voice-profile-export" type="button" class="secondary">Export selected voice</button>
+        </div>
+        <form id="voice-profile-import-form" class="import-form">
+          <label for="voice-profile-zip">Import voice-profile ZIP</label>
+          <input id="voice-profile-zip" type="file" accept=".zip,application/zip" />
+          <button type="submit">Import voice</button>
+          <label><input id="voice-import-reference-confirm" type="checkbox" /> I confirm I may store and use the included biometric voice reference.</label>
+        </form>
+        <details>
+          <summary>Create a named custom/cloned voice</summary>
+          <form id="voice-clone-form" class="settings-form">
+            <label><span>Profile id</span><input id="clone-profile-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_voice" /></label>
+            <label><span>Display name</span><input id="clone-profile-name" required maxlength="128" placeholder="My voice" /></label>
+            <label><span>Provider</span><select id="clone-provider"><option value="chatterbox-local">Chatterbox local (free, optional install)</option><option value="elevenlabs">ElevenLabs voice id (paid/BYOK)</option></select></label>
+            <label><span>Consent record</span><input id="clone-consent" required minlength="10" maxlength="256" placeholder="Speaker consented on YYYY-MM-DD" /></label>
+            <label><span>Reference WAV/MP3 (local)</span><input id="clone-reference" type="file" accept="audio/wav,audio/mpeg,.wav,.mp3" /></label>
+            <label><span>ElevenLabs voice id</span><input id="clone-voice-id" maxlength="128" /></label>
+            <button type="submit">Save named voice</button>
+          </form>
+          <form id="voice-token-form" class="settings-form" autocomplete="off">
+            <label><span>ElevenLabs session token</span><input id="voice-token" type="password" maxlength="8192" autocomplete="off" /></label>
+            <button type="submit">Use for this session</button>
+            <button id="voice-token-clear" type="button" class="secondary">Clear session token</button>
+          </form>
+          <p id="voice-credential-status" class="muted">Voice token: environment or session only</p>
+          <p class="field-hint">Local cloning stores the consented reference under the private OpenMimicry data directory and requires <code>openmimicry-voice[clone-chatterbox]</code>. ElevenLabs uses a voice already created in your account plus <code>ELEVENLABS_API_KEY</code>. No reference is uploaded by OpenMimicry. Restart the backend after changing providers.</p>
+        </details>
+        <p id="voice-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Whole companion profile</h2><span class="badge">v1.7</span></div>
+        <p class="field-hint">A companion profile combines the current character images, personality, appearance, and selected named voice. API tokens, memory, history, logs, and model caches are never exported.</p>
+        <form id="companion-export-form" class="settings-form">
+          <label><span>Profile id</span><input id="companion-export-id" required maxlength="64" placeholder="My companion (normalized on export)" /></label>
+          <label><span>Display name</span><input id="companion-export-name" required maxlength="128" placeholder="My companion" /></label>
+          <label><span>Voice reference</span><select id="companion-export-voice"><option value="false">Exclude biometric audio</option><option value="true">Include WAV/MP3 after rights confirmation</option></select></label>
+          <button type="submit">Export whole companion</button>
+        </form>
+        <form id="companion-import-form" class="import-form">
+          <label for="companion-zip">Import <code>.omprofile.zip</code></label>
+          <input id="companion-zip" type="file" accept=".zip,.omprofile.zip,application/zip" />
+          <button type="submit">Validate &amp; import</button>
+          <label><input id="companion-import-voice-confirm" type="checkbox" /> I confirm I may store and use biometric voice material in this bundle.</label>
+        </form>
+        <div class="settings-form">
+          <label><span>Installed companion</span><select id="companion-select"><option value="">No imported companions</option></select></label>
+          <button id="companion-activate" type="button">Activate companion</button>
+        </div>
+        <p id="companion-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Avatar settings</h2><span class="badge">live</span></div>
+        <form id="settings-form" class="settings-form">
+          <label><span>Character pack</span><select id="pack"><option value="octomimic">octomimic</option></select></label>
+          <button id="swap-pack" type="button">Apply pack</button>
+          <label><span>Runtime</span><select id="runtime"><option>sprite2d</option><option>threejs</option><option>live3d</option><option>unity</option><option>external</option></select></label>
+          <button id="swap-runtime" type="button">Apply runtime</button>
+        </form>
+        <form id="pack-import-form" class="import-form">
+          <label for="pack-zip">Import character ZIP</label>
+          <input id="pack-zip" type="file" accept=".zip,application/zip" />
+          <button type="submit">Validate &amp; import</button>
+        </form>
+        <p class="field-hint">The ZIP must contain exactly one <code>pack.yaml</code> plus its sprite folders. Imported packs appear in the selector above.</p>
+        <details>
+          <summary>Create a simple 2D character</summary>
+          <form id="pack-create-form" class="settings-form">
+            <label><span>Pack id</span><input id="create-pack-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_character" /></label>
+            <label><span>Name</span><input id="create-pack-name" required maxlength="128" /></label>
+            <label><span>Author / owner</span><input id="create-pack-author" required maxlength="128" /></label>
+            <label><span>License / ownership</span><input id="create-pack-license" required maxlength="128" value="Proprietary (user-owned)" /></label>
+            <label><span>Idle sprite (required)</span><input id="create-pack-idle" type="file" required accept="image/png,image/webp,image/jpeg,image/gif" /></label>
+            <label><span>Speaking sprite (optional)</span><input id="create-pack-speaking" type="file" accept="image/png,image/webp,image/jpeg,image/gif" /></label>
+            <button type="submit">Create pack</button>
+          </form>
+          <p class="field-hint">The wizard creates every lifecycle folder from the idle image and uses the optional speaking image during TTS. For full animation, download the <a href="/pack/template">v1.6 template ZIP</a>, replace its numbered transparent sprites, and import it above.</p>
+        </details>
+        <p id="settings-error" class="error" role="alert"></p>
+        <p class="muted">Only import artwork you own or may redistribute. Commercial-profile imports reject configured incompatible or unknown license labels.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Language model</h2><span id="llm-model" class="badge">checking</span></div>
+        <form id="llm-form" class="settings-form">
+          <label><span>Backend</span><select id="llm-backend"></select></label>
+          <button type="submit">Switch backend</button>
+        </form>
+        <form id="llm-model-form" class="settings-form">
+          <label><span>Model</span><select id="llm-model-select"></select></label>
+          <button type="button" id="llm-discover">Load available models</button>
+          <span></span><button type="submit">Use model</button>
+        </form>
+        <form id="llm-token-form" class="settings-form" autocomplete="off">
+          <label><span>Session API token</span><input id="llm-token" type="password" maxlength="8192" autocomplete="new-password" placeholder="Not saved to disk" /></label>
+          <button type="submit">Use until exit</button>
+          <span id="llm-credential-status" class="field-hint">Checking credential source…</span>
+          <button type="button" id="llm-token-clear" class="quiet">Clear session token</button>
+        </form>
+        <form id="llm-web-form" class="settings-form">
+          <label><span>Internet grounding</span><select id="llm-web-search"><option value="false">Off</option><option value="true">On — search the web for every request</option></select></label>
+          <button type="submit">Save web access</button>
+        </form>
+        <p id="llm-web-hint" class="field-hint">Web grounding is available for OpenRouter backends. It adds linked citations and may add search charges even with a free model.</p>
+        <p class="field-hint">OpenRouter may use <code>OPENROUTER_API_KEY</code> or the session-only token above. Ollama discovery reads installed models from the local <code>/api/tags</code> endpoint. Backend/model switches apply to the next turn.</p>
+        <p id="llm-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Reply presentation</h2><span class="badge">v1.6</span></div>
+        <form id="interaction-form" class="settings-form">
+          <label><span>Text and voice</span><select id="presentation-mode"><option value="parallel">Show text and voice in parallel</option><option value="voice_ready">Show text when voice is ready</option><option value="text_only">Text only</option><option value="voice_only">Voice only</option></select></label>
+          <label><span>Minimum display (ms)</span><input id="bubble-min" type="number" min="0" max="60000" step="100" /></label>
+          <label><span>Base display (ms)</span><input id="bubble-base" type="number" min="0" max="60000" step="100" /></label>
+          <label><span>Per character (ms)</span><input id="bubble-per-character" type="number" min="0" max="1000" step="1" /></label>
+          <label><span>Maximum display (ms)</span><input id="bubble-max" type="number" min="1000" max="300000" step="100" /></label>
+          <button type="submit">Save presentation</button>
+        </form>
+        <p class="field-hint">With parallel voice, a reply remains visible until both playback has ended and the reading timer has elapsed. A TTS failure releases the audio hold and keeps text available.</p>
+        <p id="interaction-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Personality</h2><span class="badge">prompt</span></div>
+        <form id="personality-form">
+          <label for="personality-prompt">System prompt</label>
+          <textarea id="personality-prompt" rows="7" maxlength="20000" aria-label="Assistant personality system prompt"></textarea>
+          <button type="submit">Save personality</button>
+        </form>
+        <p class="field-hint">The avatar emotion/action JSON contract is appended separately and remains allow-listed, so editing personality cannot introduce unsupported animations.</p>
+        <p id="personality-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Long-term memory</h2><span id="memory-status" class="badge">checking</span></div>
+        <p id="memory-summary" class="field-hint">Memory is optional and disabled by default.</p>
+        <form id="memory-settings-form" class="settings-form">
+          <label><span>Enabled</span><select id="memory-enabled"><option value="false">Off (no retention)</option><option value="true">On</option></select></label>
+          <label><span>Provider</span><select id="memory-provider"><option value="none">None (memory off)</option><option value="local">Local SQLite</option><option value="hindsight">Hindsight service</option></select></label>
+          <label><span>Extraction</span><select id="memory-extraction"><option value="deterministic">Deterministic explicit facts</option><option value="llm">Independent LLM extraction</option></select></label>
+          <label><span>Memory LLM backend</span><select id="memory-llm-backend"><option value="">Conversation backend/default</option></select></label>
+          <label><span>Retrieval deadline (ms)</span><input id="memory-deadline" type="number" min="25" max="5000" step="25" /></label>
+          <label><span>Retention days</span><input id="memory-retention" type="number" min="1" max="36500" step="1" /></label>
+          <label><span>Hindsight endpoint</span><input id="memory-endpoint" maxlength="2048" placeholder="http://127.0.0.1:8888" /></label>
+          <button type="submit">Save memory settings</button>
+        </form>
+        <div class="voice-actions">
+          <button id="memory-refresh" type="button" class="quiet">Refresh records</button>
+          <a class="quiet diagnostics-download" href="/memory/export">Export JSON</a>
+          <button id="memory-clear" type="button" class="quiet">Delete all</button>
+        </div>
+        <div id="memory-records" class="memory-records"><p class="empty">No retained facts.</p></div>
+        <p class="field-hint">Turning memory on defaults to private Local SQLite storage. Selecting None turns memory off. Changes require a backend restart. Retrieval is deadline-bounded; writes happen after the reply. Raw audio is never stored. Hindsight retention/deletion policy is managed by its external service.</p>
+        <p id="memory-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card tasks-card">
+        <div class="card-heading"><h2>Tasks</h2><span id="task-count" class="badge">0 active</span></div>
+        <div id="tasks" class="tasks" role="list">
+          <p class="empty">No tasks running. Tasks appear only after an explicit delegation request.</p>
+        </div>
+      </section>
+
+      <section class="card diagnostics-card">
+        <div class="card-heading"><h2>Diagnostics</h2><div><a class="quiet diagnostics-download" href="/diagnostics/bundle">Download bundle</a> <button id="refresh-health" class="quiet" type="button">Refresh</button></div></div>
+        <pre id="health">Loading adapter health…</pre>
+        <p class="field-hint">The ZIP contains rotating lifecycle logs, package versions, and sanitized runtime settings—never your <code>.env</code> or API-key value. Run <code>python scripts/voice_doctor.py --playback</code> for the repeatable hardware preflight.</p>
+      </section>
+    </main>
+    <script src="/dashboard.js" defer></script>
+  </body>
+</html>

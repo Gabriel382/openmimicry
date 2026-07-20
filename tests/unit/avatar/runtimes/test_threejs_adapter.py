@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pytest
 from openmimicry.avatar.runtimes.threejs.adapter import (
     ThreeJSAvatarAdapter,
     WSBridge,
@@ -134,7 +133,7 @@ async def test_healthcheck_and_shutdown() -> None:
 
 async def test_bridge_errors_dont_propagate() -> None:
     class BoomBridge:
-        async def publish(self, message):  # noqa: D401, ANN001
+        async def publish(self, message):
             raise RuntimeError("network down")
 
     adapter = ThreeJSAvatarAdapter(pack=_pack(), ws_bridge=BoomBridge())

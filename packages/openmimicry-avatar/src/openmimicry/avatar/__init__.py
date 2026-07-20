@@ -24,26 +24,26 @@ from .director import AvatarDirector
 from .mocks import MockAvatarRuntimeAdapter
 from .orchestrator import AvatarOrchestrator
 from .pack import PackLoadError, ValidationReport, load_pack, validate_pack
-from .runtimes.sprite2d import (
-    Sprite2DAvatarAdapter,
-    WSBridge,
-    build_sprite2d_projection,
-)
-from .runtimes.live3d import (
-    Live3DAvatarAdapter,
-    build_live3d_projection,
-)
-from .runtimes.threejs import (
-    ThreeJSAvatarAdapter,
-    ThreeJSPackError,
-    build_threejs_projection,
-)
 from .runtimes.external import (
     ExternalAvatarAdapter,
     ExternalClient,
     ExternalUnavailable,
     MockExternalClient,
     WSExternalClient,
+)
+from .runtimes.live3d import (
+    Live3DAvatarAdapter,
+    build_live3d_projection,
+)
+from .runtimes.sprite2d import (
+    Sprite2DAvatarAdapter,
+    WSBridge,
+    build_sprite2d_projection,
+)
+from .runtimes.threejs import (
+    ThreeJSAvatarAdapter,
+    ThreeJSPackError,
+    build_threejs_projection,
 )
 from .runtimes.unity import (
     MockUnityTransport,
@@ -82,4 +82,4 @@ __all__ = [
     "validate_pack",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.6.4"

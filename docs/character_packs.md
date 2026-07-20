@@ -89,6 +89,61 @@ Notes:
 
 ## 3. Loader
 
+### Import from the dashboard
+
+Open `http://127.0.0.1:8000/dashboard`, find **Avatar settings**, choose
+**Import character ZIP**, then select the imported pack and click **Apply
+pack**. The ZIP may place `pack.yaml` at its root or inside one top-level
+folder, but it must contain exactly one manifest.
+
+Download `OpenMimicry-character-template-v1.6.0.zip` from `examples/` (or use
+the dashboard's **Download template** button) for a validated starting point.
+The dashboard's simple creator can also build a complete pack from a required
+idle image and optional speaking image; it fills the remaining lifecycle
+states with safe fallbacks. Use a new pack ID for every installed revision.
+
+Minimal importable ZIP:
+
+```text
+my_friend.zip
+└── my_friend/
+    ├── pack.yaml
+    ├── preview.png
+    ├── idle/
+    │   └── 000.png
+    ├── thinking/
+    │   └── 000.png
+    └── speaking/
+        ├── 000.png
+        └── 001.png
+```
+
+```yaml
+schema_version: 1
+id: my_friend                 # lowercase letters/numbers/-/_; max 64
+name: My Friend
+kind: sprite2d
+preview: preview.png
+default_state: idle
+default_emotion: neutral
+emotions:
+  idle:
+    frames: idle
+  thinking:
+    frames: thinking
+  speaking:
+    frames: speaking
+    speaking_frames: speaking
+    fps: 9
+```
+
+`frames` may name a folder or list individual image files. PNG, JPEG, WebP,
+GIF, and BMP are accepted. Missing speaking variants safely fall back to the
+base frames. Import never overwrites an existing pack ID; change `id` when
+installing a new revision. Archives are rejected before installation if they
+contain path traversal, symbolic links, multiple manifests, too many files,
+or exceed the compressed/expanded size limits.
+
 ```python
 # packages/openmimicry-avatar/src/openmimicry/avatar/loaders.py
 def load_pack(pack_dir: Path) -> CharacterPack: ...

@@ -25,6 +25,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from openmimicry.core.schemas import (
+    AvatarCue,
     AvatarDirective,
     Emotion,
     ErrorEvent,
@@ -34,7 +35,9 @@ from openmimicry.core.schemas import (
     State,
     TaskCompleted,
     TranscriptPreview,
+    TurnStateChanged,
     TTSChunkSpoken,
+    TTSFailed,
     TTSFinished,
     TTSInterrupted,
     TTSStarted,
@@ -90,12 +93,15 @@ class AvatarDirector:
 
     # ----------------------------------------------------------------- API
 
-    def on_event(self, event: "RuntimeEvent") -> AvatarDirective | None:
+    def on_event(self, event: RuntimeEvent) -> AvatarDirective | None:
         """Map ``event`` to the next ``AvatarDirective``, or ``None`` for a no-op.
 
         Returning ``None`` is significant: it means *do not re-render*. The
         orchestrator simply doesn't dispatch.
         """
+        if isinstance(event, AvatarCue):
+            return self._apply_avatar_cue(event)
+
         next_state, speaking_override = self._next_state(event)
         if next_state is None:
             return None
@@ -137,6 +143,46 @@ class AvatarDirector:
         self._emotion = emotion
         return directive
 
+    def _apply_avatar_cue(self, event: AvatarCue) -> AvatarDirective:
+        """Map an allow-listed LLM affect/action onto the runtime contract."""
+
+        emotion_map: dict[str, Emotion] = {
+            "neutral": "neutral",
+            "happy": "happy",
+            "sad": "sad",
+            "angry": "angry",
+            "confused": "confused",
+            "focused": "focused",
+            "worried": "worried",
+        }
+        emotion = emotion_map.get(event.emotion, "neutral")
+
+        # Sprite2D renders states, while richer runtimes also consume gesture.
+        # The mapping therefore produces a useful 2D reaction without losing
+        # the original action for 3D/Unity/external runtimes.
+        if emotion == "happy" or event.action in {"wave", "nod", "celebrate"}:
+            state: State = "happy"
+        elif emotion in {"sad", "angry", "worried"}:
+            state = "error"
+        elif emotion in {"confused", "focused"} or event.action == "think":
+            state = "thinking"
+        else:
+            state = "idle"
+
+        directive = AvatarDirective(
+            state=state,
+            emotion=emotion,
+            animation=None if event.action in {"", "idle", "none"} else event.action,
+            gesture=None if event.action in {"", "idle", "none"} else event.action,
+            intensity=max(0.0, min(1.0, event.intensity)),
+            next_state="idle" if state != "idle" else None,
+            duration_ms=event.duration_ms if state != "idle" else None,
+            metadata={"source": "llm_structured_output"},
+        )
+        self._state = state
+        self._emotion = emotion
+        return directive
+
     def apply_return_to(self, return_to: State) -> AvatarDirective:
         """Synthesise a directive that returns the avatar to ``return_to``.
 
@@ -152,9 +198,24 @@ class AvatarDirector:
 
     # ---------------------------------------------------------- state machine
 
-    def _next_state(self, event: "RuntimeEvent") -> tuple[State | None, bool]:
+    def _next_state(self, event: RuntimeEvent) -> tuple[State | None, bool]:
         """Return ``(next_state_or_None, speaking_flag)`` for ``event``."""
         s = self._state
+
+        if isinstance(event, TurnStateChanged):
+            # This event is the authoritative conversation lease.  In
+            # particular, ``thinking`` must override speech from the previous
+            # completed turn, while a rejected attempt must never disturb the
+            # currently active avatar state.
+            if event.state == "thinking":
+                return ("thinking", False) if s != "thinking" else (None, False)
+            if event.state == "failed":
+                return ("error", False) if s != "error" else (None, False)
+            if event.state == "cancelled" and s == "thinking":
+                return "idle", False
+            if event.state == "completed" and s == "thinking":
+                return "idle", False
+            return None, False
 
         # The mapping table from character_packs.md §4. A cell of "—" means
         # we return (None, False) -> no directive emitted.
@@ -180,9 +241,11 @@ class AvatarDirector:
                 return "speaking", True
             return None, False
 
-        if isinstance(event, (TTSFinished, TTSInterrupted)):
-            # thinking/speaking -> idle; others -> no-op.
-            if s in ("thinking", "speaking"):
+        if isinstance(event, (TTSFinished, TTSInterrupted, TTSFailed)):
+            # Only the speech state may be completed by a TTS terminal event.
+            # A late terminal event from an older utterance must not clear a
+            # newer turn's authoritative thinking state.
+            if s == "speaking":
                 return "idle", False
             return None, False
 
@@ -201,17 +264,13 @@ class AvatarDirector:
         # ---- Soft events the table doesn't list, but we still react to. ----
 
         if isinstance(event, UserTextSubmitted):
-            # Typing the same as starting LLM intent: transition to thinking
-            # so the avatar shows it's working on a response.
-            if s in ("idle", "listening", "happy", "error"):
-                return "thinking", False
+            # History/diagnostic event only. TurnStateChanged owns processing.
             return None, False
 
         if isinstance(event, UserSpeechFinal):
-            # Speech ended without a new TTS yet: park at "thinking" so the
-            # user sees the avatar is processing.
-            if s == "listening":
-                return "thinking", False
+            # Accepted wake/PTT input is followed by an admitted
+            # TurnStateChanged(thinking). Rejected ambient wake transcripts
+            # deliberately leave the avatar listening.
             return None, False
 
         if isinstance(event, WakeDetected):
@@ -240,7 +299,7 @@ class AvatarDirector:
         return None, False
 
 
-def _event_text(event: "RuntimeEvent") -> str | None:
+def _event_text(event: RuntimeEvent) -> str | None:
     """Extract a salient text field from an event for the speech bubble."""
     for attr in ("text", "full_text", "delta"):
         value = getattr(event, attr, None)

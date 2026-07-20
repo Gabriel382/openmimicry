@@ -18,6 +18,7 @@ from .tasks import TaskHandle, TaskResult, TaskUpdate
 from .vision import GestureDetection, MovementDetection
 
 __all__ = [
+    "AvatarCue",
     "ConfigUpdated",
     "ConsentRequired",
     "ConsentResolved",
@@ -29,16 +30,22 @@ __all__ = [
     "LLMStarted",
     "LLMTokenStreamed",
     "MovementDetected",
+    "ComponentHealthChanged",
     "RuntimeEvent",
     "RuntimeEventAdapter",
+    "RuntimeStateChanged",
     "TTSChunkSpoken",
+    "TTSFailed",
     "TTSFinished",
     "TTSInterrupted",
+    "TTSQueued",
+    "TTSReady",
     "TTSStarted",
     "TaskCompleted",
     "TaskSubmitted",
     "TaskUpdatedEvent",
     "TranscriptPreview",
+    "TurnStateChanged",
     "UserSpeechFinal",
     "UserSpeechStarted",
     "UserTextSubmitted",
@@ -67,6 +74,13 @@ class UserSpeechFinal(_Event):
     kind: Literal["speech_final"] = "speech_final"
     text: str
     reason: Literal["normal", "no_speech", "interrupted"] = "normal"
+    # Wake mode now records every final transcript for diagnostics/history,
+    # but only accepted turns are submitted to the LLM. ``text`` is the
+    # command after wake-prefix stripping; ``raw_text`` is what STT heard.
+    accepted: bool = True
+    input_mode: Literal["push_to_talk", "continuous", "wake"] = "push_to_talk"
+    raw_text: str | None = None
+    rejection_reason: Literal["wake_name_missing", "duplicate", "empty"] | None = None
 
 
 class TranscriptPreview(_Event):
@@ -78,6 +92,56 @@ class TranscriptPreview(_Event):
 class WakeDetected(_Event):
     kind: Literal["wake"] = "wake"
     name: str
+
+
+class TurnStateChanged(_Event):
+    """Authoritative lifecycle for one admitted conversation turn.
+
+    ``sequence`` is monotonic within one backend process and ``turn_id`` is
+    globally unique.  Rejected attempts are observable but never become the
+    active turn, which lets every UI explain a busy response without allowing
+    the rejected event to change avatar state.
+    """
+
+    kind: Literal["turn_state"] = "turn_state"
+    turn_id: str
+    sequence: int
+    state: Literal[
+        "accepted",
+        "thinking",
+        "presenting",
+        "completed",
+        "failed",
+        "cancelled",
+        "rejected",
+    ]
+    source: Literal["text", "push_to_talk", "continuous", "wake", "task"] = "text"
+    reason: str | None = None
+    active_turn_id: str | None = None
+
+
+class RuntimeStateChanged(_Event):
+    """Process lifecycle projected to every desktop window."""
+
+    kind: Literal["runtime_state"] = "runtime_state"
+    instance_id: str
+    state: Literal["starting", "ready", "refreshing", "stopping", "stopped", "degraded"]
+    ready: bool = False
+    reason: str | None = None
+
+
+class ComponentHealthChanged(_Event):
+    """Health snapshot for an adapter selected by the active configuration."""
+
+    kind: Literal["component_health"] = "component_health"
+    instance_id: str
+    component: str
+    family: str
+    adapter: str
+    state: Literal["unknown", "healthy", "degraded", "unavailable"] = "unknown"
+    required: bool = False
+    actual_device: str | None = None
+    last_error: str | None = None
 
 
 class LLMStarted(_Event):
@@ -92,22 +156,60 @@ class LLMTokenStreamed(_Event):
 class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
+    presentation_mode: Literal["parallel", "voice_ready", "text_only", "voice_only"] = "parallel"
+    speech_expected: bool = False
+    speech_utterance_id: str | None = None
+
+
+class AvatarCue(_Event):
+    """Validated affect/action selected from a structured LLM reply.
+
+    ``emotion`` and ``action`` remain strings at the event boundary so packs
+    and future runtimes may extend their vocabularies. The backend parser
+    allow-lists values before publishing this event.
+    """
+
+    kind: Literal["avatar_cue"] = "avatar_cue"
+    emotion: str = "neutral"
+    action: str = "idle"
+    intensity: float = 0.6
+    duration_ms: int = 1800
+
+
+class TTSQueued(_Event):
+    kind: Literal["tts_queued"] = "tts_queued"
+    utterance_id: str
+
+
+class TTSReady(_Event):
+    kind: Literal["tts_ready"] = "tts_ready"
+    utterance_id: str
 
 
 class TTSStarted(_Event):
     kind: Literal["tts_start"] = "tts_start"
+    utterance_id: str | None = None
 
 
 class TTSChunkSpoken(_Event):
     kind: Literal["tts_chunk"] = "tts_chunk"
+    utterance_id: str | None = None
 
 
 class TTSFinished(_Event):
     kind: Literal["tts_done"] = "tts_done"
+    utterance_id: str | None = None
 
 
 class TTSInterrupted(_Event):
     kind: Literal["tts_interrupted"] = "tts_interrupted"
+    utterance_id: str | None = None
+
+
+class TTSFailed(_Event):
+    kind: Literal["tts_failed"] = "tts_failed"
+    utterance_id: str | None = None
+    message: str = "Text-to-speech playback did not start."
 
 
 class TaskSubmitted(_Event):
@@ -186,13 +288,20 @@ RuntimeEvent = Annotated[
     | UserSpeechFinal
     | TranscriptPreview
     | WakeDetected
+    | TurnStateChanged
+    | RuntimeStateChanged
+    | ComponentHealthChanged
     | LLMStarted
     | LLMTokenStreamed
     | LLMReplyComplete
+    | AvatarCue
+    | TTSQueued
+    | TTSReady
     | TTSStarted
     | TTSChunkSpoken
     | TTSFinished
     | TTSInterrupted
+    | TTSFailed
     | TaskSubmitted
     | TaskUpdatedEvent
     | TaskCompleted

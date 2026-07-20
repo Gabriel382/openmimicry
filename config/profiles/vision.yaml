@@ -10,7 +10,7 @@
 # `ConsentRequired` on the bus; the desktop frontend renders the
 # consent dialog and only then does the camera open.
 
-schema_version: 1
+schema_version: 2
 
 app:
   log_level: INFO
@@ -28,8 +28,10 @@ voice:
     adapter: mock
   modes:
     text_always_on: true
+    continuous_listening: false
     live_wake: false
     agent_voice: true
+    barge_in_enabled: false
 
 avatar:
   runtime: sprite2d

@@ -7,6 +7,7 @@
  */
 
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode, useEffect, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MockWebSocket, mockSocketFactory } from "../ws/mockSocket";
@@ -27,6 +28,16 @@ function StatusProbe(): JSX.Element {
       </button>
     </div>
   );
+}
+
+function BubbleProbe(): JSX.Element {
+  const ws = useWS();
+  const [texts, setTexts] = useState<string[]>([]);
+  useEffect(
+    () => ws.subscribe("bubble.text", (message) => setTexts((value) => [...value, message.text])),
+    [ws],
+  );
+  return <span data-testid="bubbles">{texts.join("|")}</span>;
 }
 
 afterEach(() => cleanup());
@@ -128,5 +139,28 @@ describe("WSProvider", () => {
     act(() => ws._dispatchMessage("not-json"));
     act(() => ws._dispatchMessage({ no: "type" }));
     expect(screen.getByTestId("last").textContent).toBe("none");
+  });
+
+  it("ignores stale StrictMode sockets instead of dispatching duplicate events", async () => {
+    const { factory, sockets } = mockSocketFactory();
+    render(
+      <StrictMode>
+        <WSProvider url="ws://test/ws" socketFactory={factory}>
+          <BubbleProbe />
+        </WSProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(sockets.length).toBe(2));
+    await waitFor(() => expect(sockets[1]?.readyState).toBe(1));
+    act(() =>
+      sockets[0]?._dispatchMessage({ type: "bubble.text", text: "stale", complete: false }),
+    );
+    expect(screen.getByTestId("bubbles").textContent).toBe("");
+
+    act(() =>
+      sockets[1]?._dispatchMessage({ type: "bubble.text", text: "active", complete: false }),
+    );
+    await waitFor(() => expect(screen.getByTestId("bubbles").textContent).toBe("active"));
   });
 });

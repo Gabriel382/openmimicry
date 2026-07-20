@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "STTConfig",
@@ -24,10 +24,17 @@ class STTConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     language: str = "en"
-    mode: Literal["wake", "dictation"] = "dictation"
+    # The low-level contract keeps a lightweight legacy default. The Windows
+    # application profile explicitly selects the stronger medium.en model.
+    model: str = "small.en"
+    realtime_model_type: str = "small.en"
+    use_main_model_for_realtime: bool = True
+    mode: Literal["wake", "dictation", "push_to_talk", "continuous"] = "dictation"
     wake_names: list[str] = []
+    prompt_terms: list[str] = []
     sample_rate: int = 16000
     vad: Literal["silero", "webrtc", "none"] = "silero"
+    post_speech_silence_duration: float = Field(default=1.0, ge=0.2, le=3.0)
 
 
 class TTSConfig(BaseModel):

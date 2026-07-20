@@ -168,11 +168,9 @@ class WSExternalClient:
                 ),
                 timeout=self._connect_timeout_s,
             )
-        except asyncio.TimeoutError as exc:
-            raise ExternalClientError(
-                f"external WS connect timed out for {self._url}"
-            ) from exc
-        except Exception as exc:  # noqa: BLE001
+        except TimeoutError as exc:
+            raise ExternalClientError(f"external WS connect timed out for {self._url}") from exc
+        except Exception as exc:
             raise ExternalClientError(f"external WS connect failed: {exc}") from exc
         self._open = True
 
@@ -183,9 +181,9 @@ class WSExternalClient:
         payload = json.dumps(frame, default=str)
         try:
             await asyncio.wait_for(ws.send(payload), timeout=self._send_timeout_s)
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise ExternalClientError("external WS send timed out") from exc
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._open = False
             raise ExternalClientError(f"external WS send failed: {exc}") from exc
 
@@ -197,7 +195,7 @@ class WSExternalClient:
             return
         try:
             await ws.close()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.debug("WSExternalClient close raised: %s", exc)
 
     def incoming(self) -> AsyncIterator[ExternalFrame]:
@@ -214,11 +212,9 @@ class WSExternalClient:
                 try:
                     yield json.loads(raw)
                 except json.JSONDecodeError as exc:
-                    _log.warning(
-                        "WSExternalClient: dropped malformed frame: %s", exc
-                    )
+                    _log.warning("WSExternalClient: dropped malformed frame: %s", exc)
                     continue
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _log.info("WSExternalClient: incoming() ended: %s", exc)
             self._open = False
             return
@@ -231,6 +227,6 @@ def _import_websockets() -> Any:
     except ImportError as exc:
         raise ExternalUnavailable(
             "websockets is not installed. Install with "
-            "`pip install \"openmimicry-avatar[external]\"`."
+            '`pip install "openmimicry-avatar[external]"`.'
         ) from exc
     return websockets

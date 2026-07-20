@@ -1,0 +1,87 @@
+# OpenRouter plus crash-contained local STT and Piper TTS.
+schema_version: 2
+
+llm:
+  active_backend: openrouter
+  history_turns: 4
+  backends:
+    openrouter:
+      adapter: litellm
+      provider: openrouter
+      # "GPT-20" default: OpenAI's 20B open-weight model on OpenRouter.
+      model: openrouter/openai/gpt-oss-20b
+      api_key_env: OPENROUTER_API_KEY
+      temperature: 0.6
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      provider: ollama
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      temperature: 0.6
+      request_timeout_s: 180
+
+voice:
+  stt:
+    adapter: isolated-faster-whisper
+    language: en
+    # Strong CPU default. NVIDIA users can select distil-large-v3 from the
+    # dashboard; tiny/base/small remain opt-in low-resource modes.
+    model: medium.en
+    realtime_model_type: medium.en
+    use_main_model_for_realtime: true
+    device: auto
+    compute_type: auto
+    beam_size: 5
+    speech_threshold: 0.015
+    vad: silero
+    # Raise this if natural pauses are cutting a phrase short (0.2–3.0 s).
+    post_speech_silence_duration: 1.0
+    wake:
+      enabled: true
+      names:
+        - Mimi
+        - Hey Mimi
+      aliases:
+        - Me me
+      sensitivity: 0.6
+  tts:
+    adapter: isolated-piper
+    engine: piper
+    voice: en_US-lessac-medium
+    data_dir: ~/.openmimicry/voices
+    rate: 1.0
+    interruptible: true
+  modes:
+    text_always_on: true
+    continuous_listening: false
+    live_wake: false
+    agent_voice: true
+    # Laptop speakers are otherwise often mistaken for user speech.
+    barge_in_enabled: false
+
+interaction:
+  response_presentation:
+    mode: parallel
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+memory:
+  enabled: false
+  provider: none
+
+# isolated-piper is retained for existing users but is a community-profile
+# component. Select the commercial profile to exclude it from redistributions.
+distribution:
+  profile: community
+
+tasks:
+  default_runtime: mock
+  runtimes:
+    mock:
+      adapter: mock

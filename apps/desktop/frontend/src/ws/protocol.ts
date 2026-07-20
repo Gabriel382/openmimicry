@@ -105,6 +105,68 @@ export interface BubbleTextMessage {
   type: "bubble.text";
   text: string;
   complete: boolean;
+  /** A new LLM turn started; clear any incomplete text from the prior turn. */
+  reset?: boolean;
+  presentation_mode?: "parallel" | "voice_ready" | "text_only" | "voice_only";
+  speech_expected?: boolean;
+  utterance_id?: string | null;
+}
+
+export interface SpeechStatusMessage {
+  type: "speech.status";
+  utterance_id: string | null;
+  status: "queued" | "ready" | "started" | "finished" | "interrupted" | "failed";
+}
+
+export interface ConversationTurnMessage {
+  type: "conversation.turn";
+  id: string;
+  role: "user" | "assistant";
+  source: "text" | "voice" | "assistant";
+  text: string;
+  ts: string;
+}
+
+export type TurnLifecycleState =
+  | "accepted"
+  | "thinking"
+  | "presenting"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "rejected";
+
+export interface TurnStateMessage {
+  type: "turn.state";
+  turn_id: string;
+  sequence: number;
+  state: TurnLifecycleState;
+  source: "text" | "push_to_talk" | "continuous" | "wake" | "task";
+  reason?: string | null;
+  active_turn_id?: string | null;
+  ts: string;
+}
+
+export interface RuntimeStateMessage {
+  type: "runtime.state";
+  instance_id: string;
+  state: "starting" | "ready" | "refreshing" | "stopping" | "stopped" | "degraded";
+  ready: boolean;
+  reason?: string | null;
+  ts?: string;
+}
+
+export interface ComponentHealthMessage {
+  type: "component.health";
+  instance_id: string;
+  component: string;
+  family: string;
+  adapter: string;
+  state: "unknown" | "healthy" | "degraded" | "unavailable";
+  required: boolean;
+  actual_device?: string | null;
+  last_error?: string | null;
+  ts: string;
 }
 
 export interface TaskCardMessage {
@@ -123,6 +185,26 @@ export interface SystemNoticeMessage {
   diff?: Record<string, unknown>;
   where?: string;
   recoverable?: boolean;
+  voice?: {
+    continuous_listening?: boolean;
+    live_wake?: boolean;
+    wake_names?: string[];
+    agent_voice?: boolean;
+    ptt_active?: boolean;
+    ptt_stage?: string;
+    listening_mode?: string;
+    stt_adapter?: string;
+    stt_runtime?: Record<string, unknown>;
+    tts_adapter?: string;
+    real_input?: boolean;
+    real_output?: boolean;
+    input_install_hint?: string | null;
+    output_install_hint?: string | null;
+  };
+  voice_result?: {
+    text: string;
+    reason: "normal" | "no_speech" | "interrupted";
+  };
   [extra: string]: unknown;
 }
 
@@ -131,6 +213,11 @@ export type ServerMessage =
   | AvatarDirectiveMessage
   | TranscriptPreviewMessage
   | BubbleTextMessage
+  | SpeechStatusMessage
+  | ConversationTurnMessage
+  | TurnStateMessage
+  | RuntimeStateMessage
+  | ComponentHealthMessage
   | TaskCardMessage
   | SystemNoticeMessage;
 
@@ -153,7 +240,7 @@ export interface PttUpMessage {
   type: "ptt.up";
 }
 
-export type ModeKey = "live_wake" | "agent_voice";
+export type ModeKey = "continuous_listening" | "live_wake" | "agent_voice";
 
 export interface ModeToggleMessage {
   type: "mode.toggle";
@@ -190,6 +277,11 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     t === "avatar.directive" ||
     t === "transcript.preview" ||
     t === "bubble.text" ||
+    t === "speech.status" ||
+    t === "conversation.turn" ||
+    t === "turn.state" ||
+    t === "runtime.state" ||
+    t === "component.health" ||
     t === "task.card" ||
     t === "system.notice"
   );

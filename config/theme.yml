@@ -1,34 +1,55 @@
+schema_version: 1
 
-name: openmimicry-default
 windows:
   overlay:
-    width: 500
-    height: 700
+    width: 360
+    height: 420
     transparent: true
     frameless: true
     always_on_top: true
     movable: true
+  controls:
+    width: 360
+    height: 46
+    always_on_top: true
+  composer:
+    width: 360
+    height: 54
+    always_on_top: true
   panel:
-    width: 420
+    width: 480
     height: 720
-    transparent: false
-    frameless: false
+
 theme:
   font_family: Inter, Arial, sans-serif
-colors:
-  panel_bg: "rgba(18, 22, 30, 0.92)"
-  panel_border: "rgba(255,255,255,0.10)"
-  text_primary: "#f4f6fb"
-  text_secondary: "#aab3c5"
   accent: "#ff8a3d"
-  bubble_bg: "rgba(255,255,255,0.96)"
-  bubble_text: "#1b1d22"
-  dock_bg: "rgba(18,22,30,0.52)"
-  dock_border: "rgba(255,255,255,0.10)"
-  button_bg: "rgba(18,22,30,0.58)"
-  button_border: "rgba(255,255,255,0.12)"
-  input_bg: "rgba(255,255,255,0.10)"
-  input_border: "rgba(255,255,255,0.14)"
+  panel_bg: "#16161a"
+  panel_text: "#dddddd"
+  bubble_bg: "rgba(20, 20, 22, 0.88)"
+  bubble_text: "#f4f4f6"
+  controls_bg: "rgba(18, 22, 30, 0.82)"
+  controls_border: "rgba(255, 255, 255, 0.14)"
+  input_bg: "rgba(255, 255, 255, 0.10)"
+  input_border: "rgba(255, 255, 255, 0.18)"
+
 layout:
-  bubble_max_width: 320
-  avatar_width: 320
+  bubble_max_width: 330
+  avatar_width: 330
+  avatar_scale: 1.0
+  # Pixel gap between the toolbar and the top edge of the avatar.
+  controls_gap: 6
+  # Pixel gap between the avatar and the message composer underneath it.
+  composer_gap: 6
+
+behaviour:
+  bubble:
+    # Display duration = min(max_ms, base_ms + characters * ms_per_character).
+    base_ms: 1500
+    ms_per_character: 55
+    min_ms: 2500
+    max_ms: 30000
+  controls:
+    show: true
+    show_drag_handle: true
+    show_text_input: true
+    drag_label: Drag OpenMimicry

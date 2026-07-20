@@ -7,7 +7,8 @@ The resolution order is the one documented in ``docs/configuration.md`` §1:
    ``./config/app.yaml``, ``~/.config/openmimicry/app.yaml``).
 3. Profile overlay if ``OPENMIMICRY_PROFILE`` is set
    (``./config/profiles/<name>.yaml``).
-4. Environment variables ``OPENMIMICRY__<SECTION>__<KEY>=...`` applied last.
+4. Optional per-user overlay (``./config/user.yaml``).
+5. Environment variables ``OPENMIMICRY__<SECTION>__<KEY>=...`` applied last.
 
 Booleans accept ``true/false/1/0/yes/no``. Lists accept JSON syntax.
 Secrets are not read from YAML; the API-key env var is referenced by name
@@ -34,6 +35,7 @@ __all__ = [
     "diff_dicts",
     "load",
     "resolve_config_path",
+    "resolve_user_config_path",
 ]
 
 ENV_PREFIX = "OPENMIMICRY__"
@@ -41,6 +43,7 @@ ENV_PREFIX = "OPENMIMICRY__"
 
 CONFIG_ENV_VAR = "OPENMIMICRY_CONFIG"
 PROFILE_ENV_VAR = "OPENMIMICRY_PROFILE"
+USER_CONFIG_ENV_VAR = "OPENMIMICRY_USER_CONFIG"
 
 _TRUE_STRS = frozenset({"true", "1", "yes", "on"})
 _FALSE_STRS = frozenset({"false", "0", "no", "off"})
@@ -90,6 +93,17 @@ def resolve_config_path(explicit: str | os.PathLike[str] | None = None) -> Path 
 
 def _resolve_profile_path(name: str) -> Path | None:
     candidate = Path.cwd() / "config" / "profiles" / f"{name}.yaml"
+    return candidate if candidate.is_file() else None
+
+
+def resolve_user_config_path(env: Mapping[str, str] | None = None) -> Path | None:
+    """Return the optional dashboard-managed user overlay when it exists."""
+
+    src = dict(env) if env is not None else dict(os.environ)
+    configured = src.get(USER_CONFIG_ENV_VAR)
+    candidate = (
+        Path(os.path.expanduser(configured)) if configured else Path.cwd() / "config" / "user.yaml"
+    )
     return candidate if candidate.is_file() else None
 
 
@@ -225,12 +239,17 @@ def load(
             )
         _deep_merge(merged, _read_yaml(profile_path))
 
-    # 4. Env overrides (last wins).
+    # 4. Per-user settings saved by the local dashboard.
+    user_path = resolve_user_config_path(src_env)
+    if user_path is not None:
+        _deep_merge(merged, _read_yaml(user_path))
+
+    # 5. Env overrides (last wins).
     overrides = _env_overrides(src_env)
     if overrides:
         _deep_merge(merged, overrides)
 
-    # 5. schema_version migration.
+    # 6. schema_version migration.
     declared = int(merged.get("schema_version", SCHEMA_VERSION))
     if declared > SCHEMA_VERSION:
         raise SchemaVersionError(
@@ -249,7 +268,7 @@ def load(
         merged = migrate(merged, declared, SCHEMA_VERSION)
         merged["schema_version"] = SCHEMA_VERSION
 
-    # 6. Validate.
+    # 7. Validate.
     try:
         return AppConfig.model_validate(merged)
     except ValidationError as exc:

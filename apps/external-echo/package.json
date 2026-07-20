@@ -1,7 +1,7 @@
 {
   "name": "@openmimicry/external-echo",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.4",
   "type": "module",
   "description": "Reference WS echo server for the OpenMimicry External avatar protocol (M12).",
   "scripts": {
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "ws": "^8.18.0"
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

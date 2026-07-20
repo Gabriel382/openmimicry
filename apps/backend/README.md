@@ -12,8 +12,10 @@ make install PROFILE=dev
 uvicorn openmimicry_backend.main:app --reload --port 8000
 ```
 
-That brings up `/health`, `/chat`, `/mode/toggle`, `/pack/swap`,
-`/runtime/swap`, `/admin/reload`, `/config`, and the WebSocket at `/ws`.
+That brings up the browser dashboard at `/dashboard`, plus `/health`, `/chat`,
+`/mode/toggle`, `/voice/settings`, `/llm/settings`, `/packs`, `/pack/import`,
+`/pack/swap`, `/runtime/swap`, `/admin/reload`, `/config`, and the WebSocket at
+`/ws`.
 With the default config (every adapter is a mock), `POST /chat` runs
 the mock LLM end-to-end and the WS streams the projected events.
 
@@ -28,7 +30,8 @@ OPENMIMICRY_CONFIG_PATH=./config/dev.yaml \
 
 The config schema lives in `docs/configuration.md`; an example with
 `llm.adapter: litellm` + `voice.{stt,tts}.adapter: realtime*` covers a
-real provider stack.
+real provider stack. The v1.4 voice profile demonstrates named OpenRouter and
+Ollama backends that can be selected from the dashboard.
 
 ## Architecture
 

@@ -5,7 +5,7 @@
 //! * Last known overlay position.
 //! * Current avatar emotion (drives the tray mood pixel).
 //! * Current avatar runtime name.
-//! * Panel-visible flag (so the next launch matches the last session).
+//! * Position-lock flag for the avatar toolbar.
 //!
 //! Persisted as JSON to `<data_dir>/state.json`. The save/load helpers
 //! are pure (path in, path out) so the test suite drives them against
@@ -31,16 +31,20 @@ pub struct PersistedState {
     #[serde(default)]
     pub runtime: Option<String>,
     #[serde(default)]
-    pub panel_visible: bool,
-    #[serde(default)]
     pub interactive: bool,
+    #[serde(default)]
+    pub controls_gap: Option<i32>,
+    #[serde(default)]
+    pub composer_gap: Option<i32>,
+    #[serde(default)]
+    pub position_locked: bool,
 }
 
 fn default_schema() -> u32 {
     SCHEMA
 }
 
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 3;
 pub const STATE_FILENAME: &str = "state.json";
 
 /// Wrapper that pairs the persisted record with its on-disk path.
@@ -102,8 +106,9 @@ pub fn load_from(path: impl AsRef<Path>) -> Result<PersistedState> {
     let path = path.as_ref();
     let bytes = fs::read(path)
         .with_context(|| format!("failed to read state file {}", path.display()))?;
-    let parsed: PersistedState = serde_json::from_slice(&bytes)
+    let mut parsed: PersistedState = serde_json::from_slice(&bytes)
         .with_context(|| format!("failed to parse state file {}", path.display()))?;
+    parsed.schema = SCHEMA;
     Ok(parsed)
 }
 
@@ -135,7 +140,7 @@ mod tests {
         assert_eq!(s.overlay_position, None);
         assert_eq!(s.emotion, None);
         assert_eq!(s.runtime, None);
-        assert!(!s.panel_visible);
+        assert!(!s.position_locked);
     }
 
     #[test]
@@ -155,8 +160,10 @@ mod tests {
                 s.overlay_position = Some((100, 200));
                 s.emotion = Some("happy".to_string());
                 s.runtime = Some("sprite2d".to_string());
-                s.panel_visible = true;
                 s.interactive = true;
+                s.controls_gap = Some(8);
+                s.composer_gap = Some(10);
+                s.position_locked = true;
             })
             .unwrap();
 
@@ -164,8 +171,10 @@ mod tests {
         assert_eq!(loaded.overlay_position, Some((100, 200)));
         assert_eq!(loaded.emotion.as_deref(), Some("happy"));
         assert_eq!(loaded.runtime.as_deref(), Some("sprite2d"));
-        assert!(loaded.panel_visible);
         assert!(loaded.interactive);
+        assert_eq!(loaded.controls_gap, Some(8));
+        assert_eq!(loaded.composer_gap, Some(10));
+        assert!(loaded.position_locked);
     }
 
     #[test]

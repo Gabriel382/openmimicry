@@ -12,6 +12,7 @@ from .loader import (
     diff_dicts,
     load,
     resolve_config_path,
+    resolve_user_config_path,
 )
 from .migrations import MigrationError, migrate, register_migration
 from .reloader import ConfigReloader
@@ -26,4 +27,5 @@ __all__ = [
     "migrate",
     "register_migration",
     "resolve_config_path",
+    "resolve_user_config_path",
 ]

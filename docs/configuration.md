@@ -1,6 +1,10 @@
 # Configuration
 
-OpenMimicry is configured by a single YAML file. Environment variables can override any leaf value. The merged tree is validated by Pydantic into an immutable `AppConfig`. The runtime reads only `AppConfig`; it never goes back to the file system or `os.environ`.
+OpenMimicry runtime behavior is configured by `config/app.yaml` plus an optional
+profile. The browser dashboard stores non-secret user overrides such as the
+wake name and end-of-speech pause in ignored `config/user.yaml`. Desktop appearance is configured in
+`config/theme.yml`, and assistant tone/cue vocabulary in
+`config/personality.yml`.
 
 ## 1. Resolution order
 
@@ -11,14 +15,17 @@ OpenMimicry is configured by a single YAML file. Environment variables can overr
    - `./config/app.yaml`.
    - `~/.config/openmimicry/app.yaml`.
 3. A profile file, if `OPENMIMICRY_PROFILE` is set: `./config/profiles/<name>.yaml`, merged over the active file.
-4. Environment variables of the form `OPENMIMICRY__<SECTION>__<KEY>=...`, applied last.
+4. The optional user overlay at `config/user.yaml`, or the path named by
+   `OPENMIMICRY_USER_CONFIG`, merged over the profile.
+5. Environment variables of the form `OPENMIMICRY__<SECTION>__<KEY>=...`,
+   applied last.
 
 The merge is deep for nested dicts and replacement for scalars/lists. The final tree is validated; on failure, the process exits with a structured error pointing at the offending path.
 
 ## 2. Top-level schema
 
 ```yaml
-schema_version: 1
+schema_version: 2
 
 app:
   log_level: INFO              # DEBUG | INFO | WARNING | ERROR
@@ -27,42 +34,82 @@ app:
   telemetry: false             # off by default; never on without explicit opt-in
 
 llm:
-  adapter: litellm             # litellm | mock | <custom>
-  model: openrouter/anthropic/claude-3.5-sonnet
-  temperature: 0.7
-  max_tokens: null
-  api_base: null               # for self-hosted/OpenAI-compatible endpoints
-  api_key_env: OPENROUTER_API_KEY
-  request_timeout_s: 60
-  retry:
-    attempts: 2
-    backoff_s: 1.5
-  fallback:
-    adapter: litellm
-    model: ollama/llama3.1
+  active_backend: openrouter
+  history_turns: 4             # completed user/assistant pairs; 0–10
+  backends:
+    openrouter:
+      adapter: litellm
+      model: openrouter/openai/gpt-oss-20b
+      api_key_env: OPENROUTER_API_KEY
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      request_timeout_s: 180
 
 voice:
   stt:
-    adapter: realtimestt        # realtimestt | mock | <custom>
+    adapter: isolated-faster-whisper  # supported default | mock | legacy realtimestt
     language: en
+    model: medium.en            # CPU default; distil-large-v3 for NVIDIA
+    realtime_model_type: medium.en  # legacy adapter compatibility only
+    use_main_model_for_realtime: true
+    device: auto                # auto | cpu | cuda
+    compute_type: auto          # auto -> CPU int8 / CUDA float16
+    beam_size: 5
+    speech_threshold: 0.015     # live energy-VAD threshold
     vad: silero                 # silero | webrtc | none
     sample_rate: 16000
+    post_speech_silence_duration: 1.0  # 0.2–3.0 s; raise if pauses cut speech
     wake:
       enabled: true
       names: ["Mimi", "Hey Mimi"]
+      aliases: ["Me me"]
       sensitivity: 0.6
   tts:
-    adapter: realtimetts        # realtimetts | mock | <custom>
-    engine: coqui               # coqui | piper | azure | openai | ...
-    voice: en_female_1
+    adapter: system-command     # mock | system-command | isolated-piper | chatterbox-local | elevenlabs
+    engine: system
+    voice: system-default
+    data_dir: ~/.openmimicry/voices
     rate: 1.0
     interruptible: true
+    readiness_timeout_s: 30     # up to 180 for cold-start clone models
   modes:
     text_always_on: true
     push_to_talk_hotkey: "Ctrl+Space"
-    live_wake: true
+    continuous_listening: false  # advanced: submit every final utterance
+    live_wake: false             # toolbar: require configured name prefix
     agent_voice: true
+    barge_in_enabled: false      # safe default for laptop speakers
     barge_in_grace_ms: 600
+
+interaction:
+  response_presentation:
+    mode: parallel              # parallel | voice_ready | text_only | voice_only
+    dismiss_policy: after_both
+    minimum_ms: 2500
+    base_ms: 1500
+    ms_per_character: 55
+    maximum_ms: 30000
+    allow_accessibility_captions: true
+
+memory:
+  enabled: false                # no retention until explicitly enabled
+  provider: none                # none | local | hindsight
+  database_path: ~/.openmimicry/memory/memory.sqlite3
+  endpoint: null                # required for enabled Hindsight
+  retrieval_limit: 6
+  retrieval_deadline_ms: 150
+  retention_days: 365           # local SQLite; null means no automatic expiry
+  extraction_mode: deterministic # deterministic | llm
+  llm_backend: null             # independent named backend for LLM extraction
+  store_raw_audio: false        # invariant; true is rejected
+
+distribution:
+  profile: commercial           # core | local | cloud | commercial | community
+  reject_licenses: [GPL, AGPL, non-commercial, CC-BY-NC, research-only, unknown]
 
 avatar:
   runtime: sprite2d            # sprite2d | advanced2d | threejs | vrm | live3d | unity | external | mock
@@ -129,15 +176,11 @@ ui:
     click_through_default: true
     always_on_top: true
     save_position: true
-  panel:
-    width: 480
-    height: 720
-    open_on_startup: false
   tray:
     enabled: true
   hotkeys:
     toggle_interact: "Ctrl+Shift+M"
-    show_panel: "Ctrl+Shift+O"
+    show_panel: "Ctrl+Shift+O"  # legacy name; opens the browser dashboard
 ```
 
 Every section maps 1:1 to a Pydantic model in `openmimicry.core.schemas.app`. Models are frozen; the runtime gets read-only views.
@@ -147,7 +190,7 @@ Every section maps 1:1 to a Pydantic model in `openmimicry.core.schemas.app`. Mo
 Double-underscore separates levels:
 
 ```bash
-export OPENMIMICRY__LLM__MODEL=openrouter/anthropic/claude-3.5-haiku
+export OPENMIMICRY__LLM__BACKENDS__OPENROUTER__MODEL=openrouter/anthropic/claude-3.5-haiku
 export OPENMIMICRY__VOICE__MODES__AGENT_VOICE=false
 export OPENMIMICRY__UI__OVERLAY__CLICK_THROUGH_DEFAULT=false
 ```
@@ -165,6 +208,9 @@ Some changes are safe to apply without restarting:
 | `app.log_level` | yes |
 | `llm.temperature`, `max_tokens`, `model` (same adapter) | yes |
 | `voice.modes.*` toggles | yes |
+| `voice.stt.post_speech_silence_duration` | yes (dashboard restarts active listener) |
+| `voice.stt.model` | yes (dashboard warms and swaps the model) |
+| `llm.active_backend` | yes (next accepted turn) |
 | `avatar.pack`, `avatar.transition_ms` | yes |
 | `avatar.runtime` swap | yes (handled by `AvatarOrchestrator.swap_runtime`) |
 | `avatar.runtimes.<modality>.*` | yes |
@@ -172,35 +218,54 @@ Some changes are safe to apply without restarting:
 | `llm.adapter`, `voice.*.adapter`, `tasks.runtimes.*.adapter` | **no** (restart required) |
 | `tasks.runtimes.*` add/remove | **no** |
 
-`make doctor` and the panel's "Settings" page mark adapter-level changes as "needs restart".
+`make doctor` and the browser dashboard's Settings card mark adapter-level changes as "needs restart".
 
 The reloader watches the active config file with `watchfiles`, re-merges env overrides, re-validates, and `EventBus.publish(ConfigUpdated(diff))`. Each module decides whether the diff requires action.
 
 ## 5. Schema versioning
 
-`schema_version: 1` is mandatory. Future major bumps:
-
-- v2 might split `voice.tts` into engine-specific subtrees.
-- v2 might add a `personalities` section.
-
-Each bump ships with a migration function in `openmimicry.core.config.migrations` and the runtime refuses to load an older version unless `--allow-config-migrate` is passed.
+`schema_version: 2` is current. The loader contains a deterministic v1→v2
+migration for legacy single-LLM and voice configurations. The backend opts into
+that migration in memory and never overwrites the source file. Library callers
+remain strict unless they pass `allow_migrate=True`; a version newer than the
+running code is always rejected.
 
 ## 6. Profiles
 
-`config/profiles/` ships these examples. Each profile is a small overlay merged on top of `config/app.yaml`; choosing one is `OPENMIMICRY_PROFILE=voice make backend`.
+`config/profiles/` ships these working examples. Each profile is a small overlay
+merged on top of `config/app.yaml`; choosing one is, for example,
+`OPENMIMICRY_PROFILE=openrouter-voice make backend`.
 
-- `basic.yaml` — Sprite2D avatar, text chat via LiteLLM, mock voice. Smallest install.
-- `voice.yaml` — basic + RealtimeSTT + RealtimeTTS.
-- `threejs.yaml` — basic + `avatar.runtime: threejs` + sample VRM/glTF asset.
-- `live3d.yaml` — threejs + `avatar.runtime: live3d` + mouth/gaze/blend config.
-- `unity.yaml` — `avatar.runtime: unity` over WebSocket; requires the sample Unity app running.
-- `agent.yaml` — voice + cloud LLM + mcp-agent task runtime.
-- `full.yaml` — everything turned on; useful for contributors and screenshots.
-- `studio.yaml` — full + character editor tools, pack validators, asset converters.
-- `dev.yaml` — every adapter is the mock; used by CI and demos.
+- `basic.yaml` — Sprite2D with mock LLM, voice, and tasks; no key/network/audio.
+- `openrouter-voice.yaml` — OpenRouter through LiteLLM, isolated local
+  Faster-Whisper/Piper voice, plus a dashboard-selectable Ollama `gpt-oss:20b`
+  backend. This is a community/GPL profile because current Piper is GPL-3.0.
+- `openrouter-commercial.yaml` — OpenRouter/Ollama, isolated Faster-Whisper,
+  and dependency-free operating-system TTS; no Piper installation.
+- `openrouter-chatterbox.yaml` — free local Chatterbox voice cloning in a
+  prewarmed disposable worker. Explicit consent and a reference recording are
+  required; this is an opt-in community profile.
+- `openrouter-elevenlabs.yaml` — remote BYOK voice selected in an ElevenLabs
+  account. The API token remains in an environment variable or process memory.
+- `vision.yaml` — mocks plus the opt-in MediaPipe vision demonstration.
 
-These profiles intentionally line up 1:1 with the `pip` extras documented in [`avatar_modalities.md`](./avatar_modalities.md) §5 (`basic`, `voice`, `threejs`, `live3d`, `unity`, `full`, `studio`). The same word names the install footprint and the runtime configuration; that mapping is the contract between `make install PROFILE=...` and `OPENMIMICRY_PROFILE=...`.
+The install profile and `OPENMIMICRY_PROFILE` must use the same name when
+optional dependencies are involved.
 
-## 7. Validation in CI
+## 7. Appearance and personality files
 
-`scripts/validate_config.py` loads every YAML in `config/` and runs the validator. CI runs that script on every PR. Pack manifests are validated the same way via `scripts/validate_pack.py`. A PR that breaks the example configs cannot be merged.
+`config/theme.yml` is validated by the backend and exposed through the
+non-secret `GET /appearance` endpoint. Restart after editing it. Set
+`OPENMIMICRY_APPEARANCE_PATH` to keep a personal theme elsewhere.
+
+`config/personality.yml` defines the system prompt plus allow-listed emotions
+and actions for structured avatar cues. Override its location with
+`OPENMIMICRY_PERSONALITY_PATH`. Neither file may contain provider secrets.
+
+## 8. Validation in CI
+
+`scripts/validate_config.py` validates `config/app.yaml` alone and merged with
+every profile in `config/profiles/`. Appearance and personality schemas have
+their own backend tests. Pack manifests are validated through
+`scripts/validate_pack.py`. A PR that breaks a shipped example cannot be
+merged.

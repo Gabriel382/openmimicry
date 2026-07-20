@@ -7,6 +7,499 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added explicit, persisted OpenRouter internet grounding in the dashboard.
+  It uses OpenRouter's documented online model variant, remains off by default,
+  and surfaces the provider's linked citations in normal assistant replies.
+
+- Added named Voice Profiles stored outside the repository, with Chatterbox
+  WAV/MP3 references, ElevenLabs voice IDs, consent metadata, selection,
+  activation, bounded import, and optional-reference export.
+- Added whole Companion Profile import/export for the current character images,
+  personality, appearance, and selected named voice. Secrets, memory records,
+  history, logs, and model caches are excluded, while biometric audio requires
+  explicit confirmation in both directions.
+- Added dashboard controls to create, choose, import, export, and activate
+  voices and complete companions.
+- Added a runtime supervisor with process identity, lifecycle snapshots,
+  component health projection, and `/health/live`, `/health/ready`, and
+  `/health/components` endpoints.
+- Added correlated `turn.state`, `runtime.state`, and `component.health`
+  events/messages with replay for newly opened desktop windows.
+
+### Changed
+
+- Conversation submission is strict single-flight: overlapping text, PTT,
+  continuous, or wake turns are rejected immediately instead of being hidden
+  in an internal queue.
+- Desktop text and PTT controls now follow backend readiness and the active turn
+  lease while lock, drag, settings, and exit controls remain available.
+- Dashboard personality edits now persist to the user's OpenMimicry data
+  directory and overlay the tracked default instead of modifying a repository
+  file.
+
+### Fixed
+
+- Automatic Faster-Whisper device selection now proves the CUDA 12 cuBLAS and
+  cuDNN speech DLLs on Windows before opening the microphone. An incompatible
+  CUDA 11/PyTorch environment selects the stable CPU/INT8 lane immediately
+  instead of failing on the first utterance and retrying noisily.
+- Thinking, listening, transcription, refresh, and backend-availability states
+  now use a white status balloon above the avatar. The red toolbar banner is
+  reserved exclusively for actionable errors.
+- The last successfully loaded character pack is persisted, private pack paths
+  are resolved before orchestrator startup, and the active named voice is
+  recovered from the persisted TTS profile. Personality remains in the private
+  persistent personality overlay.
+- Companion export accepts human-friendly IDs such as `GLaDOS-v1`, normalizes
+  them to safe portable IDs, downloads through a checked blob response, and
+  reports failures inline instead of navigating to a 422 response.
+- Desktop appearance loading waits for the direct backend WebSocket to connect,
+  eliminating repeated Vite `/appearance` proxy errors during backend startup
+  or refresh. The dashboard embeds its favicon and no longer requests a missing
+  `/favicon.ico`.
+- LiteLLM's generic feedback footer is suppressed while the concrete classified
+  provider exception and traceback are retained in OpenMimicry diagnostics.
+
+- User-created and imported character packs now install under the private
+  OpenMimicry data directory; bundled character roots remain discoverable and
+  read-only, with a validated asset route serving both locations.
+- Windows installation paths are resolved from the OpenMimicry script location,
+  so invoking an installer from another repository cannot silently select that
+  repository's `.venv`.
+- Installers claim and validate environment ownership before changing packages;
+  an existing non-empty, unclaimed environment is rejected with an actionable
+  recovery message.
+- Chatterbox installation now checks and repairs Perth after a Torch/Torchvision
+  import repair instead of skipping it and reporting a false CUDA mismatch.
+- Runtime verification reports the exact failing Torch, Torchaudio, Torchvision,
+  Chatterbox, Perth, CUDA, or device condition instead of a generic PyTorch error.
+- A late TTS finish/interruption from an older utterance can no longer replace
+  the listening or thinking animation for the current input.
+- Accepted PTT/wake input now transitions through the same authoritative
+  thinking state as typed input; rejected ambient wake transcripts remain in
+  listening state.
+- New character packs and other local companion assets are ignored by default;
+  only `mimic_blue`, `octomimic`, and `octomimic_vrm` remain source-controlled.
+
+## [1.6.4] — Chatterbox Perth startup repair
+
+### Fixed
+
+- Detect the defective `resemble-perth` state where the package imports but
+  `PerthImplicitWatermarker` is `None`; this state can no longer produce a
+  misleading successful runtime report.
+- Repair only Perth from the official MIT upstream repository at immutable
+  commit `ce86c49d029f42272c1902eccb675556b9ed2330`, while preserving the
+  verified Torch, Torchaudio, Torchvision, CUDA, and NumPy installation.
+- Resolve the real Perth constructor before Chatterbox model construction and
+  surface the underlying import failure instead of Chatterbox's unhelpful
+  `'NoneType' object is not callable` exception.
+- Keep Chatterbox's audio watermark active. OpenMimicry never substitutes the
+  Perth dummy/no-watermark implementation.
+
+### Diagnostics
+
+- Runtime reports now include Perth's installed version, package origin, and
+  `perth_watermarker_callable` result. The v1.6.4 preflight marker is written
+  only after the real Chatterbox Turbo model loads successfully.
+
+## [1.6.3] — unified and non-destructive Chatterbox setup
+
+### Fixed
+
+- Accepted CUDA build suffixes such as `torchvision 0.21.0+cu126` when
+  verifying the PyTorch 2.6 version triplet.
+- Preserved a complete CUDA runtime that already imports, sees the GPU, and
+  matches Chatterbox instead of guessing CUDA 11.8 when `nvidia-smi` omits its
+  banner version and downloading a multi-gigabyte downgrade.
+- Limited Torch repairs to Torch, Torchvision, and Torchaudio with `--no-deps`
+  so an accelerator repair cannot unnecessarily reinstall NumPy and unrelated
+  application dependencies.
+
+### Changed
+
+- Folded Chatterbox detection, installation repair, verification, model
+  prewarming, profile selection, and startup into the existing Windows
+  `start-openrouter-voice.ps1` flow.
+- Removed the separate Chatterbox PowerShell and shell launchers. Installation
+  remains an ordinary `openrouter-chatterbox` profile; execution uses the same
+  voice/backend entry points as the other providers.
+
+## [1.6.2] — reliable Chatterbox installation and NumPy 2 compatibility
+
+### Fixed
+
+- Kept Chatterbox 0.1.7 reference conditioning in float32 inside its isolated
+  worker, fixing `expected scalar type Double but found Float` with NumPy 2.x
+  without modifying files under `.venv`.
+- Added hardware-aware installation of the official, version-matched PyTorch
+  2.6 CUDA wheels when an NVIDIA GPU is present; macOS retains its MPS-capable
+  platform wheel and CPU remains a deliberate fallback.
+- Added dedicated Windows and Unix Chatterbox launchers with dependency
+  repair, CUDA verification, bounded one-time model prewarming, the correct
+  profile, and a 180-second cold-start deadline.
+- Persisted the Chatterbox readiness deadline alongside dashboard provider
+  selection so a former Piper configuration cannot retain a 30-second limit.
+- Prevented two-second HTTP health checks from cold-starting or orphaning a
+  multi-gigabyte Chatterbox worker after cancellation.
+
+### Diagnostics
+
+- Worker handshakes now report device, Torch/CUDA, NumPy, and compatibility
+  status, while startup and synthesis failures include stable error codes and
+  retain their child-process tracebacks in diagnostics.
+
+### Tests
+
+- Added regressions for NumPy 2 float promotion, hardware channel selection,
+  unsupported Blackwell/Torch combinations, non-starting health checks,
+  dashboard timeout persistence, and the dedicated Windows launcher.
+
+## [1.6.1] — memory settings validation hotfix
+
+### Fixed
+
+- Prevented the dashboard from submitting the invalid combination of enabled
+  long-term memory with the `none` provider. Enabling memory now defaults to
+  private Local SQLite storage, while choosing `None` turns memory off.
+- Converted nested memory-configuration validation failures into safe HTTP 422
+  responses instead of uncaught HTTP 500 errors and server tracebacks.
+- Added an explicit endpoint check for enabled Hindsight memory and readable
+  dashboard error messages for rejected settings.
+- Included `openmimicry-memory` in Pyright source resolution while retaining a
+  narrow ignore for its intentionally optional Hindsight client import.
+
+### Tests
+
+- Added regression coverage for `enabled + none`, Hindsight without an
+  endpoint, non-persistence of invalid settings, and dashboard normalization.
+
+## [1.6.0] — configurable interaction, optional memory, and voice providers
+
+### Added
+
+- Four utterance-correlated reply-presentation modes with a character-based
+  reading timer and speech-terminal hold.
+- Named OpenRouter/Ollama backends, bounded catalog discovery, model roles,
+  session-only tokens, and editable personality.
+- Disabled-by-default SQLite/Hindsight memory with deterministic or independent
+  LLM extraction, deadlines, retention, local CRUD, and export.
+- Hardened character ZIP import, simple Sprite2D authoring, and a versioned
+  template archive.
+- OS-native TTS, free local consent-gated Chatterbox cloning, ElevenLabs BYOK,
+  schema v2 migration, dependency profiles, and license audit tooling.
+
+### Changed
+
+- Default OpenRouter model is `openrouter/openai/gpt-oss-20b`.
+- Commercial installs exclude Piper/Chatterbox and use host-native TTS; Piper
+  remains an explicit community profile.
+- Assistant bubbles dismiss only after the reading deadline and matching audio
+  terminal event.
+
+### Security
+
+- Added session/environment-only provider secrets, loopback-only Ollama
+  discovery, bounded provider responses, atomic prompt/settings writes,
+  consented private voice-reference storage, and license-aware atomic pack
+  installation.
+- Memory cannot store raw audio and optional-subsystem failures cannot suppress
+  typed chat.
+
+## [1.5.1] — verified CUDA auto-selection fallback
+
+### Fixed
+
+- Treated CTranslate2 GPU enumeration as a hint instead of proof that the CUDA
+  runtime is usable. `device: auto` now retries `medium.en` on CPU/INT8 when
+  CUDA model loading or first inference fails, including a missing
+  `cublas64_12.dll`.
+- Reported the hardware and compute type that actually passed the voice
+  preflight, together with the CUDA fallback reason.
+- Kept `device: cuda` strict so an explicitly requested GPU configuration still
+  fails with the original actionable dependency error.
+
+### Added
+
+- Regression coverage for CUDA model-load failure, lazy CUDA inference failure,
+  and strict explicit-CUDA behavior.
+
+## [1.5.0] — isolated, repeatable Windows voice runtime
+
+### Changed
+
+- Replaced RealtimeSTT/RealtimeTTS as the Windows default with a preloaded,
+  supervised Faster-Whisper input process and disposable Piper output jobs.
+- Raised the CPU recognition default from `small.en` to `medium.en`; added
+  `distil-large-v3` and `large-v3` dashboard selections.
+- Published assistant text and history before queuing audio, so TTS failure can
+  no longer hide an OpenRouter response or block another conversation turn.
+- Started the speaking animation only after the playback process reports that
+  audio actually began. Stale synthesis events cannot replace listening.
+
+### Added
+
+- `scripts/voice_doctor.py`, exercised automatically by the Windows launcher,
+  validates audio devices, several sequential Piper jobs, WAV integrity, and
+  a real Faster-Whisper transcription before voice is enabled.
+- Process-boundary regressions for two STT turns, two TTS turns, and recovery
+  after forcibly terminating a hung playback job.
+
+### Deprecated
+
+- `realtimestt` and `realtimetts` remain available through the
+  `legacy-realtime` extra but are no longer used by the supported Windows
+  profile.
+
+## [1.4.2] — non-blocking audio stop and live-final priority
+
+### Fixed
+
+- Moved RealtimeTTS `stream.stop()` off the asyncio event loop and bounded the
+  wait, preventing Windows/SystemEngine shutdown from freezing PTT, WebSockets,
+  typed chat, and passive-listener recovery after the first spoken answer.
+- Replaced a wedged TTS worker with a fresh daemon COM lane, so the next answer
+  can speak even when the previous third-party playback worker never exits.
+- Bounded `SpeechController.interrupt()` so hold-to-talk opens promptly while
+  slow audio cleanup finishes independently.
+- Coalesced obsolete realtime STT previews and prioritized final transcripts,
+  preventing live-wake commands from sitting behind an unbounded partial-text
+  backlog until the mode was disabled.
+
+### Added
+
+- Lifecycle logs showing passive-listener consumption, final dequeue, bounded
+  stop failures, and TTS worker-lane replacement.
+- Regressions for a permanently blocking RealtimeTTS stop, recovery of the
+  second spoken answer, PTT responsiveness during stuck cleanup, and a 500-item
+  realtime-preview flood ahead of a final wake transcript.
+
+## [1.4.1] — repeat-turn voice lifecycle recovery
+
+### Fixed
+
+- Drained cancelled RealtimeTTS executor work before accepting the next reply,
+  preventing an interrupted first playback from permanently occupying the
+  single Windows COM worker and silencing every later answer.
+- Added per-reply readiness ownership and a bounded playback watchdog so stale
+  TTS readiness cannot leak into the next turn and a broken audio stream
+  restores passive voice input instead of freezing it indefinitely.
+- Kept the prewarmed RealtimeSTT recorder reusable across ordinary pauses,
+  removed non-operational wake metadata from its rebuild signature, and made
+  stop sentinels synchronous on the owning event loop so they cannot terminate
+  the next listening session.
+- Decoupled accepted UI input from LLM/TTS completion while retaining ordered
+  conversation execution, so a stuck audio operation cannot block later typed
+  messages from appearing or prevent the WebSocket receive loop from running.
+- Serialized all outbound writes per WebSocket and treated status/replay sends
+  racing with a client close as clean disconnects instead of ASGI exceptions.
+
+### Added
+
+- Numbered conversation, STT-session, TTS-playback, and WebSocket lifecycle
+  logging to a rotating per-process file under `~/.openmimicry/logs`.
+- A dashboard **Download bundle** action and Windows fallback collector that
+  package logs, relevant dependency versions, and sanitized runtime settings
+  without reading `.env` or including API-key values.
+- Repeat-turn regressions for cancelled/sequential TTS, recorder pause/restart,
+  stale STT sentinels, closed-socket status sends, serialized socket writes,
+  and non-blocking background conversations.
+
+## [1.4.0] — ordered multimodal conversations and configurable local AI
+
+### Fixed
+
+- Serialized accepted text/PTT/wake turns so an older LLM response cannot
+  arrive after a newer question and appear to answer the wrong prompt.
+- Reused a prewarmed RealtimeTTS engine on one dedicated worker, fixing the
+  Windows failure where only the first assistant reply produced audio.
+- Preloaded RealtimeSTT at startup and finalized PTT on release, removing the
+  first-press model load and making the hold/release boundary deterministic.
+- Suppressed repeated wake finals inside a 2.5-second window while preserving
+  every heard transcript in the dashboard for diagnosis.
+- Delayed reply display until TTS reports playback start (with an explicit
+  text fallback if audio cannot start), aligning visible and audible output.
+
+### Added
+
+- Four-pair successful conversation memory; ignored wake audio and failed
+  turns are displayed but never added to future LLM context.
+- Accurate `small.en` speech recognition by default, selectable
+  `tiny.en`/`base.en`/`small.en` quality, wake-name transcription prompts,
+  and editable aliases such as `Me me` for `Mimi`.
+- Dashboard-visible model identity and live switching between configured
+  OpenRouter and Ollama backends. The voice profile includes
+  `ollama_chat/gpt-oss:20b` as its local option.
+- Validated character-pack ZIP import with traversal, symlink, file-count,
+  compressed-size, and expanded-size protections.
+- Regression coverage for ordering, memory, wake rejection/deduplication,
+  TTS engine reuse, STT model selection, backend switching, and ZIP import.
+
+## [1.3.2] — reliable multi-turn voice and desktop event lifecycle
+
+### Fixed
+
+- Replaced RealtimeTTS's racy `play_async()`/`is_playing()` completion poll
+  with blocking playback on a worker thread, so every reply waits for actual
+  audio completion and subsequent replies speak reliably.
+- Isolated stale React StrictMode WebSockets by connection generation and
+  connected desktop windows directly to the backend, preventing duplicated
+  bubble deltas and Vite `ws proxy socket error: ECONNABORTED` noise.
+- Published each already-complete structured LLM reply as one display update
+  while TTS starts, so text and voice become available together without
+  artificial append-only chunks.
+- Explicitly closed the three Tauri webview windows before process exit to
+  reduce WebView2 `Chrome_WidgetWin_0` class-unregistration errors on Windows.
+
+### Added
+
+- Configurable `voice.stt.post_speech_silence_duration` endpointing (default
+  `1.0`, range `0.2`–`3.0` seconds), passed through to RealtimeSTT and editable
+  from the local dashboard without a restart.
+- A toolbar reply-interaction toggle that temporarily changes the avatar from
+  click-through to interactive, plus auto-following and keyboard-focusable
+  speech-bubble scrolling.
+- Regression coverage for repeat TTS playback, speech-pause propagation and
+  persistence, passive-listener restart, and stale StrictMode sockets.
+
+## [1.3.1] — voice turn completion and observable transcription
+
+### Fixed
+
+- Prevented passive RealtimeSTT from transcribing system TTS by pausing
+  listening during playback in the safe default configuration and restoring it
+  afterward.
+- Contained intentional `asyncio.CancelledError` from interrupted TTS so every
+  chat turn still emits its final reply and avatar cue instead of disconnecting
+  the originating WebSocket and leaving the avatar in `speaking`.
+- Reset incomplete bubble text at the start of every LLM turn, eliminating
+  concatenated replies after an interrupted turn.
+- Added an actionable Windows launcher error when another process already owns
+  port 8000.
+
+### Added
+
+- Explicit PTT `listening` and `transcribing` stages plus recognized/no-speech
+  results in both the toolbar and browser dashboard.
+- Replayable in-memory conversation history for the latest 100 typed, voice,
+  and assistant turns in the dashboard.
+- `voice.modes.barge_in_enabled`, disabled by default for ordinary speaker and
+  laptop-microphone setups; PTT interruption remains available at all times.
+
+## [1.3.0] — stable Windows voice and name-gated companion controls
+
+### Added
+
+- Configurable wake-name listening: the hands-free mode accepts only final
+  utterances beginning with the configured name (default `Mimi`) and strips
+  that prefix before submitting the command.
+- Local-dashboard wake-name editor backed by an ignored `config/user.yaml`
+  overlay, with environment variables retaining highest precedence.
+- A dedicated below-avatar message composer while drag, lock, PTT, wake
+  listening, agent voice, settings, and exit stay in the top toolbar.
+- A perceptible thinking-animation interval for both typed and spoken turns.
+
+### Fixed
+
+- Disabled Uvicorn reload in the Windows voice launcher so first-run
+  `comtypes` file generation cannot restart FastAPI during TTS and disconnect
+  every desktop WebSocket.
+- Treated Starlette's shutdown-time disconnected-socket `RuntimeError` as a
+  normal WebSocket close.
+- Increased the PTT final-transcript allowance for Windows CPU/first-run
+  Whisper latency.
+- Preserved text input independently of agent-voice state and kept
+  dashboard adapter diagnostics intact after saving a wake name.
+
+### Changed
+
+- The companion is implemented as three docked native windows: click-through
+  avatar, interactive top toolbar, and interactive bottom composer.
+- RealtimeSTT performs dictation; provider-independent wake-prefix matching is
+  owned by `SpeechController`, allowing arbitrary user-selected names.
+
+## [1.2.2] — Windows Python 3.13 voice compatibility hotfix
+
+### Fixed
+
+- Replaced the launcher's multiline `python -c` preflight with a checked-in
+  Python script so Windows PowerShell cannot strip quotes from the command.
+- Added `audioop-lts` automatically on Python 3.13 and newer, restoring the
+  `RealtimeTTS` → `pydub` import path after Python removed the standard
+  `audioop` module.
+- Kept full stderr capture and automatic `.venv` repair while making the same
+  file-based import check run both before and after installation.
+
+## [1.2.1] — Windows voice preflight hotfix
+
+### Fixed
+
+- Prevented Windows PowerShell's `ErrorActionPreference=Stop` from terminating
+  the launcher when Python writes an import traceback to stderr.
+- Captured and displayed complete RealtimeSTT/RealtimeTTS diagnostics after a
+  failed repair instead of reporting only `NativeCommandError`.
+- Installed the upstream-recommended `faster-whisper` STT extra and `system`
+  TTS engine extra for the `openrouter-voice` profile.
+- Verified the concrete `AudioToTextRecorder`, `TextToAudioStream`, and
+  `SystemEngine` imports before starting the backend.
+- Selected CPU/int8 as the portable RealtimeSTT default instead of inheriting
+  upstream's CUDA default on Windows machines without a CUDA runtime.
+
+## [1.2.0] — avatar toolbar and continuous voice
+
+### Added
+
+- Top-docked avatar toolbar with drag, persistent lock, hold-to-talk, Auto
+  listen, agent voice, browser-dashboard, exit, and text controls.
+- VAD-driven `continuous_listening` mode with no wake phrase.
+- FastAPI `/dashboard` for chat, settings, diagnostics, and replayed task cards.
+- Windows voice-launcher preflight that repairs missing RealtimeSTT/RealtimeTTS
+  in the backend's actual project virtual environment.
+
+### Changed
+
+- Removed the native startup panel; gear, tray, and `Ctrl+Shift+O` open the
+  local browser dashboard.
+- Docked the interactive toolbar above the transparent avatar.
+- Global PTT now targets the toolbar and temporarily pauses/restores continuous
+  listening so a single STT stream never has competing consumers.
+- Voice status distinguishes selected adapters from importable audio backends
+  and no longer labels mock adapters as real microphone/audio devices.
+
+### Versioning
+
+- Workspace applications and packages moved from `1.1.0` to `1.2.0`.
+
+## [1.1.0] — desktop companion stabilization
+
+### Added
+
+- Separate always-on-top `avatar-controls` window with a drag handle and compact
+  message field below the transparent avatar.
+- Validated `config/theme.yml` appearance pipeline and public `GET /appearance`.
+- Reading-time speech bubbles with configurable pad, per-character duration,
+  cap, scrolling, and late-window replay.
+- Allow-listed structured LLM reply envelope and additive `AvatarCue` event.
+- Safe default/basic configuration and an `openrouter-voice` profile using
+  local RealtimeSTT plus operating-system TTS.
+- Windows `.env` launcher for the OpenRouter/voice profile.
+- Voice adapter/status reporting and Tauri push-to-talk forwarding.
+
+### Fixed
+
+- Persisted drag movement, initial avatar replay, and always-on-top enforcement.
+- Agent voice now gates later TTS; live-wake/PTT finals now enter chat.
+- Runtime factories are registered and pack swap follows the current runtime.
+- Task cancellation reaches the task router; the empty task UI explains its
+  on-demand behavior.
+- Happy structured cues use the bundled distinct happy Sprite2D frames.
+
+### Versioning
+
+- Workspace applications and packages moved from `1.0.0` to `1.1.0`.
+
 ## [1.0.0] — first stable release
 
 The contract surface in [`docs/contracts.md`](docs/contracts.md) is frozen.
@@ -91,4 +584,11 @@ Every workspace package + app + Tauri shell is pinned to `1.0.0`. Cross-package
 - **M13 (vision, post-v0.2, optional):** new brief `docs/modules/M13_vision.md` for a camera-driven `MediaPipeVisionAdapter` + `GestureClassifier` registry that publishes `GestureDetected` events the avatar director maps to `AvatarDirective` overrides. Off by default, opt-in via `pip install openmimicry[vision]` and `vision.enabled: true`. Privacy-first: no upload, explicit consent dialog on first activation. `pyproject.toml` gains `vision` and `full-vision` extras; `Makefile` lists them under `make install PROFILE=…`. Implementation deferred — the contract surface (`VisionAdapter`, `GestureClassifier`, `HandLandmark`/`HandPose`/`GestureDetection`/`VisionConfig` schemas, three new `RuntimeEvent` variants) lands in a contracts-amendment PR before M13 begins.
 - Architecture, adapter, event-flow, voice-mode, task-delegation, character-pack, desktop-overlay, configuration, testing-and-ci, and migration docs.
 
-[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ghenrique/openmimicry/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/ghenrique/openmimicry/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/ghenrique/openmimicry/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/ghenrique/openmimicry/compare/v1.2.2...v1.3.0
+[1.2.2]: https://github.com/ghenrique/openmimicry/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/ghenrique/openmimicry/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/ghenrique/openmimicry/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/ghenrique/openmimicry/compare/v1.0.0...v1.1.0

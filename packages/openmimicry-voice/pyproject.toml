@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-voice"
-version = "1.0.0"
-description = "OpenMimicry voice: RealtimeSTT/RealtimeTTS adapters, SpeechController, WakeController, mocks."
+version = "1.6.4"
+description = "OpenMimicry voice: isolated Faster-Whisper/Piper runtime, legacy realtime adapters, and controllers."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -16,19 +16,37 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=1.0.0",
+    "openmimicry-core>=1.6.4",
 ]
 
 [project.optional-dependencies]
 # RealtimeSTT/RealtimeTTS are heavy and audio-device-bound. They are lazy-
 # imported inside the adapter, so pure-mock installs (tests, CI, dev
 # workstations without a microphone) don't need them.
-realtimestt = ["RealtimeSTT>=0.3"]
-realtimetts = ["RealtimeTTS>=0.4"]
-voice = ["RealtimeSTT>=0.3", "RealtimeTTS>=0.4"]
+realtimestt = ["RealtimeSTT[faster-whisper]>=0.3"]
+realtimetts = [
+    "RealtimeTTS[system]>=0.4",
+    "audioop-lts>=0.2.2; python_version >= '3.13'",
+]
+voice = [
+    "faster-whisper>=1.2.1",
+    "numpy>=1.26",
+    "sounddevice>=0.5",
+]
+piper-community = ["piper-tts==1.4.2"]
+# The profile installer validates Perth's real watermark constructor and, only
+# when the stale PyPI wheel exposes None, installs the immutable compatible
+# upstream revision without changing the Torch/audio dependency graph.
+clone-chatterbox = ["chatterbox-tts==0.1.7", "numpy>=1.26"]
+legacy-realtime = [
+    "RealtimeSTT[faster-whisper]>=0.3",
+    "RealtimeTTS[system]>=0.4",
+    "audioop-lts>=0.2.2; python_version >= '3.13'",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -40,10 +58,13 @@ dev = [
 [project.entry-points."openmimicry.contracts.stt"]
 mock = "openmimicry.voice.mocks:make_mock_stt_adapter"
 realtimestt = "openmimicry.voice.stt.realtimestt_adapter:make_realtimestt_adapter"
+isolated-faster-whisper = "openmimicry.voice.stt.isolated_faster_whisper:make_isolated_faster_whisper_adapter"
 
 [project.entry-points."openmimicry.contracts.tts"]
 mock = "openmimicry.voice.mocks:make_mock_tts_adapter"
 realtimetts = "openmimicry.voice.tts.realtimetts_adapter:make_realtimetts_adapter"
+isolated-piper = "openmimicry.voice.tts.isolated_piper:make_isolated_piper_adapter"
+system-command = "openmimicry.voice.tts.system_command:SystemCommandTTSAdapter"
 
 [project.entry-points."openmimicry.contracts.speech_controller"]
 default = "openmimicry.voice.controllers.speech:make_speech_controller"

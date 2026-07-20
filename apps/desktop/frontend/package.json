@@ -1,9 +1,9 @@
 {
   "name": "@openmimicry/desktop-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.4",
   "type": "module",
-  "description": "OpenMimicry desktop frontend (M7): overlay + panel routes, WS client, runtime registry.",
+  "description": "OpenMimicry desktop frontend: transparent avatar, compact toolbar, WS client, and runtime registry.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -19,7 +19,7 @@
     "@tauri-apps/api": "^2.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "^6.27.0",
+    "react-router-dom": "6.30.4",
     "three": "^0.169.0"
   },
   "devDependencies": {

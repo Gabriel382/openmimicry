@@ -10,8 +10,8 @@ adapter classes are imported by name.
 | App | What it is | Why it's a surface |
 |-----|------------|--------------------|
 | [`apps/backend`](../../../apps/backend/) | FastAPI service + WebSocket transport + `wiring.py` | The HTTP/WS edge of the system + the single assembly point. |
-| [`apps/desktop/frontend`](../../../apps/desktop/frontend/) | Vite + React UI: speech bubble, controls, runtime registry, settings | Renders state, sends events. No business logic. |
-| [`apps/desktop/src-tauri`](../../../apps/desktop/src-tauri/) | Tauri 2 shell: transparent overlay, panel window, tray, global hotkeys | The native chrome around the frontend. |
+| [`apps/desktop/frontend`](../../../apps/desktop/frontend/) | Vite + React UI: speech bubble, top toolbar, runtime registry | Renders state, sends events. No business logic. |
+| [`apps/desktop/src-tauri`](../../../apps/desktop/src-tauri/) | Tauri 2 shell: transparent avatar, docked toolbar, tray, global hotkeys | The native chrome around the frontend. |
 | [`apps/unity-bridge`](../../../apps/unity-bridge/) | Unity ↔ FastAPI bridge for the Unity avatar runtime | A surface for a non-web renderer. |
 | [`apps/external-echo`](../../../apps/external-echo/) | Reference external avatar — echoes directives to stdout/HTTP | Demonstrates the `External` runtime modality. |
 

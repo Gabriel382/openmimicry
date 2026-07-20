@@ -11,8 +11,8 @@ Exports
 
 * :class:`STTAdapter` — re-exported Protocol from ``openmimicry.core``.
 * :class:`MockSTTAdapter` — zero-dependency mock for unit tests.
-* :class:`RealtimeSTTAdapter` — RealtimeSTT-backed adapter
-  (lazy-imports heavy deps).
+* :class:`IsolatedFasterWhisperAdapter` — supported crash-contained runtime.
+* :class:`RealtimeSTTAdapter` — legacy RealtimeSTT compatibility adapter.
 * :class:`RealtimeSTTSettings`, :class:`RealtimeSTTUnavailable`.
 * :class:`WakeController` — thin enable/disable wrapper for live-wake mode.
 * :class:`SpeechController` — bridging controller that owns the
@@ -34,6 +34,9 @@ package version is exposed as :data:`source_package_version`.
 from __future__ import annotations
 
 from openmimicry.voice import (
+    IsolatedFasterWhisperAdapter,
+    IsolatedFasterWhisperSettings,
+    IsolatedSTTUnavailable,
     MockSTTAdapter,
     RealtimeSTTAdapter,
     RealtimeSTTSettings,
@@ -45,6 +48,9 @@ from openmimicry.voice import (
 from openmimicry.voice import __version__ as source_package_version
 
 __all__ = [
+    "IsolatedFasterWhisperAdapter",
+    "IsolatedFasterWhisperSettings",
+    "IsolatedSTTUnavailable",
     "MockSTTAdapter",
     "RealtimeSTTAdapter",
     "RealtimeSTTSettings",
@@ -55,4 +61,4 @@ __all__ = [
     "source_package_version",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.6.4"

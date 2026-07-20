@@ -1,4 +1,5 @@
 PROFILE ?= basic
+OPENMIMICRY_CLAIM_EXISTING_VENV ?= 0
 
 # Default Python interpreter, OS-aware.
 #   - Linux / macOS / WSL ship `python3` on PATH; `python` may be missing.
@@ -34,7 +35,7 @@ endif
         docker-build docker-up docker-up-frontend docker-down \
         cleanup-legacy release-preview \
         lint format typecheck test ci pre-commit-install \
-        check-imports validate-packs install-workspace \
+        check-imports check-versions validate-packs install-workspace \
         m1-demo m1-demo-ollama m2-demo m2-demo-barge-in
 
 .DEFAULT_GOAL := help
@@ -44,7 +45,8 @@ help:
 	@echo ""
 	@echo "Setup"
 	@echo "  make install PROFILE=basic         Install workspace + selected profile"
-	@echo "    PROFILES: basic | voice | threejs | live3d | unity | agent"
+	@echo "    PROFILES: basic | openrouter-commercial | openrouter-voice | openrouter-chatterbox"
+	@echo "              openrouter-elevenlabs | voice | threejs | live3d | unity | agent"
 	@echo "              vision (optional — webcam + MediaPipe, off by default)"
 	@echo "              full | full-vision | studio | dev"
 	@echo "  make doctor                        Print environment checklist"
@@ -55,7 +57,7 @@ help:
 	@echo "  make backend-prod                  FastAPI backend bound to 0.0.0.0"
 	@echo "  make frontend                      Vite dev server (:5173)"
 	@echo "  make dev                           Hint for two-terminal dev loop"
-	@echo "  make desktop                       cargo tauri dev (overlay + panel)"
+	@echo "  make desktop                       cargo tauri dev (avatar + top toolbar)"
 	@echo ""
 	@echo "Docker"
 	@echo "  make docker-build                  Build backend + frontend-dev images"
@@ -71,6 +73,7 @@ help:
 	@echo "  make format                        Apply Ruff formatting"
 	@echo "  make typecheck                     Pyright"
 	@echo "  make check-imports                 Enforce no cross-module imports"
+	@echo "  make check-versions                Verify package/app release versions"
 	@echo "  make validate-packs                Validate character packs"
 	@echo "  make ci                            lint + typecheck + check-imports + test"
 	@echo "  make pre-commit-install            Install Git hooks"
@@ -82,17 +85,19 @@ help:
 	@echo "  make m2-demo-barge-in              Exercise the barge-in path"
 	@echo ""
 	@echo "Release"
-	@echo "  make release-preview               Show the v1.0.0 publish plan"
+	@echo "  make release-preview               Show the v1.6.4 publish plan"
 	@echo "  make clean                         Remove venv + build artefacts"
 
 $(VENV_DIR):
 	$(PYTHON) -m venv $(VENV_DIR)
+	$(VENV_PYTHON) scripts/validate_install_environment.py --repo-root "$(CURDIR)" --claim
 
 install: install-workspace
 	@echo "OpenMimicry installed (PROFILE=$(PROFILE))"
 
 install-workspace: $(VENV_DIR)
 	@echo "Installing workspace packages + dev tooling (PROFILE=$(PROFILE))"
+	$(VENV_PYTHON) scripts/validate_install_environment.py --repo-root "$(CURDIR)" $(if $(filter 1,$(OPENMIMICRY_CLAIM_EXISTING_VENV)),--claim,)
 	$(VENV_PYTHON) -m pip install --upgrade pip setuptools wheel
 	@# Install workspace packages FIRST in editable mode so the root
 	@# `pip install -e .[dev]` step below sees them as already-satisfied.
@@ -100,10 +105,31 @@ install-workspace: $(VENV_DIR)
 	@# from PyPI, which fails (we haven't published yet).
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-core
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-llm
+	$(VENV_PYTHON) -m pip install -e packages/openmimicry-memory
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-voice
+	@if [ "$(PROFILE)" = "voice" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,piper-community]"; \
+	fi
+	@if [ "$(PROFILE)" = "openrouter-voice" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,piper-community]"; \
+	fi
+	@if [ "$(PROFILE)" = "openrouter-commercial" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice]"; \
+	fi
+	@if [ "$(PROFILE)" = "openrouter-chatterbox" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,clone-chatterbox]"; \
+		$(VENV_PYTHON) scripts/install_chatterbox_runtime.py --python "$(VENV_PYTHON)"; \
+	fi
+	@if [ "$(PROFILE)" = "openrouter-elevenlabs" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice]"; \
+	fi
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-avatar
 	$(VENV_PYTHON) -m pip install -e packages/openmimicry-tasks
-	$(PYTHON) -m pip install -e packages/openmimicry-vision
+	$(VENV_PYTHON) -m pip install -e packages/openmimicry-vision
 	@# M6 backend application (depends on every package above).
 	@if [ -f apps/backend/pyproject.toml ]; then \
 		$(VENV_PYTHON) -m pip install -e apps/backend; \
@@ -120,7 +146,7 @@ install-workspace: $(VENV_DIR)
 		fi; \
 	fi
 	@if [ -d apps/desktop/frontend ]; then \
-		$(PNPM_CMD) install --frozen-lockfile || true; \
+		$(PNPM_CMD) install --frozen-lockfile; \
 	fi
 
 # ---------------------------------------------------------------------------
@@ -196,8 +222,8 @@ cleanup-legacy:
 	bash scripts/cleanup-legacy.sh --apply
 
 release-preview:
-	@echo "v1.0.0 publish plan (dry run)"
-	@echo "  1. git tag v1.0.0 && git push origin v1.0.0"
+	@echo "v1.6.4 publish plan (dry run)"
+	@echo "  1. git tag v1.6.4 && git push origin v1.6.4"
 	@echo "  2. GitHub release workflow (.github/workflows/release.yml) picks it up"
 	@echo "  3. Manual: pnpm --filter @openmimicry/desktop-frontend build"
 	@echo "  4. Manual: cd apps/desktop/src-tauri && cargo tauri build"
@@ -217,6 +243,9 @@ typecheck:
 
 check-imports:
 	$(SHELL_PY) scripts/check_imports.py
+
+check-versions:
+	$(SHELL_PY) scripts/check_versions.py
 
 validate-packs:
 	@if [ -d characters ]; then \
@@ -250,7 +279,7 @@ m2-demo:
 m2-demo-barge-in:
 	$(SHELL_PY) scripts/m2_demo.py --barge-in --skip-ptt --skip-wake
 
-ci: lint typecheck check-imports test
+ci: lint typecheck check-imports check-versions test
 	@echo "make ci: OK"
 
 pre-commit-install:

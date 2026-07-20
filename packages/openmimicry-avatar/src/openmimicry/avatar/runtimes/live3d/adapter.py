@@ -96,8 +96,7 @@ class Live3DAvatarAdapter:
         if pack.kind not in _LIVE3D_FRIENDLY_KINDS and not self._warned_unknown_kind:
             self._warned_unknown_kind = True
             _log.warning(
-                "Live3DAvatarAdapter: pack.kind=%r is not vrm/gltf; "
-                "frontend may fail to load %r",
+                "Live3DAvatarAdapter: pack.kind=%r is not vrm/gltf; frontend may fail to load %r",
                 pack.kind,
                 pack.id,
             )
@@ -112,9 +111,7 @@ class Live3DAvatarAdapter:
     async def apply_directive(self, directive: AvatarDirective) -> None:
         pack = self._pack
         if pack is None:
-            _log.warning(
-                "Live3DAvatarAdapter: apply_directive without a loaded pack; dropping"
-            )
+            _log.warning("Live3DAvatarAdapter: apply_directive without a loaded pack; dropping")
             return
 
         try:
@@ -124,23 +121,17 @@ class Live3DAvatarAdapter:
                 static_url_prefix=self._url_prefix,
                 runtime_cfg=self._runtime_cfg,
             )
-        except Exception as exc:  # noqa: BLE001 — never raise
-            _log.warning(
-                "Live3DAvatarAdapter: projection failed: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            _log.warning("Live3DAvatarAdapter: projection failed: %s", exc, exc_info=True)
             return
 
         try:
             await self._bridge.publish(message)
-        except Exception as exc:  # noqa: BLE001 — transport issues shouldn't poison the bus
-            _log.warning(
-                "Live3DAvatarAdapter: bridge.publish failed: %s", exc, exc_info=True
-            )
+        except Exception as exc:
+            _log.warning("Live3DAvatarAdapter: bridge.publish failed: %s", exc, exc_info=True)
 
     async def set_text(self, text: str) -> None:
-        await self._bridge.publish(
-            {"type": "bubble.text", "text": text, "complete": True}
-        )
+        await self._bridge.publish({"type": "bubble.text", "text": text, "complete": True})
 
     async def start_speaking(self, text: str | None = None) -> None:
         await self._bridge.publish(

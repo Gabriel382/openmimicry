@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from openmimicry.avatar.mocks import MockAvatarRuntimeAdapter
 from openmimicry.core.contracts import AvatarRuntimeAdapter
 from openmimicry.core.schemas import AvatarDirective

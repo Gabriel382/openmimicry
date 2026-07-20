@@ -37,7 +37,7 @@ def test_ergonomic_top_level_imports() -> None:
         TTSAdapter,
     )
 
-    assert AppConfig().schema_version == 1
+    assert AppConfig().schema_version == 2
     assert callable(EventBus)
     # Protocols are types; assert they are isinstance-checkable.
     assert hasattr(LLMAdapter, "__instancecheck__")
