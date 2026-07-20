@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import { ToolbarIcon } from "../components/ToolbarIcon";
 import { useAppearance } from "../hooks/useAppearance";
 import { useTauriCommand } from "../hooks/useTauriCommand";
+import { useRuntimeState } from "../hooks/useRuntimeState";
 import { useVoiceMode } from "../hooks/useVoiceMode";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
@@ -18,6 +19,7 @@ export function ControlsRoute(): JSX.Element {
     setPositionLocked,
   } = useTauriCommand();
   const voice = useVoiceMode();
+  const runtime = useRuntimeState();
   const controls = appearance.behaviour.controls;
   const [locked, setLocked] = useState(false);
   const [overlayInteractive, setOverlayInteractiveState] = useState(false);
@@ -55,7 +57,12 @@ export function ControlsRoute(): JSX.Element {
   }, [voice.pttUp]);
 
   const beginPtt = (event: PointerEvent<HTMLButtonElement>): void => {
-    if ((typeof event.button === "number" && event.button !== 0) || pointerPtt.current) return;
+    if (
+      !runtime.canSubmit ||
+      (typeof event.button === "number" && event.button !== 0) ||
+      pointerPtt.current
+    )
+      return;
     pointerPtt.current = true;
     if (typeof event.currentTarget.setPointerCapture === "function") {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -147,6 +154,7 @@ export function ControlsRoute(): JSX.Element {
           type="button"
           className="avatar-toolbar__button avatar-toolbar__ptt"
           data-stage={voice.pttStage}
+          disabled={!runtime.canSubmit && !voice.pttActive}
           aria-label={voice.pttStage === "idle" ? "Hold to talk" : pttLabel}
           aria-pressed={voice.pttActive}
           title={`${pttLabel} (or hold Ctrl+Space)`}

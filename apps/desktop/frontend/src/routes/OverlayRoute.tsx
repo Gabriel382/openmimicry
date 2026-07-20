@@ -11,6 +11,7 @@
 import type { CSSProperties } from "react";
 
 import { AvatarHost } from "../components/AvatarHost";
+import { AvatarStatusBubble } from "../components/AvatarStatusBubble";
 import { SpeechBubble } from "../components/SpeechBubble";
 import { useAppearance } from "../hooks/useAppearance";
 
@@ -28,6 +29,7 @@ export function OverlayRoute(): JSX.Element {
   };
   return (
     <div className="overlay-route" data-route="overlay" style={style}>
+      <AvatarStatusBubble />
       <AvatarHost />
       <SpeechBubble timing={appearance.behaviour.bubble} />
     </div>

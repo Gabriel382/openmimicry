@@ -127,6 +127,48 @@ export interface ConversationTurnMessage {
   ts: string;
 }
 
+export type TurnLifecycleState =
+  | "accepted"
+  | "thinking"
+  | "presenting"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "rejected";
+
+export interface TurnStateMessage {
+  type: "turn.state";
+  turn_id: string;
+  sequence: number;
+  state: TurnLifecycleState;
+  source: "text" | "push_to_talk" | "continuous" | "wake" | "task";
+  reason?: string | null;
+  active_turn_id?: string | null;
+  ts: string;
+}
+
+export interface RuntimeStateMessage {
+  type: "runtime.state";
+  instance_id: string;
+  state: "starting" | "ready" | "refreshing" | "stopping" | "stopped" | "degraded";
+  ready: boolean;
+  reason?: string | null;
+  ts?: string;
+}
+
+export interface ComponentHealthMessage {
+  type: "component.health";
+  instance_id: string;
+  component: string;
+  family: string;
+  adapter: string;
+  state: "unknown" | "healthy" | "degraded" | "unavailable";
+  required: boolean;
+  actual_device?: string | null;
+  last_error?: string | null;
+  ts: string;
+}
+
 export interface TaskCardMessage {
   type: "task.card";
   update: TaskUpdate;
@@ -173,6 +215,9 @@ export type ServerMessage =
   | BubbleTextMessage
   | SpeechStatusMessage
   | ConversationTurnMessage
+  | TurnStateMessage
+  | RuntimeStateMessage
+  | ComponentHealthMessage
   | TaskCardMessage
   | SystemNoticeMessage;
 
@@ -234,6 +279,9 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     t === "bubble.text" ||
     t === "speech.status" ||
     t === "conversation.turn" ||
+    t === "turn.state" ||
+    t === "runtime.state" ||
+    t === "component.health" ||
     t === "task.card" ||
     t === "system.notice"
   );

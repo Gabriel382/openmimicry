@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added explicit, persisted OpenRouter internet grounding in the dashboard.
+  It uses OpenRouter's documented online model variant, remains off by default,
+  and surfaces the provider's linked citations in normal assistant replies.
+
+- Added named Voice Profiles stored outside the repository, with Chatterbox
+  WAV/MP3 references, ElevenLabs voice IDs, consent metadata, selection,
+  activation, bounded import, and optional-reference export.
+- Added whole Companion Profile import/export for the current character images,
+  personality, appearance, and selected named voice. Secrets, memory records,
+  history, logs, and model caches are excluded, while biometric audio requires
+  explicit confirmation in both directions.
+- Added dashboard controls to create, choose, import, export, and activate
+  voices and complete companions.
+- Added a runtime supervisor with process identity, lifecycle snapshots,
+  component health projection, and `/health/live`, `/health/ready`, and
+  `/health/components` endpoints.
+- Added correlated `turn.state`, `runtime.state`, and `component.health`
+  events/messages with replay for newly opened desktop windows.
+
+### Changed
+
+- Conversation submission is strict single-flight: overlapping text, PTT,
+  continuous, or wake turns are rejected immediately instead of being hidden
+  in an internal queue.
+- Desktop text and PTT controls now follow backend readiness and the active turn
+  lease while lock, drag, settings, and exit controls remain available.
+- Dashboard personality edits now persist to the user's OpenMimicry data
+  directory and overlay the tracked default instead of modifying a repository
+  file.
+
+### Fixed
+
+- Automatic Faster-Whisper device selection now proves the CUDA 12 cuBLAS and
+  cuDNN speech DLLs on Windows before opening the microphone. An incompatible
+  CUDA 11/PyTorch environment selects the stable CPU/INT8 lane immediately
+  instead of failing on the first utterance and retrying noisily.
+- Thinking, listening, transcription, refresh, and backend-availability states
+  now use a white status balloon above the avatar. The red toolbar banner is
+  reserved exclusively for actionable errors.
+- The last successfully loaded character pack is persisted, private pack paths
+  are resolved before orchestrator startup, and the active named voice is
+  recovered from the persisted TTS profile. Personality remains in the private
+  persistent personality overlay.
+- Companion export accepts human-friendly IDs such as `GLaDOS-v1`, normalizes
+  them to safe portable IDs, downloads through a checked blob response, and
+  reports failures inline instead of navigating to a 422 response.
+- Desktop appearance loading waits for the direct backend WebSocket to connect,
+  eliminating repeated Vite `/appearance` proxy errors during backend startup
+  or refresh. The dashboard embeds its favicon and no longer requests a missing
+  `/favicon.ico`.
+- LiteLLM's generic feedback footer is suppressed while the concrete classified
+  provider exception and traceback are retained in OpenMimicry diagnostics.
+
+- User-created and imported character packs now install under the private
+  OpenMimicry data directory; bundled character roots remain discoverable and
+  read-only, with a validated asset route serving both locations.
+- Windows installation paths are resolved from the OpenMimicry script location,
+  so invoking an installer from another repository cannot silently select that
+  repository's `.venv`.
+- Installers claim and validate environment ownership before changing packages;
+  an existing non-empty, unclaimed environment is rejected with an actionable
+  recovery message.
+- Chatterbox installation now checks and repairs Perth after a Torch/Torchvision
+  import repair instead of skipping it and reporting a false CUDA mismatch.
+- Runtime verification reports the exact failing Torch, Torchaudio, Torchvision,
+  Chatterbox, Perth, CUDA, or device condition instead of a generic PyTorch error.
+- A late TTS finish/interruption from an older utterance can no longer replace
+  the listening or thinking animation for the current input.
+- Accepted PTT/wake input now transitions through the same authoritative
+  thinking state as typed input; rejected ambient wake transcripts remain in
+  listening state.
+- New character packs and other local companion assets are ignored by default;
+  only `mimic_blue`, `octomimic`, and `octomimic_vrm` remain source-controlled.
+
 ## [1.6.4] — Chatterbox Perth startup repair
 
 ### Fixed

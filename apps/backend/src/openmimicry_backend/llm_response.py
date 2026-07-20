@@ -28,6 +28,8 @@ DEFAULT_EMOTIONS = (
     "worried",
 )
 DEFAULT_ACTIONS = ("idle", "wave", "nod", "celebrate", "think", "none")
+_BUILTIN_PERSONALITY = Path("config/personality.yml")
+_LOCAL_PERSONALITY = Path("~/.openmimicry/personality.yml")
 
 
 @dataclass(frozen=True)
@@ -50,8 +52,12 @@ class ParsedAssistantReply:
 
 
 def load_personality(path: str | os.PathLike[str] | None = None) -> PersonalitySettings:
-    raw_path = path or os.environ.get("OPENMIMICRY_PERSONALITY_PATH") or "config/personality.yml"
-    candidate = Path(raw_path).expanduser()
+    configured = path or os.environ.get("OPENMIMICRY_PERSONALITY_PATH")
+    if configured is not None:
+        candidate = Path(configured).expanduser()
+    else:
+        local = _LOCAL_PERSONALITY.expanduser()
+        candidate = local if local.is_file() else _BUILTIN_PERSONALITY
     data: dict[str, Any] = {}
     if candidate.is_file():
         try:

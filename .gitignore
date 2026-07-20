@@ -47,10 +47,6 @@ config/user.yaml
 .env.*
 !.env.example
 
-# --- Characters ------------------------------------------------------
-characters/glados/
-
-
 # --- IDE / OS noise ------------------------------------------------------
 .idea/
 .vscode/
@@ -60,5 +56,21 @@ characters/glados/
 Thumbs.db
 
 # --- OpenMimicry-specific ------------------------------------------------
-characters/octomimic_vrm/*.vrm
+# Character art, personality prompts, reference voices, and exported
+# companion profiles may carry third-party copyright or biometric material.
+# New local assets are private-by-default. Only the three redistributable
+# built-in packs remain eligible for source control.
+/characters/*
+!/characters/mimic_blue/
+!/characters/mimic_blue/**
+!/characters/octomimic/
+!/characters/octomimic/**
+!/characters/octomimic_vrm/
+!/characters/octomimic_vrm/**
+/characters/octomimic_vrm/*.vrm
+/config/personality.local.yml
+/config/companions/
+/config/voice-profiles/
+/.openmimicry/
+/local-companions/
 ~$*

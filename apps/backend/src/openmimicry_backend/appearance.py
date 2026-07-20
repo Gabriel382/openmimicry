@@ -127,7 +127,12 @@ def load_appearance(path: str | os.PathLike[str] | None = None) -> AppearanceCon
     backend from starting.
     """
 
-    raw_path = path or os.environ.get("OPENMIMICRY_APPEARANCE_PATH") or "config/theme.yml"
+    user_default = Path("~/.openmimicry/appearance.yml").expanduser()
+    raw_path = (
+        path
+        or os.environ.get("OPENMIMICRY_APPEARANCE_PATH")
+        or (user_default if user_default.is_file() else "config/theme.yml")
+    )
     candidate = Path(raw_path).expanduser()
     if not candidate.is_file():
         return AppearanceConfig()

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from openmimicry_backend.llm_response import (
     PersonalitySettings,
+    load_personality,
     parse_assistant_reply,
 )
 
@@ -42,3 +45,24 @@ def test_plain_text_is_preserved_when_model_ignores_json_contract() -> None:
     parsed = parse_assistant_reply("A normal answer", _settings())
     assert parsed.text == "A normal answer"
     assert parsed.structured is False
+
+
+def test_local_personality_overlays_the_tracked_default(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OPENMIMICRY_PERSONALITY_PATH", raising=False)
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "personality.yml").write_text(
+        "system_prompt: Built-in prompt\n",
+        encoding="utf-8",
+    )
+
+    assert load_personality().system_prompt.startswith("Built-in prompt")
+
+    local = tmp_path / "home" / ".openmimicry" / "personality.yml"
+    local.parent.mkdir(parents=True)
+    local.write_text("system_prompt: Private local prompt\n", encoding="utf-8")
+    assert load_personality().system_prompt.startswith("Private local prompt")

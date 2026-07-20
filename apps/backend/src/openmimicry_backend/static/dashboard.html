@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OpenMimicry Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23ff8a3d'/%3E%3Ccircle cx='32' cy='28' r='13' fill='white'/%3E%3Ccircle cx='32' cy='28' r='5' fill='%23843f20'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
   <body>
@@ -65,14 +66,28 @@
         <p id="voice-adapters" class="muted">Input: unknown · Output: unknown</p>
         <p id="voice-result" class="voice-result" aria-live="polite">PTT is idle.</p>
         <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the configured name, for example “Mimi, what time is it?”. <strong>Push-to-talk</strong> starts recording while the toolbar microphone or Ctrl+Space is held, then transcribes after release; it does not require the name.</p>
+        <div class="settings-form">
+          <label><span>Saved voice</span><select id="voice-profile-select"><option value="">No saved voice profiles</option></select></label>
+          <button id="voice-profile-activate" type="button">Use selected voice</button>
+          <label><span>Include reference in export</span><input id="voice-export-reference" type="checkbox" /></label>
+          <button id="voice-profile-export" type="button" class="secondary">Export selected voice</button>
+        </div>
+        <form id="voice-profile-import-form" class="import-form">
+          <label for="voice-profile-zip">Import voice-profile ZIP</label>
+          <input id="voice-profile-zip" type="file" accept=".zip,application/zip" />
+          <button type="submit">Import voice</button>
+          <label><input id="voice-import-reference-confirm" type="checkbox" /> I confirm I may store and use the included biometric voice reference.</label>
+        </form>
         <details>
-          <summary>Configure a custom/cloned voice</summary>
+          <summary>Create a named custom/cloned voice</summary>
           <form id="voice-clone-form" class="settings-form">
+            <label><span>Profile id</span><input id="clone-profile-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_voice" /></label>
+            <label><span>Display name</span><input id="clone-profile-name" required maxlength="128" placeholder="My voice" /></label>
             <label><span>Provider</span><select id="clone-provider"><option value="chatterbox-local">Chatterbox local (free, optional install)</option><option value="elevenlabs">ElevenLabs voice id (paid/BYOK)</option></select></label>
             <label><span>Consent record</span><input id="clone-consent" required minlength="10" maxlength="256" placeholder="Speaker consented on YYYY-MM-DD" /></label>
             <label><span>Reference WAV/MP3 (local)</span><input id="clone-reference" type="file" accept="audio/wav,audio/mpeg,.wav,.mp3" /></label>
             <label><span>ElevenLabs voice id</span><input id="clone-voice-id" maxlength="128" /></label>
-            <button type="submit">Save custom voice</button>
+            <button type="submit">Save named voice</button>
           </form>
           <form id="voice-token-form" class="settings-form" autocomplete="off">
             <label><span>ElevenLabs session token</span><input id="voice-token" type="password" maxlength="8192" autocomplete="off" /></label>
@@ -83,6 +98,28 @@
           <p class="field-hint">Local cloning stores the consented reference under the private OpenMimicry data directory and requires <code>openmimicry-voice[clone-chatterbox]</code>. ElevenLabs uses a voice already created in your account plus <code>ELEVENLABS_API_KEY</code>. No reference is uploaded by OpenMimicry. Restart the backend after changing providers.</p>
         </details>
         <p id="voice-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Whole companion profile</h2><span class="badge">v1.7</span></div>
+        <p class="field-hint">A companion profile combines the current character images, personality, appearance, and selected named voice. API tokens, memory, history, logs, and model caches are never exported.</p>
+        <form id="companion-export-form" class="settings-form">
+          <label><span>Profile id</span><input id="companion-export-id" required maxlength="64" placeholder="My companion (normalized on export)" /></label>
+          <label><span>Display name</span><input id="companion-export-name" required maxlength="128" placeholder="My companion" /></label>
+          <label><span>Voice reference</span><select id="companion-export-voice"><option value="false">Exclude biometric audio</option><option value="true">Include WAV/MP3 after rights confirmation</option></select></label>
+          <button type="submit">Export whole companion</button>
+        </form>
+        <form id="companion-import-form" class="import-form">
+          <label for="companion-zip">Import <code>.omprofile.zip</code></label>
+          <input id="companion-zip" type="file" accept=".zip,.omprofile.zip,application/zip" />
+          <button type="submit">Validate &amp; import</button>
+          <label><input id="companion-import-voice-confirm" type="checkbox" /> I confirm I may store and use biometric voice material in this bundle.</label>
+        </form>
+        <div class="settings-form">
+          <label><span>Installed companion</span><select id="companion-select"><option value="">No imported companions</option></select></label>
+          <button id="companion-activate" type="button">Activate companion</button>
+        </div>
+        <p id="companion-error" class="error" role="alert"></p>
       </section>
 
       <section class="card">
@@ -133,6 +170,11 @@
           <span id="llm-credential-status" class="field-hint">Checking credential source…</span>
           <button type="button" id="llm-token-clear" class="quiet">Clear session token</button>
         </form>
+        <form id="llm-web-form" class="settings-form">
+          <label><span>Internet grounding</span><select id="llm-web-search"><option value="false">Off</option><option value="true">On — search the web for every request</option></select></label>
+          <button type="submit">Save web access</button>
+        </form>
+        <p id="llm-web-hint" class="field-hint">Web grounding is available for OpenRouter backends. It adds linked citations and may add search charges even with a free model.</p>
         <p class="field-hint">OpenRouter may use <code>OPENROUTER_API_KEY</code> or the session-only token above. Ollama discovery reads installed models from the local <code>/api/tags</code> endpoint. Backend/model switches apply to the next turn.</p>
         <p id="llm-error" class="error" role="alert"></p>
       </section>

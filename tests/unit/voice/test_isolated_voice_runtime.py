@@ -18,7 +18,7 @@ from openmimicry.voice.tts.isolated_piper import (
     IsolatedPiperSettings,
     IsolatedPiperTTSAdapter,
 )
-from openmimicry.voice.workers.whisper_runtime import load_whisper_runtime
+from openmimicry.voice.workers.whisper_runtime import cuda_runtime_probe, load_whisper_runtime
 
 
 async def test_isolated_stt_reuses_warm_worker_for_multiple_ptt_turns() -> None:
@@ -105,6 +105,43 @@ def test_auto_device_falls_back_when_cuda_model_load_fails() -> None:
     assert runtime.device == "cpu"
     assert runtime.compute_type == "int8"
     assert "cublas64_12.dll" in str(runtime.fallback_reason)
+
+
+def test_windows_auto_device_selects_cpu_before_lazy_cuda_inference() -> None:
+    attempts: list[tuple[str, str]] = []
+
+    class _FakeModel:
+        def __init__(self, _name: str, *, device: str, compute_type: str) -> None:
+            attempts.append((device, compute_type))
+
+    runtime = load_whisper_runtime(
+        "medium.en",
+        requested_device="auto",
+        requested_compute_type="auto",
+        model_class=_FakeModel,
+        cuda_count=lambda: 1,
+        cuda_probe=lambda: (
+            False,
+            "CUDA 12 speech libraries are unavailable; selected the compatible CPU/INT8 runtime",
+        ),
+    )
+
+    assert attempts == [("cpu", "int8")]
+    assert runtime.device == "cpu"
+    assert runtime.compute_type == "int8"
+    assert "selected the compatible CPU/INT8 runtime" in str(runtime.fallback_reason)
+
+
+def test_windows_cuda_probe_reports_missing_speech_dlls() -> None:
+    def _loader(name: str) -> object:
+        if name == "cublas64_12.dll":
+            raise OSError(name)
+        return object()
+
+    usable, reason = cuda_runtime_probe(system="Windows", dll_loader=_loader)
+
+    assert usable is False
+    assert "cublas64_12.dll" in str(reason)
 
 
 def test_explicit_cuda_does_not_hide_a_broken_cuda_installation() -> None:

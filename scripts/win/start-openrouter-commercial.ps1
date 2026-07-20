@@ -12,7 +12,15 @@ if (Test-Path ".env") {
     }
 }
 
-$python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+$venvRoot = Join-Path $repoRoot ".venv"
+if (-not [string]::IsNullOrWhiteSpace($env:OPENMIMICRY_VENV)) {
+    $configuredVenv = [Environment]::ExpandEnvironmentVariables($env:OPENMIMICRY_VENV)
+    if (-not [IO.Path]::IsPathRooted($configuredVenv)) {
+        $configuredVenv = Join-Path $repoRoot $configuredVenv
+    }
+    $venvRoot = [IO.Path]::GetFullPath($configuredVenv)
+}
+$python = Join-Path $venvRoot "Scripts\python.exe"
 $check = Join-Path $repoRoot "scripts\check_commercial_voice_imports.py"
 if (-not (Test-Path $python)) {
     & ".\scripts\win\install.bat" "openrouter-commercial"

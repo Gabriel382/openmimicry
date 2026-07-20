@@ -118,6 +118,10 @@ class LLMBackendConfig(BaseModel):
     catalog_url: str | None = None
     enabled: bool = True
     request_timeout_s: int = 60
+    # OpenRouter's :online model variant enables provider-managed web
+    # grounding and standardized URL citations. It is opt-in because searches
+    # can add provider charges even when the selected model is free.
+    web_search: bool = False
 
 
 class LLMRoleAssignments(BaseModel):
@@ -155,6 +159,7 @@ class LLMConfig(BaseModel):
     backends: dict[str, LLMBackendConfig] = {}
     roles: LLMRoleAssignments = Field(default_factory=LLMRoleAssignments)
     history_turns: int = Field(default=4, ge=0, le=10)
+    web_search: bool = False
 
     @model_validator(mode="after")
     def active_backend_is_configured(self) -> LLMConfig:

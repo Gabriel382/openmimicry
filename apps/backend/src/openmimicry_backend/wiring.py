@@ -211,6 +211,7 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
                         request_timeout_s=backend.request_timeout_s,
                         temperature=backend.temperature,
                         max_tokens=backend.max_tokens,
+                        web_search=backend.web_search,
                     )
                 )
             else:
@@ -233,6 +234,7 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
             request_timeout_s=config.llm.request_timeout_s,
             temperature=config.llm.temperature,
             max_tokens=config.llm.max_tokens,
+            web_search=config.llm.web_search,
         )
         return LiteLLMAdapter(settings=settings)
     raise WiringError(f"unknown llm.adapter: {name!r}")

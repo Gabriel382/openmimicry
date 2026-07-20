@@ -1,9 +1,24 @@
 import yaml
 from openmimicry_backend.user_settings import (
+    persist_avatar_pack,
+    persist_llm_web_search,
     persist_tts_clone,
     persist_voice_settings,
     persist_wake_names,
 )
+
+
+def test_persist_avatar_and_web_preferences_are_additive(tmp_path) -> None:
+    path = tmp_path / "user.yaml"
+    path.write_text("memory:\n  enabled: false\n", encoding="utf-8")
+
+    persist_avatar_pack("glados", path=path)
+    persist_llm_web_search("openrouter", True, path=path)
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert loaded["avatar"]["pack"] == "glados"
+    assert loaded["llm"]["backends"]["openrouter"]["web_search"] is True
+    assert loaded["memory"]["enabled"] is False
 
 
 def test_persist_wake_names_is_additive_and_atomic(tmp_path) -> None:

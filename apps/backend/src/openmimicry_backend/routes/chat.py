@@ -26,6 +26,7 @@ from typing import cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from openmimicry.core import (
     AvatarCue,
     EventBus,
@@ -40,7 +41,6 @@ from openmimicry.core import (
     TaskRuntimeAdapter,
     TaskSubmitted,
     TaskUpdatedEvent,
-    UserTextSubmitted,
 )
 from openmimicry.core.schemas.app import ResponsePresentationConfig
 from pydantic import BaseModel
@@ -51,7 +51,6 @@ __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
 
 _log = logging.getLogger(__name__)
-_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 _MIN_THINKING_SECONDS = 0.65
 
 
@@ -66,25 +65,23 @@ class ChatRequest(BaseModel):
 router = APIRouter()
 
 
-@router.post("/chat", status_code=202)
-async def chat(req: ChatRequest, request: Request) -> dict[str, str]:
-    wiring = request.app.state.wiring
-    bus: EventBus = wiring.bus
+@router.post("/chat", status_code=202, response_model=None)
+async def chat(req: ChatRequest, request: Request) -> dict[str, str] | JSONResponse:
+    """Atomically submit a turn; never hide an input in a server-side queue."""
 
-    # The WS also publishes UserTextSubmitted on inbound user.text. Here
-    # we publish it for callers that hit /chat directly (e.g. curl). The
-    # avatar director is idempotent on transitions so a duplicate is a
-    # no-op for visible state.
-    bus.publish(UserTextSubmitted(ts=_now(), text=req.text))
-
-    # Background pipeline; the HTTP response returns immediately.
-    chat_task = asyncio.create_task(
-        request.app.state.handle_user_text(req.text),
-        name="openmimicry.backend.chat_turn",
-    )
-    _BACKGROUND_TASKS.add(chat_task)
-    chat_task.add_done_callback(_BACKGROUND_TASKS.discard)
-    return {"status": "accepted"}
+    submission = await request.app.state.handle_user_text(req.text, "text")
+    if not submission.accepted:
+        status_code = 400 if submission.reason == "empty" else 409
+        return JSONResponse(
+            status_code=status_code,
+            content={
+                "status": "rejected",
+                "reason": submission.reason,
+                "turn_id": submission.turn_id,
+                "active_turn_id": submission.admission.active_turn_id,
+            },
+        )
+    return {"status": "accepted", "turn_id": submission.turn_id}
 
 
 async def run_chat_turn(
@@ -225,6 +222,13 @@ async def _run_llm_path(
     except Exception as exc:
         from openmimicry.core import ErrorEvent
 
+        _log.error(
+            "LLM turn failed: adapter=%s error=%s: %s",
+            getattr(llm, "name", type(llm).__name__),
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
         bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
 
     reply = parse_assistant_reply("".join(raw_parts), settings)

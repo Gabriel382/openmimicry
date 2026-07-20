@@ -39,6 +39,7 @@ from .app import (
 from .avatar import AvatarDirective, CharacterPack, Emotion, EmotionFrames, State
 from .events import (
     AvatarCue,
+    ComponentHealthChanged,
     ConfigUpdated,
     ConsentRequired,
     ConsentResolved,
@@ -52,10 +53,12 @@ from .events import (
     MovementDetected,
     RuntimeEvent,
     RuntimeEventAdapter,
+    RuntimeStateChanged,
     TaskCompleted,
     TaskSubmitted,
     TaskUpdatedEvent,
     TranscriptPreview,
+    TurnStateChanged,
     TTSChunkSpoken,
     TTSFailed,
     TTSFinished,
@@ -105,6 +108,7 @@ __all__ = [
     "Artifact",
     "AvatarConfig",
     "AvatarCue",
+    "ComponentHealthChanged",
     # avatar
     "AvatarDirective",
     # vision
@@ -148,6 +152,7 @@ __all__ = [
     "ResponsePresentationConfig",
     "RuntimeEvent",
     "RuntimeEventAdapter",
+    "RuntimeStateChanged",
     # voice
     "STTConfig",
     "STTConfigSection",
@@ -182,6 +187,7 @@ __all__ = [
     "ToolSpec",
     "Transcript",
     "TranscriptPreview",
+    "TurnStateChanged",
     "TrayConfig",
     "UIConfig",
     "UserSpeechFinal",

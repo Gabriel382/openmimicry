@@ -4,7 +4,12 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
-python_path=".venv/bin/python"
+venv_root=${OPENMIMICRY_VENV:-"$repo_root/.venv"}
+case "$venv_root" in
+  /*) ;;
+  *) venv_root="$repo_root/$venv_root" ;;
+esac
+python_path="$venv_root/bin/python"
 if [ ! -x "$python_path" ]; then
   make install PROFILE=openrouter-commercial
 fi

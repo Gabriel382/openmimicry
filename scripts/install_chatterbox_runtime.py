@@ -26,10 +26,7 @@ TORCHVISION_VERSION = "0.21.0"
 TORCHAUDIO_VERSION = "2.6.0"
 SUPPORTED_CHANNELS = ("auto", "cpu", "cu118", "cu124", "cu126")
 PERTH_REVISION = "ce86c49d029f42272c1902eccb675556b9ed2330"
-PERTH_ARCHIVE_URL = (
-    "https://github.com/resemble-ai/Perth/archive/"
-    f"{PERTH_REVISION}.zip"
-)
+PERTH_ARCHIVE_URL = f"https://github.com/resemble-ai/Perth/archive/{PERTH_REVISION}.zip"
 
 
 @dataclass(frozen=True)
@@ -176,23 +173,45 @@ def diagnose_perth(python: str) -> str:
     return output or f"direct Perth import failed with exit code {completed.returncode}"
 
 
-def _runtime_matches(runtime: dict[str, Any], channel: str | None) -> bool:
+def _runtime_mismatches(runtime: dict[str, Any], channel: str | None) -> list[str]:
+    """Return precise verification failures instead of one misleading label."""
+
+    mismatches: list[str] = []
     version = str(runtime.get("torch") or "")
-    if (
-        not version.startswith(TORCH_VERSION)
-        or not str(runtime.get("torchaudio") or "").startswith(TORCHAUDIO_VERSION)
-        or not str(runtime.get("torchvision") or "").startswith(TORCHVISION_VERSION)
-        or runtime.get("chatterbox") != "0.1.7"
-        or runtime.get("perth_watermarker_callable") is not True
-    ):
-        return False
+    if not version.startswith(TORCH_VERSION):
+        mismatches.append(f"torch expected {TORCH_VERSION}, found {version or 'missing'}")
+    torchaudio = str(runtime.get("torchaudio") or "")
+    if not torchaudio.startswith(TORCHAUDIO_VERSION):
+        mismatches.append(
+            f"torchaudio expected {TORCHAUDIO_VERSION}, found {torchaudio or 'missing'}"
+        )
+    torchvision = str(runtime.get("torchvision") or "")
+    if not torchvision.startswith(TORCHVISION_VERSION):
+        mismatches.append(
+            f"torchvision expected {TORCHVISION_VERSION}, found {torchvision or 'missing'}"
+        )
+    if runtime.get("chatterbox") != "0.1.7":
+        mismatches.append(
+            f"chatterbox-tts expected 0.1.7, found {runtime.get('chatterbox') or 'missing'}"
+        )
+    if runtime.get("perth_watermarker_callable") is not True:
+        mismatches.append("PerthImplicitWatermarker is unavailable")
     if channel is None:
-        return True
-    if channel == "cpu":
-        return runtime.get("torch_cuda") is None
-    return bool(runtime.get("cuda_available")) and channel.removeprefix("cu") in str(
-        runtime.get("torch_cuda") or ""
-    ).replace(".", "")
+        return mismatches
+    if channel == "cpu" and runtime.get("torch_cuda") is not None:
+        mismatches.append(f"CPU channel requested, found CUDA {runtime.get('torch_cuda')}")
+    elif channel != "cpu":
+        actual_cuda = str(runtime.get("torch_cuda") or "")
+        expected_cuda = channel.removeprefix("cu")
+        if expected_cuda not in actual_cuda.replace(".", ""):
+            mismatches.append(f"{channel} requested, found CUDA {actual_cuda or 'none'}")
+        if not runtime.get("cuda_available"):
+            mismatches.append(f"{channel} installed but torch.cuda.is_available() is false")
+    return mismatches
+
+
+def _runtime_matches(runtime: dict[str, Any], channel: str | None) -> bool:
+    return not _runtime_mismatches(runtime, channel)
 
 
 def _working_installed_channel(runtime: dict[str, Any]) -> str | None:
@@ -285,6 +304,7 @@ def main() -> int:
             nvidia=nvidia,
         )
         report["selected_channel"] = channel or "platform-default"
+        current: dict[str, Any]
         try:
             before = probe_runtime(args.python)
         except Exception as exc:
@@ -297,59 +317,68 @@ def main() -> int:
                     "reinstall the openrouter-chatterbox profile."
                 ) from exc
             install_torch(args.python, channel)
+            current = probe_runtime(args.python)
+            report["after_torch_repair"] = current
         else:
             report["before"] = before
-            if before.get("perth_watermarker_callable") is not True:
-                report["perth_diagnostic"] = diagnose_perth(args.python)
-                if args.check_only:
-                    raise RuntimeError(
-                        "Perth's real audio-watermark implementation is unavailable; "
-                        "run the ordinary openrouter-chatterbox installer to repair it"
-                    )
-                install_perth(args.python)
-                before = probe_runtime(args.python)
-                report["after_perth_repair"] = before
-                if before.get("perth_watermarker_callable") is not True:
-                    report["perth_diagnostic_after_repair"] = diagnose_perth(args.python)
-                    raise RuntimeError(
-                        "Perth's real audio-watermark implementation is still unavailable "
-                        "after the pinned compatibility repair"
-                    )
-            # Some Windows nvidia-smi builds omit the banner's CUDA version.
-            # A complete CUDA triplet that already imports and sees the GPU is
-            # stronger evidence than guessing cu118 and downloading a large
-            # downgrade.
-            installed_channel = _working_installed_channel(before)
-            can_reuse_installed = (
-                args.channel == "auto"
-                and platform.system() != "Darwin"
-                and (
-                    (nvidia.available and installed_channel not in {None, "cpu"})
-                    or (not nvidia.available and installed_channel == "cpu")
+            current = before
+
+        # Perth must be checked after *every* successful runtime probe. The
+        # first probe may have failed inside an inconsistent Torchvision import,
+        # which previously skipped this repair and produced a false CUDA error.
+        if current.get("perth_watermarker_callable") is not True:
+            report["perth_diagnostic"] = diagnose_perth(args.python)
+            if args.check_only:
+                raise RuntimeError(
+                    "Perth's real audio-watermark implementation is unavailable; "
+                    "run the ordinary openrouter-chatterbox installer to repair it"
                 )
+            install_perth(args.python)
+            current = probe_runtime(args.python)
+            report["after_perth_repair"] = current
+            if current.get("perth_watermarker_callable") is not True:
+                report["perth_diagnostic_after_repair"] = diagnose_perth(args.python)
+                raise RuntimeError(
+                    "Perth's real audio-watermark implementation is still unavailable "
+                    "after the pinned compatibility repair"
+                )
+
+        # Some Windows nvidia-smi builds omit the banner's CUDA version. A
+        # complete CUDA triplet that already imports and sees the GPU is
+        # stronger evidence than guessing cu118 and downloading a large
+        # downgrade.
+        installed_channel = _working_installed_channel(current)
+        can_reuse_installed = (
+            args.channel == "auto"
+            and platform.system() != "Darwin"
+            and (
+                (nvidia.available and installed_channel not in {None, "cpu"})
+                or (not nvidia.available and installed_channel == "cpu")
             )
-            if can_reuse_installed:
-                assert installed_channel is not None
-                channel = installed_channel
-                report["selected_channel"] = channel
-                report["selection_reason"] = "existing verified runtime"
-            if not _runtime_matches(before, channel):
-                if args.check_only:
-                    raise RuntimeError(
-                        f"PyTorch runtime does not match {channel or 'the platform default'}"
-                    )
-                if channel is None:
-                    raise RuntimeError(
-                        "The platform-default PyTorch runtime has an unexpected version; "
-                        "reinstall the openrouter-chatterbox profile."
-                    )
-                install_torch(args.python, channel)
+        )
+        if can_reuse_installed:
+            assert installed_channel is not None
+            channel = installed_channel
+            report["selected_channel"] = channel
+            report["selection_reason"] = "existing verified runtime"
+
+        mismatches = _runtime_mismatches(current, channel)
+        if mismatches:
+            if args.check_only:
+                raise RuntimeError("Runtime verification failed: " + "; ".join(mismatches))
+            if channel is None:
+                raise RuntimeError(
+                    "The platform-default runtime is incompatible: " + "; ".join(mismatches)
+                )
+            install_torch(args.python, channel)
+            current = probe_runtime(args.python)
+            report["after_torch_repair"] = current
+
         after = probe_runtime(args.python)
         report["after"] = after
-        if not _runtime_matches(after, channel):
-            raise RuntimeError(
-                f"PyTorch verification still does not match {channel or 'the platform default'}"
-            )
+        final_mismatches = _runtime_mismatches(after, channel)
+        if final_mismatches:
+            raise RuntimeError("Runtime verification failed: " + "; ".join(final_mismatches))
         report["passed"] = True
         print(json.dumps(report, indent=2))
         return 0

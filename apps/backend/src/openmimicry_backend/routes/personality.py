@@ -22,14 +22,16 @@ class PersonalityRequest(BaseModel):
 
 def _path() -> Path:
     return Path(
-        os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "config/personality.yml")
+        os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "~/.openmimicry/personality.yml")
     ).expanduser()
 
 
 def _read() -> dict[str, Any]:
     candidate = _path()
     if not candidate.is_file():
-        return {}
+        candidate = Path("config/personality.yml")
+        if not candidate.is_file():
+            return {}
     loaded = yaml.safe_load(candidate.read_text(encoding="utf-8")) or {}
     if not isinstance(loaded, dict):
         raise ValueError("personality document must be a YAML mapping")

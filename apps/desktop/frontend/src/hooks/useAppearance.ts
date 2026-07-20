@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { useWS } from "./useWS";
+
 export interface AppearanceConfig {
   windows: {
     overlay: { width: number; height: number; always_on_top: boolean; movable: boolean };
@@ -76,8 +78,13 @@ export const DEFAULT_APPEARANCE: AppearanceConfig = {
 
 export function useAppearance(): AppearanceConfig {
   const [appearance, setAppearance] = useState<AppearanceConfig>(DEFAULT_APPEARANCE);
+  const ws = useWS();
 
   useEffect(() => {
+    // The WebSocket connects directly to FastAPI. Waiting for it prevents
+    // every transparent Tauri window from hammering Vite's HTTP proxy while
+    // the backend is starting or intentionally refreshing.
+    if (ws.status !== "open") return;
     const controller = new AbortController();
     void fetch("/appearance", { signal: controller.signal })
       .then(async (response) => {
@@ -91,7 +98,7 @@ export function useAppearance(): AppearanceConfig {
         // Defaults keep browser-only and backend-offline development usable.
       });
     return () => controller.abort();
-  }, []);
+  }, [ws.status]);
 
   return appearance;
 }

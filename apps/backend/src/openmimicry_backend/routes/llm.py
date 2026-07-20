@@ -10,7 +10,7 @@ from openmimicry.core import ConfigUpdated
 from pydantic import BaseModel, Field, SecretStr
 
 from ..provider_catalog import CatalogError, discover_models
-from ..user_settings import persist_llm_backend, persist_llm_model
+from ..user_settings import persist_llm_backend, persist_llm_model, persist_llm_web_search
 
 __all__ = ["LLMBackendRequest", "LLMCredentialRequest", "LLMModelRequest", "router"]
 
@@ -28,6 +28,11 @@ class LLMCredentialRequest(BaseModel):
     backend: str = Field(min_length=1, max_length=64)
     action: str = Field(pattern="^(set|clear)$")
     token: SecretStr | None = None
+
+
+class LLMWebSearchRequest(BaseModel):
+    backend: str = Field(min_length=1, max_length=64)
+    enabled: bool
 
 
 router = APIRouter()
@@ -52,11 +57,23 @@ async def llm_settings(request: Request) -> dict[str, object]:
         if callable(credential_status):
             with suppress(ValueError):
                 credential = credential_status(name)
+        web_search = {"supported": False, "enabled": False}
+        web_status = getattr(llm, "web_search_status", None)
+        if callable(web_status):
+            with suppress(ValueError):
+                web_search = web_status(name)
+        else:
+            adapter = llm
+            web_search = {
+                "supported": bool(getattr(adapter, "web_search_supported", False)),
+                "enabled": bool(getattr(adapter, "web_search_enabled", False)),
+            }
         enriched[name] = {
             **profile,
             "provider": provider,
             "api_base": api_base,
             "credentials": credential,
+            "web_search": web_search,
         }
     return {
         "active_backend": getattr(llm, "active_backend", next(iter(profiles))),
@@ -92,6 +109,26 @@ async def update_llm_settings(req: LLMBackendRequest, request: Request) -> dict[
             },
         )
     )
+    return await llm_settings(request)
+
+
+@router.post("/llm/web-search")
+async def update_llm_web_search(req: LLMWebSearchRequest, request: Request) -> dict[str, object]:
+    llm = request.app.state.wiring.llm
+    setter = getattr(llm, "set_web_search", None)
+    try:
+        if callable(setter):
+            # Switchboards select by name; a legacy single adapter accepts only
+            # the enabled flag.
+            if hasattr(llm, "backend"):
+                setter(req.backend, req.enabled)
+            else:
+                setter(req.enabled)
+        else:
+            raise ValueError("this LLM configuration does not support web search")
+        persist_llm_web_search(req.backend, req.enabled)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return await llm_settings(request)
 
 
