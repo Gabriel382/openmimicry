@@ -498,24 +498,9 @@ Before opening a pull request, read [`CONTRIBUTING.md`](CONTRIBUTING.md), keep c
 
 ## Star history
 
-<p align="center">
-  <a href="https://www.star-history.com/?type=date&repos=Gabriel382%2FOpenMimicry">
-    <picture>
-      <source
-        media="(prefers-color-scheme: dark)"
-        srcset="PASTE_THE_GENERATED_DARK_IMAGE_URL_HERE"
-      />
-      <source
-        media="(prefers-color-scheme: light)"
-        srcset="PASTE_THE_GENERATED_LIGHT_IMAGE_URL_HERE"
-      />
-      <img
-        alt="OpenMimicry star history"
-        src="PASTE_THE_GENERATED_LIGHT_IMAGE_URL_HERE"
-      />
-    </picture>
-  </a>
-</p>
+[![Stars](https://img.shields.io/github/stars/Gabriel382/openmimicry?style=social)](https://github.com/Gabriel382/openmimicry)
+
+[![Star History Rank](https://api.star-history.com/badge?repo=Gabriel382/openmimicry&theme=dark)](https://www.star-history.com/Gabriel382/openmimicry)
 
 ---
 
