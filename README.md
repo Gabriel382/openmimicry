@@ -499,19 +499,19 @@ Before opening a pull request, read [`CONTRIBUTING.md`](CONTRIBUTING.md), keep c
 ## Star history
 
 <p align="center">
-  <a href="https://www.star-history.com/#Gabriel382/OpenMimicry&Date">
+  <a href="https://www.star-history.com/?type=date&repos=Gabriel382%2FOpenMimicry">
     <picture>
       <source
         media="(prefers-color-scheme: dark)"
-        srcset="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date&theme=dark"
+        srcset="PASTE_THE_GENERATED_DARK_IMAGE_URL_HERE"
       />
       <source
         media="(prefers-color-scheme: light)"
-        srcset="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date"
+        srcset="PASTE_THE_GENERATED_LIGHT_IMAGE_URL_HERE"
       />
       <img
-        alt="OpenMimicry Star History Chart"
-        src="https://api.star-history.com/image?repos=Gabriel382/OpenMimicry&type=Date"
+        alt="OpenMimicry star history"
+        src="PASTE_THE_GENERATED_LIGHT_IMAGE_URL_HERE"
       />
     </picture>
   </a>
