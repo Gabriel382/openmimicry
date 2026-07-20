@@ -1,4 +1,5 @@
 PROFILE ?= basic
+OPENMIMICRY_CLAIM_EXISTING_VENV ?= 0
 
 # Default Python interpreter, OS-aware.
 #   - Linux / macOS / WSL ship `python3` on PATH; `python` may be missing.
@@ -89,12 +90,14 @@ help:
 
 $(VENV_DIR):
 	$(PYTHON) -m venv $(VENV_DIR)
+	$(VENV_PYTHON) scripts/validate_install_environment.py --repo-root "$(CURDIR)" --claim
 
 install: install-workspace
 	@echo "OpenMimicry installed (PROFILE=$(PROFILE))"
 
 install-workspace: $(VENV_DIR)
 	@echo "Installing workspace packages + dev tooling (PROFILE=$(PROFILE))"
+	$(VENV_PYTHON) scripts/validate_install_environment.py --repo-root "$(CURDIR)" $(if $(filter 1,$(OPENMIMICRY_CLAIM_EXISTING_VENV)),--claim,)
 	$(VENV_PYTHON) -m pip install --upgrade pip setuptools wheel
 	@# Install workspace packages FIRST in editable mode so the root
 	@# `pip install -e .[dev]` step below sees them as already-satisfied.

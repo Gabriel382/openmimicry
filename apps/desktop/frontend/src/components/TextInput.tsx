@@ -23,6 +23,7 @@ export function TextInput(props: TextInputProps): JSX.Element {
   const [value, setValue] = useState<string>("");
 
   const submit = useCallback((): void => {
+    if (props.disabled === true) return;
     const trimmed = value.trim();
     if (!trimmed) return;
     ws.send({ type: "user.text", text: trimmed });
@@ -53,7 +54,11 @@ export function TextInput(props: TextInputProps): JSX.Element {
           }
         }}
       />
-      <button type="submit" aria-label="send" disabled={!value.trim()}>
+      <button
+        type="submit"
+        aria-label="send"
+        disabled={props.disabled === true || !value.trim()}
+      >
         Send
       </button>
     </form>

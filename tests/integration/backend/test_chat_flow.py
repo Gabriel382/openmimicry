@@ -14,6 +14,7 @@ get us full M6 chat-flow coverage anyway:
 from __future__ import annotations
 
 import asyncio
+import time
 import contextlib
 from typing import Any
 
@@ -84,7 +85,25 @@ def test_chat_endpoint_returns_202(client: TestClient) -> None:
     """The HTTP surface returns 202 Accepted regardless of pipeline state."""
     resp = client.post("/chat", json={"text": "hi"})
     assert resp.status_code == 202
-    assert resp.json() == {"status": "accepted"}
+    body = resp.json()
+    assert body["status"] == "accepted"
+    assert body["turn_id"]
+
+
+def test_chat_endpoint_rejects_a_hidden_queue(client: TestClient) -> None:
+    first = client.post("/chat", json={"text": "first"})
+    second = client.post("/chat", json={"text": "second"})
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    rejected = second.json()
+    assert rejected["reason"] == "turn_in_progress"
+    assert rejected["active_turn_id"] == first.json()["turn_id"]
+
+    # The mock path deliberately holds thinking for 650ms, after which the
+    # lease must become available again.
+    time.sleep(0.8)
+    assert client.post("/chat", json={"text": "third"}).status_code == 202
 
 
 async def test_interrupted_tts_still_completes_the_reply_and_avatar_cue(

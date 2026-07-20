@@ -2,12 +2,14 @@ import type { CSSProperties } from "react";
 
 import { TextInput } from "../components/TextInput";
 import { useAppearance } from "../hooks/useAppearance";
+import { useRuntimeState } from "../hooks/useRuntimeState";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
 /** Interactive message composer docked underneath the click-through avatar. */
 export function ComposerRoute(): JSX.Element {
   const appearance = useAppearance();
+  const runtime = useRuntimeState();
   const style: CustomStyle = {
     "--om-font-family": appearance.theme.font_family,
     "--om-controls-bg": appearance.theme.controls_bg,
@@ -19,7 +21,11 @@ export function ComposerRoute(): JSX.Element {
 
   return (
     <div className="composer-route" data-route="composer" style={style}>
-      <TextInput className="avatar-text-input" placeholder="Message OpenMimicry…" />
+      <TextInput
+        className="avatar-text-input"
+        placeholder={runtime.canSubmit ? "Message OpenMimicry…" : runtime.statusLabel}
+        disabled={!runtime.canSubmit}
+      />
     </div>
   );
 }

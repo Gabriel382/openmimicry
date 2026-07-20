@@ -37,6 +37,7 @@ def test_launcher_captures_native_stderr_before_checking_exit_code() -> None:
     assert "Close the old OpenMimicry backend" in script
     assert '& ".\\scripts\\win\\backend.bat" "--no-reload"' in script
     assert "start-openrouter-chatterbox.ps1" not in script
+    assert "OPENMIMICRY_VENV" in script
 
 
 def test_standard_voice_launcher_detects_repairs_and_prewarms_chatterbox() -> None:
@@ -62,6 +63,19 @@ def test_windows_backend_supports_voice_safe_no_reload_mode() -> None:
     no_reload = script.rsplit("\n:no_reload", maxsplit=1)[1]
     assert "openmimicry_backend.main:app --port 8000" in no_reload
     assert "--reload" not in no_reload
+    assert '"%~dp0\\..\\.."' in script
+    assert "OPENMIMICRY_VENV" in script
+    assert "python -m uvicorn" not in script
+
+
+def test_windows_installer_is_repo_rooted_and_guards_environment_ownership() -> None:
+    script = (ROOT / "scripts/win/install.bat").read_text(encoding="utf-8")
+
+    assert '"%~dp0\\..\\.."' in script
+    assert 'set "VENV=%REPO_ROOT%\\.venv"' in script
+    assert "OPENMIMICRY_VENV" in script
+    assert "validate_install_environment.py" in script
+    assert "OPENMIMICRY_CLAIM_EXISTING_VENV" in script
 
 
 def test_voice_import_check_is_file_based_and_imports_isolated_dependencies() -> None:

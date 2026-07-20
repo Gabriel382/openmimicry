@@ -15,8 +15,10 @@ import logging
 import zipfile
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, model_validator
+
+from ..user_settings import persist_avatar_pack
 
 __all__ = ["PackCreateRequest", "PackSwapRequest", "RuntimeSwapRequest", "router"]
 
@@ -52,9 +54,26 @@ class PackCreateRequest(BaseModel):
 router = APIRouter()
 
 
+@router.get("/static/characters/{pack_id}/{asset_path:path}", include_in_schema=False)
+async def character_asset(pack_id: str, asset_path: str, request: Request) -> FileResponse:
+    """Serve a validated asset from either the private or bundled pack root."""
+
+    try:
+        root = request.app.state.character_registry.resolve(pack_id).resolve()
+        candidate = (root / asset_path).resolve()
+        if root not in candidate.parents or not candidate.is_file():
+            raise ValueError("character asset is missing or unsafe")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(candidate)
+
+
 @router.get("/packs")
 async def packs(request: Request) -> dict[str, object]:
-    return {"packs": request.app.state.character_registry.list()}
+    return {
+        "packs": request.app.state.character_registry.list(),
+        "active_pack": request.app.state.active_pack,
+    }
 
 
 @router.post("/pack/import", status_code=201)
@@ -180,6 +199,15 @@ async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]
             await runtime.apply_directive(current)
         except Exception as exc:
             _log.warning("re-apply current directive after pack swap: %s", exc)
+    request.app.state.active_pack = req.pack
+    try:
+        persist_avatar_pack(req.pack)
+    except (OSError, ValueError) as exc:
+        _log.error("could not persist active avatar pack %r: %s", req.pack, exc)
+        raise HTTPException(
+            status_code=500,
+            detail="The pack loaded, but its restart selection could not be saved.",
+        ) from exc
     return {"ok": True, "pack": req.pack}
 
 

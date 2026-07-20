@@ -29,6 +29,7 @@ from openmimicry.core.schemas import (
     TTSChunkSpoken,
     TTSFinished,
     TTSStarted,
+    TurnStateChanged,
     UserSpeechStarted,
 )
 from openmimicry.core.schemas.app import AvatarConfig
@@ -88,7 +89,7 @@ TABLE: list[tuple[State, str, object, State | None, bool]] = [
     ("thinking", "LLMStarted", LLMStarted(ts=_ts()), None, False),
     ("thinking", "TTSStarted", TTSStarted(ts=_ts()), "speaking", True),
     ("thinking", "TTSChunkSpoken", TTSChunkSpoken(ts=_ts()), None, False),
-    ("thinking", "TTSFinished", TTSFinished(ts=_ts()), "idle", False),
+    ("thinking", "TTSFinished", TTSFinished(ts=_ts()), None, False),
     ("thinking", "ErrorEvent", ErrorEvent(ts=_ts(), where="x", message="m"), "error", False),
     (
         "thinking",
@@ -207,14 +208,48 @@ def test_text_propagation_from_llm_reply() -> None:
     assert directive.text == "hello"
 
 
-def test_emotion_mapping_is_default_neutral_for_idle() -> None:
+def test_stale_tts_completion_does_not_clear_thinking() -> None:
     director = AvatarDirector(config=AvatarConfig(default_state="thinking"))
-    # Force a transition that yields "idle".
     director._state = "thinking"  # type: ignore[attr-defined]
     directive = director.on_event(TTSFinished(ts=_ts()))
+    assert directive is None
+    assert director.state == "thinking"
+
+
+def test_authoritative_turn_thinking_overrides_previous_speech() -> None:
+    director = _make_director("speaking")
+    directive = director.on_event(
+        TurnStateChanged(
+            ts=_ts(),
+            turn_id="turn-2",
+            sequence=2,
+            state="thinking",
+            source="text",
+        )
+    )
     assert directive is not None
-    assert directive.state == "idle"
-    assert directive.emotion == "neutral"
+    assert directive.state == "thinking"
+    assert directive.speaking is False
+
+    assert director.on_event(TTSFinished(ts=_ts(), utterance_id="old")) is None
+    assert director.state == "thinking"
+
+
+def test_rejected_turn_never_changes_avatar_state() -> None:
+    director = _make_director("speaking")
+    directive = director.on_event(
+        TurnStateChanged(
+            ts=_ts(),
+            turn_id="rejected",
+            sequence=3,
+            state="rejected",
+            source="text",
+            reason="turn_in_progress",
+            active_turn_id="active",
+        )
+    )
+    assert directive is None
+    assert director.state == "speaking"
 
 
 def test_structured_llm_cue_maps_to_2d_state_and_keeps_action() -> None:

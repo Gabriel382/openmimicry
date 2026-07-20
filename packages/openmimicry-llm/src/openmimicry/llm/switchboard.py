@@ -98,6 +98,20 @@ class LLMSwitchboard:
             "environment": bool(env_name and os.environ.get(env_name)),
         }
 
+    def web_search_status(self, backend: str) -> dict[str, bool]:
+        adapter = self.backend(backend)
+        return {
+            "supported": bool(getattr(adapter, "web_search_supported", False)),
+            "enabled": bool(getattr(adapter, "web_search_enabled", False)),
+        }
+
+    def set_web_search(self, backend: str, enabled: bool) -> None:
+        adapter = self.backend(backend)
+        setter = getattr(adapter, "set_web_search", None)
+        if not callable(setter):
+            raise ValueError(f"LLM backend {backend!r} does not support web search")
+        setter(enabled)
+
     def generate(
         self,
         messages: Sequence[LLMMessage],

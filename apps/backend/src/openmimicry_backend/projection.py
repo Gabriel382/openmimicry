@@ -29,17 +29,20 @@ from typing import Any
 
 from openmimicry.core.schemas import (
     AvatarCue,
+    ComponentHealthChanged,
     ConfigUpdated,
     ErrorEvent,
     LLMReplyComplete,
     LLMStarted,
     LLMTokenStreamed,
     RuntimeEvent,
+    RuntimeStateChanged,
     TaskCompleted,
     TaskSubmitted,
     TaskUpdate,
     TaskUpdatedEvent,
     TranscriptPreview,
+    TurnStateChanged,
     TTSChunkSpoken,
     TTSFailed,
     TTSFinished,
@@ -71,6 +74,42 @@ def project(event: RuntimeEvent) -> dict[str, Any] | None:
             "type": "transcript.preview",
             "text": event.text,
             "is_final": event.is_final,
+        }
+
+    if isinstance(event, TurnStateChanged):
+        return {
+            "type": "turn.state",
+            "turn_id": event.turn_id,
+            "sequence": event.sequence,
+            "state": event.state,
+            "source": event.source,
+            "reason": event.reason,
+            "active_turn_id": event.active_turn_id,
+            "ts": event.ts.isoformat(),
+        }
+
+    if isinstance(event, RuntimeStateChanged):
+        return {
+            "type": "runtime.state",
+            "instance_id": event.instance_id,
+            "state": event.state,
+            "ready": event.ready,
+            "reason": event.reason,
+            "ts": event.ts.isoformat(),
+        }
+
+    if isinstance(event, ComponentHealthChanged):
+        return {
+            "type": "component.health",
+            "instance_id": event.instance_id,
+            "component": event.component,
+            "family": event.family,
+            "adapter": event.adapter,
+            "state": event.state,
+            "required": event.required,
+            "actual_device": event.actual_device,
+            "last_error": event.last_error,
+            "ts": event.ts.isoformat(),
         }
 
     if isinstance(event, LLMTokenStreamed):

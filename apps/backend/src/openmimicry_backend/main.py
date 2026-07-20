@@ -17,21 +17,29 @@ import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from openmimicry.core import AppConfig, LLMMessage, TaskHandle, UserSpeechFinal
+from openmimicry.core import (
+    AppConfig,
+    LLMMessage,
+    TaskHandle,
+    UserSpeechFinal,
+    UserTextSubmitted,
+)
 from openmimicry.core.config import load as load_config
 
 from .appearance import load_appearance
 from .character_import import CharacterRegistry
-from .conversation import ConversationCoordinator
+from .conversation import ConversationCoordinator, TurnSubmission
 from .diagnostics import install_diagnostics
 from .routes import (
     admin_router,
     appearance_router,
     chat_router,
+    companions_router,
     dashboard_router,
     diagnostics_router,
     health_router,
@@ -42,8 +50,11 @@ from .routes import (
     pack_router,
     personality_router,
     voice_clone_router,
+    voice_profiles_router,
 )
 from .routes.chat import run_chat_turn
+from .supervisor import RuntimeSupervisor, TurnAdmission, TurnSource
+from .voice_profiles import VoiceProfileStore
 from .wiring import Wiring, build_runtime
 from .ws import BroadcastBridge, ws_endpoint
 
@@ -51,6 +62,10 @@ __all__ = ["app", "create_app", "run_uvicorn"]
 
 
 _log = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _module_available(module_name: str) -> bool:
@@ -91,8 +106,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         }
     )
+    user_character_root = str(Path(config.app.data_dir).expanduser() / "characters")
+    character_roots = [
+        user_character_root,
+        *(
+            root
+            for root in config.avatar.pack_roots
+            if Path(root).expanduser().resolve() != Path(user_character_root).resolve()
+        ),
+    ]
     character_registry = CharacterRegistry(
-        config.avatar.pack_roots,
+        character_roots,
         reject_licenses=(
             config.distribution.reject_licenses
             if config.distribution.profile == "commercial"
@@ -100,8 +124,39 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
+    # The dashboard persists the selected pack in the per-user overlay. Resolve
+    # its concrete private/bundled path before the orchestrator starts; a stale
+    # selection falls back to the bundled default without making the backend
+    # unavailable.
+    selected_pack = config.avatar.pack
+    try:
+        selected_pack_path = character_registry.resolve(selected_pack)
+    except ValueError as exc:
+        fallback_pack = "octomimic"
+        _log.warning(
+            "saved avatar pack %r is unavailable (%s); using %s",
+            selected_pack,
+            exc,
+            fallback_pack,
+        )
+        selected_pack = fallback_pack
+        selected_pack_path = character_registry.resolve(selected_pack)
+    runtime_settings = {name: dict(values) for name, values in config.avatar.runtimes.items()}
+    runtime_settings[config.avatar.runtime] = {
+        **runtime_settings.get(config.avatar.runtime, {}),
+        "pack_path": str(selected_pack_path),
+    }
+    config = config.model_copy(
+        update={
+            "avatar": config.avatar.model_copy(
+                update={"pack": selected_pack, "runtimes": runtime_settings}
+            )
+        }
+    )
+
     bridge = BroadcastBridge()
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
+    supervisor = RuntimeSupervisor(bus=wiring.bus)
     diagnostics = install_diagnostics(config.app.data_dir)
 
     mode_state = {
@@ -141,11 +196,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     conversation = ConversationCoordinator(
         run_turn=_run_ordered_turn,
+        supervisor=supervisor,
         history_turns=config.llm.history_turns,
     )
 
-    async def _handle_user_text(text: str) -> None:
-        conversation.submit_background(text)
+    async def _handle_user_text(
+        text: str,
+        source: TurnSource = "text",
+    ) -> TurnSubmission:
+        async def _accepted(_admission: TurnAdmission) -> None:
+            # A freshly admitted turn owns presentation.  Stop speech from the
+            # previous completed turn before publishing user history.  Its late
+            # TTS terminal event cannot clear this turn's authoritative
+            # ``thinking`` state (the avatar director enforces that invariant).
+            await wiring.speech.interrupt()
+            if source == "text":
+                wiring.bus.publish(UserTextSubmitted(ts=_utc_now(), text=text.strip()))
+
+        return await conversation.submit_background(
+            text,
+            source=source,
+            on_accepted=_accepted,
+        )
 
     async def _apply_mode_toggle(key: str, value: bool) -> None:
         if key == "continuous_listening":
@@ -242,7 +314,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.get_mode_status = _mode_status
     app.state.cancel_task = _cancel_task
     app.state.conversation = conversation
+    app.state.supervisor = supervisor
     app.state.character_registry = character_registry
+    app.state.active_pack = selected_pack
+    clone = config.voice.tts.clone
+    app.state.active_voice_profile = (
+        VoiceProfileStore(config.app.data_dir).match_active(
+            provider=clone.provider,
+            voice_id=clone.voice_id,
+            reference_path=clone.reference_path,
+        )
+        if clone is not None
+        else None
+    )
     app.state.memory = wiring.memory
     app.state.diagnostics = diagnostics
 
@@ -255,7 +339,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             spoken = event.text.strip()
             if not event.accepted or not spoken or event.reason == "interrupted":
                 continue
-            await _handle_user_text(spoken)
+            await _handle_user_text(spoken, source=event.input_mode)
 
     speech_turn_task = asyncio.create_task(
         _consume_speech_turns(), name="openmimicry.backend.speech_turns"
@@ -267,12 +351,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     elif mode_state["live_wake"]:
         await wiring.speech.enable_live_listening(wake_names=None)
     await wiring.orchestrator.start()
+    await supervisor.set_runtime_state("ready")
+    await bridge.remember({"type": "runtime.state", **supervisor.snapshot()})
 
     _mount_static_characters(app, config)
 
     try:
         yield
     finally:
+        await supervisor.set_runtime_state("stopping", reason="application_shutdown")
         speech_turn_task.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await speech_turn_task
@@ -282,6 +369,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except TimeoutError:
             _log.warning("backend lifespan: graceful shutdown exceeded 2s budget")
         finally:
+            await supervisor.set_runtime_state("stopped", reason="application_shutdown")
             diagnostics.close()
 
 
@@ -304,6 +392,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(chat_router)
+    app.include_router(companions_router)
     app.include_router(dashboard_router)
     app.include_router(diagnostics_router)
     app.include_router(mode_router)
@@ -312,6 +401,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(personality_router)
     app.include_router(voice_clone_router)
+    app.include_router(voice_profiles_router)
     app.include_router(pack_router)
     app.include_router(admin_router)
     app.include_router(appearance_router)

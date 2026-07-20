@@ -35,6 +35,7 @@ from openmimicry.core.schemas import (
     State,
     TaskCompleted,
     TranscriptPreview,
+    TurnStateChanged,
     TTSChunkSpoken,
     TTSFailed,
     TTSFinished,
@@ -201,6 +202,21 @@ class AvatarDirector:
         """Return ``(next_state_or_None, speaking_flag)`` for ``event``."""
         s = self._state
 
+        if isinstance(event, TurnStateChanged):
+            # This event is the authoritative conversation lease.  In
+            # particular, ``thinking`` must override speech from the previous
+            # completed turn, while a rejected attempt must never disturb the
+            # currently active avatar state.
+            if event.state == "thinking":
+                return ("thinking", False) if s != "thinking" else (None, False)
+            if event.state == "failed":
+                return ("error", False) if s != "error" else (None, False)
+            if event.state == "cancelled" and s == "thinking":
+                return "idle", False
+            if event.state == "completed" and s == "thinking":
+                return "idle", False
+            return None, False
+
         # The mapping table from character_packs.md §4. A cell of "—" means
         # we return (None, False) -> no directive emitted.
         if isinstance(event, UserSpeechStarted):
@@ -226,8 +242,10 @@ class AvatarDirector:
             return None, False
 
         if isinstance(event, (TTSFinished, TTSInterrupted, TTSFailed)):
-            # thinking/speaking -> idle; others -> no-op.
-            if s in ("thinking", "speaking"):
+            # Only the speech state may be completed by a TTS terminal event.
+            # A late terminal event from an older utterance must not clear a
+            # newer turn's authoritative thinking state.
+            if s == "speaking":
                 return "idle", False
             return None, False
 
@@ -246,19 +264,13 @@ class AvatarDirector:
         # ---- Soft events the table doesn't list, but we still react to. ----
 
         if isinstance(event, UserTextSubmitted):
-            # Typing the same as starting LLM intent: transition to thinking
-            # so the avatar shows it's working on a response.
-            if s in ("idle", "listening", "happy", "error"):
-                return "thinking", False
+            # History/diagnostic event only. TurnStateChanged owns processing.
             return None, False
 
         if isinstance(event, UserSpeechFinal):
-            if not event.accepted:
-                return None, False
-            # Speech ended without a new TTS yet: park at "thinking" so the
-            # user sees the avatar is processing.
-            if s == "listening":
-                return "thinking", False
+            # Accepted wake/PTT input is followed by an admitted
+            # TurnStateChanged(thinking). Rejected ambient wake transcripts
+            # deliberately leave the avatar listening.
             return None, False
 
         if isinstance(event, WakeDetected):

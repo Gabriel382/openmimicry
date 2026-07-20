@@ -12,6 +12,7 @@ llm:
       api_key_env: OPENROUTER_API_KEY
       temperature: 0.6
       request_timeout_s: 90
+      web_search: false
     ollama:
       adapter: litellm
       provider: ollama

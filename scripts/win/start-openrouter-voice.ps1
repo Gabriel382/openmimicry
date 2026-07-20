@@ -16,7 +16,15 @@ if ([string]::IsNullOrWhiteSpace($env:OPENROUTER_API_KEY)) {
     throw "OPENROUTER_API_KEY is missing. Copy .env.example to .env and add your key."
 }
 
-$python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+$venvRoot = Join-Path $repoRoot ".venv"
+if (-not [string]::IsNullOrWhiteSpace($env:OPENMIMICRY_VENV)) {
+    $configuredVenv = [Environment]::ExpandEnvironmentVariables($env:OPENMIMICRY_VENV)
+    if (-not [IO.Path]::IsPathRooted($configuredVenv)) {
+        $configuredVenv = Join-Path $repoRoot $configuredVenv
+    }
+    $venvRoot = [IO.Path]::GetFullPath($configuredVenv)
+}
+$python = Join-Path $venvRoot "Scripts\python.exe"
 $userConfig = Join-Path $repoRoot "config\user.yaml"
 if (-not [string]::IsNullOrWhiteSpace($env:OPENMIMICRY_USER_CONFIG)) {
     $configuredUserPath = [Environment]::ExpandEnvironmentVariables(
@@ -65,7 +73,7 @@ function Install-VoiceProfile {
         throw "Voice profile installation failed for '$Profile'. Review the installer report above."
     }
     if (-not (Test-Path $python)) {
-        throw "The installer completed without creating .venv\Scripts\python.exe."
+        throw "The installer completed without creating $python."
     }
 }
 

@@ -21,15 +21,19 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 from openmimicry.core.config import load as load_config
+from openmimicry.core import UserTextSubmitted
 from openmimicry.core.schemas.app import AppConfig
 from openmimicry_backend.main import create_app
+from openmimicry_backend.conversation import ConversationCoordinator
 from openmimicry_backend.routes.chat import run_chat_turn
+from openmimicry_backend.supervisor import RuntimeSupervisor
 from openmimicry_backend.wiring import Wiring, build_runtime
 from openmimicry_backend.ws import BroadcastBridge
 
@@ -83,14 +87,40 @@ def client_factory(integration_config: AppConfig) -> Any:
         @asynccontextmanager
         async def _lifespan(_app):  # type: ignore[no-redef]
             # Wire up app.state exactly as main.lifespan does.
-            async def _handle_user_text(text: str) -> None:
-                await run_chat_turn(
+            supervisor = RuntimeSupervisor(bus=w.bus, initial_state="ready")
+
+            async def _run_turn(text: str, history) -> str | None:
+                return await run_chat_turn(
                     text,
                     bus=w.bus,
                     llm=w.llm,
                     tasks=w.tasks,
                     speech=w.speech,
                     intent_fn=w.intent,
+                    history=history,
+                )
+
+            conversation = ConversationCoordinator(
+                run_turn=_run_turn,
+                supervisor=supervisor,
+                history_turns=4,
+            )
+
+            async def _handle_user_text(text: str, source="text"):
+                async def _accepted(_admission) -> None:
+                    await w.speech.interrupt()
+                    if source == "text":
+                        w.bus.publish(
+                            UserTextSubmitted(
+                                ts=datetime.now(timezone.utc),
+                                text=text.strip(),
+                            )
+                        )
+
+                return await conversation.submit_background(
+                    text,
+                    source=source,
+                    on_accepted=_accepted,
                 )
 
             async def _apply_mode_toggle(key: str, value: bool) -> None:
@@ -127,6 +157,8 @@ def client_factory(integration_config: AppConfig) -> Any:
                 await w.tasks.cancel(TaskHandle.model_validate(raw_handle))
 
             _app.state.wiring = w
+            _app.state.supervisor = supervisor
+            _app.state.conversation = conversation
             _app.state.bridge = w.bridge or BroadcastBridge()
             _app.state.handle_user_text = _handle_user_text
             _app.state.apply_mode_toggle = _apply_mode_toggle
@@ -138,7 +170,10 @@ def client_factory(integration_config: AppConfig) -> Any:
                 "wake_names": w.speech.wake_names,
             }
             _app.state.cancel_task = _cancel_task
-            yield
+            try:
+                yield
+            finally:
+                await conversation.close()
 
         app.router.lifespan_context = _lifespan
         return TestClient(app)

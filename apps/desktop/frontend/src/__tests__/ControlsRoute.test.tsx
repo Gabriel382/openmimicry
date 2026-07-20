@@ -92,4 +92,31 @@ describe("avatar toolbar", () => {
     );
     await waitFor(() => expect(screen.getByLabelText("Last heard: hello Mimi")).toBeTruthy());
   });
+
+  it("disables press-to-talk while a turn owns the backend lease", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline appearance"));
+    const { factory, sockets } = mockSocketFactory();
+    render(
+      <WSProvider url="ws://test/ws" socketFactory={factory}>
+        <ControlsRoute />
+      </WSProvider>,
+    );
+    await waitFor(() => expect(sockets[0]?.readyState).toBe(1));
+    const socket = sockets[0];
+    if (!socket) throw new Error("mock socket was not created");
+
+    act(() =>
+      socket._dispatchMessage({
+        type: "turn.state",
+        turn_id: "turn-1",
+        sequence: 1,
+        state: "thinking",
+        source: "wake",
+        ts: new Date().toISOString(),
+      }),
+    );
+    expect((screen.getByLabelText("Hold to talk") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

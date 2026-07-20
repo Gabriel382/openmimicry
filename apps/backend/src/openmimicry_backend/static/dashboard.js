@@ -234,6 +234,58 @@ async function refreshVoiceSettings() {
   }
 }
 
+async function refreshVoiceProfiles() {
+  const response = await fetch("/voice/profiles");
+  if (!response.ok) throw new Error(await apiError(response));
+  const data = await response.json();
+  const select = byId("voice-profile-select");
+  const previous = select.value;
+  select.replaceChildren();
+  for (const profile of data.profiles || []) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = `${profile.name} · ${profile.provider}${profile.id === data.active_profile ? " · active" : ""}`;
+    select.append(option);
+  }
+  if (!select.options.length) select.append(new Option("No saved voice profiles", ""));
+  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  else if (data.active_profile) select.value = data.active_profile;
+}
+
+async function refreshCompanions() {
+  const response = await fetch("/companions");
+  if (!response.ok) throw new Error(await apiError(response));
+  const data = await response.json();
+  const select = byId("companion-select");
+  select.replaceChildren();
+  for (const companion of data.companions || []) {
+    select.append(new Option(companion.name || companion.id, companion.id));
+  }
+  if (!select.options.length) select.append(new Option("No imported companions", ""));
+}
+
+async function downloadChecked(path, errorTarget) {
+  const target = byId(errorTarget);
+  target.textContent = "Preparing download…";
+  try {
+    const response = await fetch(path);
+    if (!response.ok) throw new Error(await apiError(response));
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = match?.[1] || "openmimicry-export.zip";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    target.textContent = "Download ready.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
 async function refreshPacks() {
   const response = await fetch("/packs");
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
@@ -247,7 +299,8 @@ async function refreshPacks() {
     option.textContent = `${pack.name} (${pack.kind})`;
     select.append(option);
   }
-  if ([...select.options].some((option) => option.value === current)) select.value = current;
+  const selected = data.active_pack || current;
+  if ([...select.options].some((option) => option.value === selected)) select.value = selected;
 }
 
 async function refreshLLMSettings() {
@@ -286,6 +339,13 @@ async function refreshLLMSettings() {
     currentModel.textContent = data.active_model || "Load available models";
     modelSelect.append(currentModel);
     const credentials = data.backends?.[data.active_backend]?.credentials || {};
+    const webSearch = data.backends?.[data.active_backend]?.web_search || {};
+    const webSelect = byId("llm-web-search");
+    webSelect.value = String(webSearch.enabled === true);
+    webSelect.disabled = webSearch.supported !== true;
+    byId("llm-web-hint").textContent = webSearch.supported === true
+      ? "OpenRouter web grounding is available. Results include linked citations and may add search charges."
+      : "Web grounding is unavailable for this backend; switch to OpenRouter to enable it.";
     byId("llm-credential-status").textContent = credentials.session
       ? "Using a session-only token (cleared on exit)."
       : credentials.environment
@@ -534,6 +594,8 @@ byId("voice-clone-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("voice-error");
   const provider = byId("clone-provider").value;
+  const profileId = byId("clone-profile-id").value.trim();
+  const profileName = byId("clone-profile-name").value.trim();
   const consent = byId("clone-consent").value.trim();
   try {
     let response;
@@ -541,21 +603,59 @@ byId("voice-clone-form").addEventListener("submit", async (event) => {
       const reference = byId("clone-reference").files?.[0];
       if (!reference) throw new Error("Choose a consented WAV or MP3 reference recording.");
       response = await fetch(
-        `/voice/clone/reference?filename=${encodeURIComponent(reference.name)}&consent_record=${encodeURIComponent(consent)}`,
+        `/voice/profiles/reference?profile_id=${encodeURIComponent(profileId)}&name=${encodeURIComponent(profileName)}&filename=${encodeURIComponent(reference.name)}&consent_record=${encodeURIComponent(consent)}`,
         { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: reference },
       );
     } else {
-      response = await fetch("/voice/clone/remote", {
+      response = await fetch("/voice/profiles/remote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, voice_id: byId("clone-voice-id").value.trim(), consent_record: consent }),
+        body: JSON.stringify({ id: profileId, name: profileName, voice_id: byId("clone-voice-id").value.trim(), consent_record: consent }),
       });
     }
     if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
-    target.textContent = "Custom voice saved. Restart the backend after installing the selected optional provider.";
+    await refreshVoiceProfiles();
+    byId("voice-profile-select").value = profileId;
+    target.textContent = "Named voice saved. Select Use selected voice to activate it.";
   } catch (error) {
     target.textContent = String(error);
   }
+});
+byId("voice-profile-activate").addEventListener("click", async () => {
+  const target = byId("voice-error");
+  const id = byId("voice-profile-select").value;
+  if (!id) { target.textContent = "Choose a saved voice first."; return; }
+  try {
+    const response = await fetch(`/voice/profiles/${encodeURIComponent(id)}/activate`, { method: "POST" });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    await refreshVoiceProfiles();
+    target.textContent = data.message;
+  } catch (error) { target.textContent = String(error); }
+});
+byId("voice-profile-export").addEventListener("click", async () => {
+  const id = byId("voice-profile-select").value;
+  if (!id) { byId("voice-error").textContent = "Choose a saved voice first."; return; }
+  const include = byId("voice-export-reference").checked;
+  if (include && !window.confirm("Export the biometric reference recording? Share it only when the speaker and asset rights permit this.")) return;
+  await downloadChecked(`/voice/profiles/${encodeURIComponent(id)}/export?include_reference=${include}`, "voice-error");
+});
+byId("voice-profile-import-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("voice-error");
+  const file = byId("voice-profile-zip").files?.[0];
+  if (!file) { target.textContent = "Choose a voice-profile ZIP first."; return; }
+  try {
+    const confirmed = byId("voice-import-reference-confirm").checked;
+    const response = await fetch(`/voice/profiles/import?confirm_reference=${confirmed}`, {
+      method: "POST", headers: { "Content-Type": "application/zip" }, body: file,
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    await refreshVoiceProfiles();
+    byId("voice-profile-select").value = data.profile.id;
+    target.textContent = `Imported ${data.profile.name}. Select Use selected voice to activate it.`;
+  } catch (error) { target.textContent = String(error); }
 });
 byId("voice-token-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -733,6 +833,25 @@ byId("llm-token-clear").addEventListener("click", async () => {
     target.textContent = String(error);
   }
 });
+byId("llm-web-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("llm-error");
+  try {
+    const response = await fetch("/llm/web-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        backend: byId("llm-backend").value,
+        enabled: byId("llm-web-search").value === "true",
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    await refreshLLMSettings();
+    target.textContent = "Web access saved. It applies to the next request.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
 byId("interaction-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("interaction-error");
@@ -823,11 +942,55 @@ byId("personality-form").addEventListener("submit", async (event) => {
   }
 });
 
+byId("companion-export-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const id = byId("companion-export-id").value.trim();
+  const name = byId("companion-export-name").value.trim();
+  const include = byId("companion-export-voice").value === "true";
+  if (include && !window.confirm("Include the selected voice reference? This is biometric material; export only with permission.")) return;
+  await downloadChecked(`/companions/current/export?companion_id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}&include_voice_reference=${include}`, "companion-error");
+});
+byId("companion-import-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("companion-error");
+  const file = byId("companion-zip").files?.[0];
+  if (!file) { target.textContent = "Choose an .omprofile.zip first."; return; }
+  try {
+    const confirmed = byId("companion-import-voice-confirm").checked;
+    const response = await fetch(`/companions/import?filename=${encodeURIComponent(file.name)}&confirm_voice_reference=${confirmed}`, {
+      method: "POST", headers: { "Content-Type": "application/zip" }, body: file,
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    await refreshCompanions();
+    byId("companion-select").value = data.companion.id;
+    target.textContent = `Imported ${data.companion.name}. Click Activate companion to apply it.`;
+  } catch (error) { target.textContent = String(error); }
+});
+byId("companion-activate").addEventListener("click", async () => {
+  const target = byId("companion-error");
+  const id = byId("companion-select").value;
+  if (!id) { target.textContent = "Choose an imported companion first."; return; }
+  try {
+    const response = await fetch(`/companions/${encodeURIComponent(id)}/activate`, { method: "POST" });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    await refreshPacks();
+    byId("pack").value = data.active_pack;
+    await refreshPersonality();
+    target.textContent = data.restart_required
+      ? "Companion activated. Restart the backend once to reload its appearance and selected voice safely."
+      : "Companion activated.";
+  } catch (error) { target.textContent = String(error); }
+});
+
 renderVoice();
 renderConversation();
 renderTasks();
 refreshHealth();
 refreshVoiceSettings();
+refreshVoiceProfiles().catch((error) => { byId("voice-error").textContent = String(error); });
+refreshCompanions().catch((error) => { byId("companion-error").textContent = String(error); });
 refreshPacks().catch((error) => { byId("settings-error").textContent = String(error); });
 refreshLLMSettings();
 refreshInteractionSettings();

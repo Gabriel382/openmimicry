@@ -30,8 +30,10 @@ __all__ = [
     "LLMStarted",
     "LLMTokenStreamed",
     "MovementDetected",
+    "ComponentHealthChanged",
     "RuntimeEvent",
     "RuntimeEventAdapter",
+    "RuntimeStateChanged",
     "TTSChunkSpoken",
     "TTSFailed",
     "TTSFinished",
@@ -43,6 +45,7 @@ __all__ = [
     "TaskSubmitted",
     "TaskUpdatedEvent",
     "TranscriptPreview",
+    "TurnStateChanged",
     "UserSpeechFinal",
     "UserSpeechStarted",
     "UserTextSubmitted",
@@ -89,6 +92,56 @@ class TranscriptPreview(_Event):
 class WakeDetected(_Event):
     kind: Literal["wake"] = "wake"
     name: str
+
+
+class TurnStateChanged(_Event):
+    """Authoritative lifecycle for one admitted conversation turn.
+
+    ``sequence`` is monotonic within one backend process and ``turn_id`` is
+    globally unique.  Rejected attempts are observable but never become the
+    active turn, which lets every UI explain a busy response without allowing
+    the rejected event to change avatar state.
+    """
+
+    kind: Literal["turn_state"] = "turn_state"
+    turn_id: str
+    sequence: int
+    state: Literal[
+        "accepted",
+        "thinking",
+        "presenting",
+        "completed",
+        "failed",
+        "cancelled",
+        "rejected",
+    ]
+    source: Literal["text", "push_to_talk", "continuous", "wake", "task"] = "text"
+    reason: str | None = None
+    active_turn_id: str | None = None
+
+
+class RuntimeStateChanged(_Event):
+    """Process lifecycle projected to every desktop window."""
+
+    kind: Literal["runtime_state"] = "runtime_state"
+    instance_id: str
+    state: Literal["starting", "ready", "refreshing", "stopping", "stopped", "degraded"]
+    ready: bool = False
+    reason: str | None = None
+
+
+class ComponentHealthChanged(_Event):
+    """Health snapshot for an adapter selected by the active configuration."""
+
+    kind: Literal["component_health"] = "component_health"
+    instance_id: str
+    component: str
+    family: str
+    adapter: str
+    state: Literal["unknown", "healthy", "degraded", "unavailable"] = "unknown"
+    required: bool = False
+    actual_device: str | None = None
+    last_error: str | None = None
 
 
 class LLMStarted(_Event):
@@ -235,6 +288,9 @@ RuntimeEvent = Annotated[
     | UserSpeechFinal
     | TranscriptPreview
     | WakeDetected
+    | TurnStateChanged
+    | RuntimeStateChanged
+    | ComponentHealthChanged
     | LLMStarted
     | LLMTokenStreamed
     | LLMReplyComplete

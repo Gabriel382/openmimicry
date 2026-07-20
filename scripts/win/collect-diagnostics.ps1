@@ -29,7 +29,15 @@ if (Test-Path $logDir) {
     Copy-Item -Path (Join-Path $logDir "openmimicry-*.log*") -Destination $staging -ErrorAction SilentlyContinue
 }
 
-$python = Join-Path $repoRoot ".venv\Scripts\python.exe"
+$venvRoot = Join-Path $repoRoot ".venv"
+if (-not [string]::IsNullOrWhiteSpace($env:OPENMIMICRY_VENV)) {
+    $configuredVenv = [Environment]::ExpandEnvironmentVariables($env:OPENMIMICRY_VENV)
+    if (-not [IO.Path]::IsPathRooted($configuredVenv)) {
+        $configuredVenv = Join-Path $repoRoot $configuredVenv
+    }
+    $venvRoot = [IO.Path]::GetFullPath($configuredVenv)
+}
+$python = Join-Path $venvRoot "Scripts\python.exe"
 if (Test-Path $python) {
     & $python --version 2>&1 | Out-File -Encoding utf8 (Join-Path $staging "python-version.txt")
     & $python -m pip show openmimicry-backend openmimicry-core openmimicry-voice faster-whisper piper-tts sounddevice numpy litellm fastapi uvicorn websockets RealtimeSTT RealtimeTTS 2>&1 |

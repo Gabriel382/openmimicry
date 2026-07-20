@@ -30,8 +30,10 @@ from openmimicry.core import (
     ErrorEvent,
     EventBus,
     SpeechController,
-    UserTextSubmitted,
 )
+
+from .conversation import TurnSubmission
+from .supervisor import TurnSource
 
 from .projection import project_messages
 
@@ -72,6 +74,9 @@ class BroadcastBridge:
         self._lock = asyncio.Lock()
         self._latest_avatar: dict[str, Any] | None = None
         self._latest_bubble: dict[str, Any] | None = None
+        self._latest_runtime: dict[str, Any] | None = None
+        self._latest_turn: dict[str, Any] | None = None
+        self._component_health: dict[str, dict[str, Any]] = {}
         self._latest_tasks: dict[str, dict[str, Any]] = {}
         self._conversation: dict[str, dict[str, Any]] = {}
 
@@ -79,11 +84,13 @@ class BroadcastBridge:
         async with self._lock:
             self._sockets.add(ws)
             self._send_locks.setdefault(ws, asyncio.Lock())
-            replay = [
+            replay = [message for message in (self._latest_runtime,) if message is not None]
+            replay.extend(self._component_health.values())
+            replay.extend(
                 message
-                for message in (self._latest_avatar, self._latest_bubble)
+                for message in (self._latest_turn, self._latest_avatar, self._latest_bubble)
                 if message is not None
-            ]
+            )
             replay.extend(self._conversation.values())
             replay.extend(self._latest_tasks.values())
         for message in replay:
@@ -147,6 +154,17 @@ class BroadcastBridge:
     def _remember_unlocked(self, message: dict[str, Any]) -> None:
         if message.get("type") == "avatar.directive":
             self._latest_avatar = dict(message)
+        elif message.get("type") == "runtime.state":
+            self._latest_runtime = dict(message)
+        elif message.get("type") == "turn.state":
+            # A rejected attempt is not the current turn and must not replace
+            # the authoritative state replayed to newly opened windows.
+            if message.get("state") != "rejected":
+                self._latest_turn = dict(message)
+        elif message.get("type") == "component.health":
+            component = message.get("component")
+            if isinstance(component, str) and component:
+                self._component_health[component] = dict(message)
         elif message.get("type") == "bubble.text":
             if message.get("reset") is True:
                 self._latest_bubble = None
@@ -171,7 +189,7 @@ class BroadcastBridge:
 # ---------------------------------------------------------------------------
 
 
-HandleUserText = Callable[[str], Awaitable[None]]
+HandleUserText = Callable[[str, TurnSource], Awaitable[TurnSubmission]]
 GetModeStatus = Callable[[], dict[str, Any]]
 CancelTask = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -275,8 +293,9 @@ async def _dispatch_inbound(
         text = str(payload.get("text") or "").strip()
         if not text:
             return
-        bus.publish(UserTextSubmitted(ts=_now(), text=text))
-        _start_turn_task(handle_user_text(text), source="websocket.text")
+        # Admission is fast and non-blocking: accepted work continues on the
+        # coordinator's owned task; a concurrent turn is rejected immediately.
+        await handle_user_text(text, "text")
         return
 
     if msg_type == "ptt.down":
@@ -347,22 +366,3 @@ async def _dispatch_inbound(
     _log.info("WS: ignoring unknown inbound type=%r", msg_type)
 
 
-_TURN_TASKS: set[asyncio.Task[None]] = set()
-
-
-def _start_turn_task(turn: Awaitable[None], *, source: str) -> None:
-    """Run a conversation without blocking the socket receive loop."""
-
-    task = asyncio.create_task(turn, name=f"openmimicry.backend.turn.{source}")
-    _TURN_TASKS.add(task)
-
-    def _done(completed: asyncio.Task[None]) -> None:
-        _TURN_TASKS.discard(completed)
-        if completed.cancelled():
-            return
-        try:
-            completed.result()
-        except Exception:
-            _log.exception("background conversation failed: source=%s", source)
-
-    task.add_done_callback(_done)

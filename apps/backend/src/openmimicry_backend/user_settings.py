@@ -9,15 +9,32 @@ from typing import Any
 import yaml
 
 __all__ = [
+    "persist_avatar_pack",
     "persist_interaction_settings",
     "persist_llm_backend",
     "persist_llm_model",
+    "persist_llm_web_search",
     "persist_memory_settings",
     "persist_tts_clone",
     "persist_voice_settings",
     "persist_wake_names",
     "user_config_path",
 ]
+
+
+def persist_avatar_pack(pack_id: str, path: Path | None = None) -> Path:
+    """Persist the last successfully loaded avatar pack."""
+
+    selected = pack_id.strip()
+    if not selected or len(selected) > 64:
+        raise ValueError("avatar pack id must contain 1 to 64 characters")
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    avatar = data.setdefault("avatar", {})
+    if not isinstance(avatar, dict):
+        raise ValueError("user settings avatar section must be a mapping")
+    avatar["pack"] = selected
+    return _write_user_mapping(target, data)
 
 
 def user_config_path() -> Path:
@@ -134,6 +151,24 @@ def persist_llm_model(backend: str, model: str, path: Path | None = None) -> Pat
     if not isinstance(entry, dict):
         raise ValueError(f"user settings llm.backends.{backend} must be a mapping")
     entry["model"] = model
+    return _write_user_mapping(target, data)
+
+
+def persist_llm_web_search(backend: str, enabled: bool, path: Path | None = None) -> Path:
+    """Persist an opt-in OpenRouter web-grounding choice per backend."""
+
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    llm = data.setdefault("llm", {})
+    if not isinstance(llm, dict):
+        raise ValueError("user settings llm section must be a mapping")
+    backends = llm.setdefault("backends", {})
+    if not isinstance(backends, dict):
+        raise ValueError("user settings llm.backends section must be a mapping")
+    entry = backends.setdefault(backend, {})
+    if not isinstance(entry, dict):
+        raise ValueError(f"user settings llm.backends.{backend} must be a mapping")
+    entry["web_search"] = bool(enabled)
     return _write_user_mapping(target, data)
 
 

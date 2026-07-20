@@ -27,7 +27,7 @@ async def test_shutdown_runtime_error_is_a_clean_disconnect() -> None:
     bus = EventBus()
     bridge = BroadcastBridge()
 
-    async def handle_user_text(_text: str) -> None:
+    async def handle_user_text(_text: str, _source: str) -> None:
         raise AssertionError("shutdown socket must not dispatch input")
 
     try:
@@ -61,7 +61,7 @@ async def test_status_send_racing_with_close_is_a_clean_disconnect() -> None:
             bus=bus,
             speech=object(),  # type: ignore[arg-type]
             bridge=bridge,
-            handle_user_text=lambda _text: asyncio.sleep(0),
+            handle_user_text=lambda _text, _source: asyncio.sleep(0),
             get_mode_status=lambda: {"agent_voice": True},
         )
     finally:

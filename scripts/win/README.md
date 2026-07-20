@@ -1,9 +1,7 @@
 # Windows `.bat` wrappers
 
-Thin wrappers around the canonical `make` targets so the workflow
-works identically in `cmd.exe` / PowerShell without requiring GNU
-Make. Each script forwards arguments to `make` if it's on `PATH`;
-otherwise it falls back to running the underlying command directly.
+Wrappers around the canonical workspace commands so the workflow works in
+`cmd.exe` and PowerShell without requiring GNU Make.
 
 Run from the repo root:
 
@@ -31,6 +29,22 @@ selects `openrouter-chatterbox`, and disables backend reloads. Set
 `OPENMIMICRY_CHATTERBOX_PREFLIGHT=force` to repeat model prewarming or
 `OPENMIMICRY_TORCH_CHANNEL=cpu|cu118|cu124|cu126` to override automatic Torch
 wheel selection.
+
+The Python installer and backend, voice, test, doctor, and diagnostic launchers
+resolve the repository from their own script path and use that checkout's
+`.venv`. Set `OPENMIMICRY_VENV` only when you want a different dedicated
+environment. Existing non-empty environments are refused until they have been
+explicitly claimed for this checkout:
+
+```powershell
+$env:OPENMIMICRY_CLAIM_EXISTING_VENV = "1" # one-time migration only
+.\scripts\win\install.bat openrouter-chatterbox
+Remove-Item Env:OPENMIMICRY_CLAIM_EXISTING_VENV
+```
+
+Do not claim an environment shared with another project. Create a clean
+OpenMimicry `.venv` instead. The ownership marker prevents later OpenMimicry
+installers from changing a different repository's dependency graph.
 
 If you have Make installed (via Chocolatey, scoop, or Git for Windows),
 prefer `make <target>` directly — these wrappers exist for the

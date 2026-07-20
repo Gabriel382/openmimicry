@@ -60,6 +60,33 @@ class WakeDetected(_Event):
     kind: Literal["wake"] = "wake"
     name: str
 
+class TurnStateChanged(_Event):
+    kind: Literal["turn_state"] = "turn_state"
+    turn_id: str
+    sequence: int
+    state: Literal["accepted", "thinking", "presenting", "completed",
+                   "failed", "cancelled", "rejected"]
+    source: Literal["text", "push_to_talk", "continuous", "wake", "task"]
+    reason: str | None = None
+    active_turn_id: str | None = None
+
+class RuntimeStateChanged(_Event):
+    kind: Literal["runtime_state"] = "runtime_state"
+    instance_id: str
+    state: Literal["starting", "ready", "refreshing", "stopping",
+                   "stopped", "degraded"]
+    ready: bool
+    reason: str | None = None
+
+class ComponentHealthChanged(_Event):
+    kind: Literal["component_health"] = "component_health"
+    instance_id: str
+    component: str
+    family: str
+    adapter: str
+    state: Literal["unknown", "healthy", "degraded", "unavailable"]
+    required: bool
+
 class LLMStarted(_Event):
     kind: Literal["llm_start"] = "llm_start"
 
@@ -116,7 +143,8 @@ class ErrorEvent(_Event):
 
 RuntimeEvent = Union[
     UserTextSubmitted, UserSpeechStarted, UserSpeechFinal, TranscriptPreview,
-    WakeDetected, LLMStarted, LLMTokenStreamed, LLMReplyComplete, AvatarCue,
+    WakeDetected, TurnStateChanged, RuntimeStateChanged, ComponentHealthChanged,
+    LLMStarted, LLMTokenStreamed, LLMReplyComplete, AvatarCue,
     TTSStarted, TTSChunkSpoken, TTSFinished, TTSInterrupted,
     TaskSubmitted, TaskUpdatedEvent, TaskCompleted, ConfigUpdated, ErrorEvent,
 ]
@@ -479,6 +507,9 @@ The frontend never sees `RuntimeEvent` directly. It consumes a narrow projection
 { "type": "transcript.preview","text": "...", "is_final": false }
 { "type": "bubble.text",       "text": "...", "complete": false, "reset": false }
 { "type": "conversation.turn", "id": "...", "role": "user|assistant", "source": "text|voice|assistant", "text": "...", "ts": "..." }
+{ "type": "turn.state",       "turn_id": "...", "sequence": 1, "state": "accepted|thinking|presenting|completed|failed|cancelled|rejected", "source": "text|push_to_talk|continuous|wake|task" }
+{ "type": "runtime.state",    "instance_id": "...", "state": "starting|ready|refreshing|stopping|stopped|degraded", "ready": true }
+{ "type": "component.health", "instance_id": "...", "component": "llm:openrouter", "family": "llm", "adapter": "openrouter", "state": "unknown|healthy|degraded|unavailable", "required": true }
 { "type": "task.card",         "update": { /* TaskUpdate */ } }
 { "type": "system.notice",     "level": "info|warn|error", "message": "..." }
 ```
@@ -489,6 +520,18 @@ projection; the backend retains and replays the latest 100 turns for the life
 of the backend process. Push-to-talk progress is projected through
 `system.notice` configuration diffs (`ptt_stage`: `listening`, `transcribing`,
 or `error`) and finishes with `message="speech_result"` plus `voice_result`.
+
+`turn.state` is the authoritative single-flight lease. A rejected message is
+diagnostic and never replaces the active turn. Only a terminal event with the
+same `turn_id` releases submission controls. `runtime.state` and
+`component.health` are retained and replayed when another desktop window
+connects.
+
+The backend exposes `GET /health/live`, `GET /health/ready`, and
+`GET /health/components`. Readiness means that the required LLM component is
+healthy, the runtime is ready, and no conversation turn currently owns the
+single-flight lease. Optional voice or avatar degradation does not make typed
+chat unavailable.
 
 The reverse direction (frontend → backend):
 

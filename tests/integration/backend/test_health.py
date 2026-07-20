@@ -25,6 +25,20 @@ def test_health_returns_ok_with_mocks(client: TestClient) -> None:
     assert adapters["llm"]["mock"] is True
     assert adapters["stt"]["mock-stt"] is True
     assert adapters["tts"]["mock-tts"] is True
+    assert body["runtime"]["state"] == "ready"
+
+
+def test_split_health_surfaces_report_live_ready_and_components(client: TestClient) -> None:
+    live = client.get("/health/live")
+    ready = client.get("/health/ready")
+    components = client.get("/health/components")
+
+    assert live.status_code == 200
+    assert live.json()["live"] is True
+    assert ready.status_code == 200
+    assert ready.json()["ready"] is True
+    assert components.status_code == 200
+    assert "llm:mock" in components.json()["components"]
 
 
 def test_health_reports_false_when_an_adapter_is_unhealthy(
@@ -42,3 +56,4 @@ def test_health_reports_false_when_an_adapter_is_unhealthy(
     body = resp.json()
     assert body["ok"] is False
     assert body["adapters"]["llm"]["mock"] is False
+    assert client.get("/health/ready").status_code == 503
