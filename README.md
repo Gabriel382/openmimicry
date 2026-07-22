@@ -18,6 +18,7 @@
 [![Tauri 2](https://img.shields.io/badge/tauri-2.x-24c8db)](apps/desktop/src-tauri)
 
 [Current release](#current-release-v051) ·
+[Demo](#video-tutorial) ·
 [Progress](#development-progress) ·
 [Roadmap](#roadmap-and-todo) ·
 [Quick start](#quick-start) ·
@@ -32,6 +33,24 @@ The current validated release is **v0.5.1 beta**. Its reference implementation i
 
 > [!IMPORTANT]
 > OpenMimicry contains a broader modular architecture than the currently validated release surface. Features marked **implemented** exist in the repository, while features marked **validated** have completed the current end-to-end acceptance path.
+
+---
+
+## Video tutorial
+
+A compressed preview can be played directly from this README. For the full-resolution version, watch the tutorial on YouTube:
+
+**[▶ Watch the Full HD OpenMimicry tutorial on YouTube](https://youtu.be/e1IaVpS4Js4)**
+
+<!--
+Upload a compressed MP4 smaller than 10 MB by dragging it into the GitHub README editor.
+GitHub will generate a URL similar to:
+https://github.com/user-attachments/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+Replace the placeholder below with that generated URL and keep it on its own line.
+-->
+
+PASTE_GITHUB_VIDEO_ATTACHMENT_URL_HERE
 
 ---
 
