@@ -50,7 +50,9 @@ https://github.com/user-attachments/assets/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 Replace the placeholder below with that generated URL and keep it on its own line.
 -->
 
-PASTE_GITHUB_VIDEO_ATTACHMENT_URL_HERE
+
+https://github.com/user-attachments/assets/bfcc0c55-c893-4f5d-bf8e-8303be569293
+
 
 ---
 
