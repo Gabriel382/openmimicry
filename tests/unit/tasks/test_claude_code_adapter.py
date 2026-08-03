@@ -46,6 +46,7 @@ class _FakeStreamWriter:
 
 class _FakeProcess:
     def __init__(self, stdout_lines: list[str], stderr_lines: list[str], exit_code: int) -> None:
+        self.pid = 1234
         self.stdout = _FakeStreamReader(stdout_lines)
         self.stderr = _FakeStreamReader(stderr_lines)
         self.stdin = _FakeStreamWriter()
@@ -119,25 +120,35 @@ async def test_success_streams_stdout(fake_proc_factory) -> None:
 
     # The CLI was spawned with our fake path.
     assert captured["argv"][0] == "/usr/local/bin/claude"
+    assert "--input-format" in captured["argv"]
+    assert "acceptEdits" in captured["argv"]
     # The prompt was piped via stdin.
     assert b"refactor utils" in captured["proc"].stdin.written
 
 
 async def test_nonzero_exit_is_failed(fake_proc_factory) -> None:
-    fake_proc_factory(stdout_lines=[], exit_code=2)
+    fake_proc_factory(
+        stdout_lines=[],
+        stderr_lines=["Authentication required for this project\n"],
+        exit_code=2,
+    )
     adapter = ClaudeCodeAdapter()
     handle = await adapter.submit(TaskRequest(summary="s", instructions="x"))
     received = [upd async for upd in adapter.updates(handle)]
     assert received[-1].status == "failed"
+    assert received[-1].error is not None
+    assert "Authentication required" in received[-1].error.message
     result = await adapter.result(handle)
     assert result.status == "failed"
+    assert result.error is not None
+    assert "Authentication required" in result.error.message
 
 
 async def test_env_is_curated(fake_proc_factory, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     monkeypatch.setenv("UNRELATED_SECRET", "do-not-leak")
     captured = fake_proc_factory(stdout_lines=[], exit_code=0)
-    adapter = ClaudeCodeAdapter()
+    adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(auth_mode="api"))
     handle = await adapter.submit(TaskRequest(summary="s", instructions="x"))
     [_ async for _ in adapter.updates(handle)]
     env = captured["kwargs"]["env"]
@@ -158,3 +169,64 @@ def test_resolve_cli_with_absolute_path_validates_existence(tmp_path) -> None:
     adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(cli=str(bogus)))
     with pytest.raises(ClaudeCodeUnavailable):
         adapter._resolve_cli()  # type: ignore[attr-defined]
+
+
+def test_windows_cmd_shim_is_wrapped_with_comspec() -> None:
+    adapter = ClaudeCodeAdapter()
+    argv = adapter._build_command(  # type: ignore[attr-defined]
+        r"C:\Users\henri\AppData\Roaming\npm\claude.cmd",
+        ("--version",),
+        env={"COMSPEC": r"C:\Windows\System32\cmd.exe"},
+        windows=True,
+    )
+    assert argv[:4] == (
+        r"C:\Windows\System32\cmd.exe",
+        "/d",
+        "/s",
+        "/c",
+    )
+    assert "claude.cmd" in argv[4]
+    assert "--version" in argv[4]
+
+
+async def test_missing_working_directory_is_actionable(
+    fake_proc_factory,
+    tmp_path,
+) -> None:
+    fake_proc_factory(stdout_lines=[], exit_code=0)
+    missing = tmp_path / "not-created"
+    adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(working_dir=str(missing)))
+    handle = await adapter.submit(TaskRequest(summary="s", instructions="x"))
+    updates = [update async for update in adapter.updates(handle)]
+    assert updates[-1].error is not None
+    assert updates[-1].error.code == "working_directory_missing"
+    assert str(missing) in updates[-1].error.message
+
+
+async def test_diagnostics_checks_version_and_auth_without_model_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(working_dir=str(tmp_path)))
+    monkeypatch.setattr(adapter, "_resolve_cli", lambda: "/opt/claude")
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_probe(_cli: str, args: tuple[str, ...], *, cwd: str):
+        assert cwd == str(tmp_path)
+        calls.append(args)
+        if args == ("--version",):
+            return {"returncode": 0, "output": "2.1.220", "error": ""}
+        return {
+            "returncode": 0,
+            "output": '{"loggedIn":true}',
+            "error": "",
+        }
+
+    monkeypatch.setattr(adapter, "_probe", fake_probe)
+
+    diagnostics = await adapter.diagnostics()
+
+    assert diagnostics["available"] is True
+    assert diagnostics["authenticated"] is True
+    assert diagnostics["version"] == "2.1.220"
+    assert calls == [("--version",), ("auth", "status")]

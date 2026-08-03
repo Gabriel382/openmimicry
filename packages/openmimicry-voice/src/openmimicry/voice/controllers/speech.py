@@ -234,6 +234,36 @@ class SpeechController:
                 with suppress(Exception):
                     await cast(Callable[..., Awaitable[Any]], close)()
 
+    async def replace_tts(self, adapter: TTSAdapter, *, config: VoiceConfig) -> None:
+        """Atomically warm a replacement TTS adapter without restarting STT."""
+
+        await self.interrupt()
+        prepare = getattr(adapter, "prepare", None)
+        try:
+            if callable(prepare):
+                await cast(Callable[..., Awaitable[Any]], prepare)(
+                    TTSConfig(
+                        engine=config.tts.engine,
+                        voice=config.tts.voice,
+                        rate=config.tts.rate,
+                        interruptible=config.tts.interruptible,
+                    )
+                )
+        except Exception:
+            close = getattr(adapter, "close", None)
+            if callable(close):
+                with suppress(Exception):
+                    await cast(Callable[..., Awaitable[Any]], close)()
+            raise
+        previous = self._tts
+        self._tts = adapter
+        self._cfg = config
+        self._tts_ready = True
+        close = getattr(previous, "close", None)
+        if callable(close):
+            with suppress(Exception):
+                await cast(Callable[..., Awaitable[Any]], close)()
+
     # --------------------------------------------------------- TTS / barge-in
 
     async def say(

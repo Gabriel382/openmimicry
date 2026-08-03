@@ -190,6 +190,56 @@ def _env_overrides(env: Mapping[str, str] | None = None) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Same-schema compatibility aliases
+# ---------------------------------------------------------------------------
+
+
+def _normalise_legacy_options(data: dict[str, Any]) -> None:
+    """Translate retired option names without weakening strict validation.
+
+    Some v1.7/v1.8 development configurations used
+    ``llm.backends.<name>.web_search: bool`` before the final v1.8 schema
+    introduced the three-state ``web_search_mode`` option. Both forms carry
+    schema version 2, so the numbered schema migration registry cannot repair
+    them. Normalise this one documented alias in memory, then let Pydantic
+    continue to reject every other unknown key.
+    """
+
+    llm = data.get("llm")
+    if not isinstance(llm, MutableMapping):
+        return
+    backends = llm.get("backends")
+    if not isinstance(backends, MutableMapping):
+        return
+
+    for backend_name, backend in backends.items():
+        if not isinstance(backend, MutableMapping) or "web_search" not in backend:
+            continue
+
+        legacy = backend.pop("web_search")
+        if "web_search_mode" in backend:
+            # The current option is authoritative when both are present.
+            continue
+
+        if isinstance(legacy, bool):
+            backend["web_search_mode"] = "auto" if legacy else "off"
+            continue
+        if isinstance(legacy, str):
+            lowered = legacy.strip().lower()
+            if lowered in _TRUE_STRS:
+                backend["web_search_mode"] = "auto"
+                continue
+            if lowered in _FALSE_STRS:
+                backend["web_search_mode"] = "off"
+                continue
+
+        raise ConfigError(
+            "legacy web_search must be a boolean; use web_search_mode: off, auto, or always",
+            where=f"llm.backends.{backend_name}.web_search",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -268,7 +318,10 @@ def load(
         merged = migrate(merged, declared, SCHEMA_VERSION)
         merged["schema_version"] = SCHEMA_VERSION
 
-    # 7. Validate.
+    # 7. Same-schema compatibility aliases.
+    _normalise_legacy_options(merged)
+
+    # 8. Validate.
     try:
         return AppConfig.model_validate(merged)
     except ValidationError as exc:

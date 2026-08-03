@@ -11,8 +11,8 @@
 import type { CSSProperties } from "react";
 
 import { AvatarHost } from "../components/AvatarHost";
-import { AvatarStatusBubble } from "../components/AvatarStatusBubble";
 import { SpeechBubble } from "../components/SpeechBubble";
+import { ThinkingBubble } from "../components/ThinkingBubble";
 import { useAppearance } from "../hooks/useAppearance";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
@@ -26,11 +26,12 @@ export function OverlayRoute(): JSX.Element {
     "--om-bubble-max-width": `${appearance.layout.bubble_max_width}px`,
     "--om-avatar-width": `${appearance.layout.avatar_width}px`,
     "--om-avatar-scale": String(appearance.layout.avatar_scale),
+    "--om-accent": appearance.theme.accent,
   };
   return (
     <div className="overlay-route" data-route="overlay" style={style}>
-      <AvatarStatusBubble />
       <AvatarHost />
+      <ThinkingBubble />
       <SpeechBubble timing={appearance.behaviour.bubble} />
     </div>
   );

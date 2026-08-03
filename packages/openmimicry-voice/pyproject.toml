@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-voice"
-version = "1.6.4"
+version = "1.8.5"
 description = "OpenMimicry voice: isolated Faster-Whisper/Piper runtime, legacy realtime adapters, and controllers."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "openmimicry-core>=1.6.4",
+    "openmimicry-core>=1.8.5",
 ]
 
 [project.optional-dependencies]

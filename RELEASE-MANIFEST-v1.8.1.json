@@ -1,0 +1,39 @@
+{
+  "name": "OpenMimicry",
+  "version": "1.8.1",
+  "configuration_schema": 2,
+  "artifact": "OpenMimicry-v1.8.1-config-compat-source.zip",
+  "documentation_artifact": "OpenMimicry-v1.8.1-config-compat-docs.zip",
+  "license": "MIT",
+  "inherits": "1.8.0",
+  "fixes": [
+    "normalise llm.backends.<name>.web_search=true to web_search_mode=auto",
+    "normalise llm.backends.<name>.web_search=false to web_search_mode=off",
+    "prefer explicit web_search_mode when both keys are present",
+    "preserve source configuration files",
+    "report invalid legacy values with an actionable path"
+  ],
+  "excluded_private_data": [
+    "credentials",
+    "config/user.yaml",
+    "raw_audio",
+    "voice_references",
+    "memory_databases",
+    "task_journals",
+    "logs",
+    "model_caches",
+    "local_characters",
+    "local_personalities",
+    "companion_exports"
+  ],
+  "verification": {
+    "python_tests_passed": 637,
+    "frontend_test_files_passed": 17,
+    "frontend_tests_passed": 94,
+    "ruff": "passed",
+    "pyright": "passed",
+    "typescript": "passed",
+    "production_dependency_audit": "no_known_vulnerabilities",
+    "windows_runtime": "target_machine_required"
+  }
+}

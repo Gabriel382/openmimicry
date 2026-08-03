@@ -41,12 +41,14 @@ llm:
       adapter: litellm
       model: openrouter/openai/gpt-oss-20b
       api_key_env: OPENROUTER_API_KEY
+      web_search_mode: auto      # off | auto | always
       request_timeout_s: 90
     ollama:
       adapter: litellm
       model: ollama_chat/gpt-oss:20b
       api_base: http://127.0.0.1:11434
       api_key_env: null
+      web_search_mode: off
       request_timeout_s: 180
 
 voice:
@@ -229,6 +231,12 @@ migration for legacy single-LLM and voice configurations. The backend opts into
 that migration in memory and never overwrites the source file. Library callers
 remain strict unless they pass `allow_migrate=True`; a version newer than the
 running code is always rejected.
+
+Version 1.8.1 also normalises the short-lived schema-v2 option
+`llm.backends.<name>.web_search: true|false` to
+`web_search_mode: auto|off`. This compatibility alias is applied in memory
+because both the old and current configurations identify themselves as schema
+version 2. New configuration should always use `web_search_mode`.
 
 ## 6. Profiles
 

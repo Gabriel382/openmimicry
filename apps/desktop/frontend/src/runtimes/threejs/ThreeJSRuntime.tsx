@@ -16,6 +16,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { pickClip, pickGestureClip } from "./clips";
 import { mergeWeights, resolveExpression } from "./expressions";
+import { createScene, type SceneHandles } from "./scene";
+import {
+  applyModelTransform,
+  captureModelBasis,
+  type ModelBasis,
+  type ModelTransform,
+} from "./transform";
 import type { CharacterController } from "./types";
 
 export interface ThreeJSProjection {
@@ -37,6 +44,9 @@ export interface ThreeJSProjection {
   gazeTarget?: string;
   fadeMs?: number;
   intensity?: number;
+  animationSpeed?: number;
+  animations?: Record<string, string>;
+  transform?: ModelTransform;
 }
 
 export interface ThreeJSRuntimeProps {
@@ -58,11 +68,27 @@ export function ThreeJSRuntime(props: ThreeJSRuntimeProps): JSX.Element {
   const projection = props.projection;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<CharacterController | null>(null);
+  const sceneRef = useRef<SceneHandles | null>(null);
+  const canvasRef = useRef<Node | null>(null);
+  const basisRef = useRef<ModelBasis | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
   const assetUrl = projection?.asset?.url ?? null;
   const assetKind = projection?.asset?.kind ?? "vrm";
+  const animationManifestKey = useMemo(
+    () =>
+      JSON.stringify(
+        Object.entries(projection?.animations ?? {}).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ),
+    [projection?.animations],
+  );
+  const transformKey = useMemo(
+    () => JSON.stringify(projection?.transform ?? null),
+    [projection?.transform],
+  );
 
   // -----------------------------------------------------------------------
   // Asset lifecycle
@@ -79,15 +105,52 @@ export function ThreeJSRuntime(props: ThreeJSRuntimeProps): JSX.Element {
 
     (async () => {
       try {
-        const ctrl = loader
-          ? await loader(assetUrl)
-          : await defaultLoad(assetUrl, assetKind);
+        let ctrl: CharacterController;
+        if (loader) {
+          ctrl = await loader(assetUrl);
+        } else {
+          const host = containerRef.current;
+          if (!host) throw new Error("Three.js mount is unavailable");
+          const width = Math.max(1, host.clientWidth || 360);
+          const height = Math.max(1, host.clientHeight || 360);
+          const handles = createScene({ width, height, lighting: "studio" });
+          if (canvasRef.current?.parentNode === host) {
+            host.removeChild(canvasRef.current);
+          }
+          sceneRef.current?.dispose();
+          sceneRef.current = handles;
+          const canvas = (handles.renderer as unknown as { domElement?: Node }).domElement;
+          if (canvas) {
+            host.appendChild(canvas);
+            canvasRef.current = canvas;
+          }
+          ctrl = await defaultLoad(assetUrl, assetKind, handles.scene);
+        }
+        if (ctrl.loadAnimation) {
+          const animations = JSON.parse(animationManifestKey) as [string, string][];
+          for (const [name, url] of animations) {
+            await ctrl.loadAnimation(url, name);
+          }
+        }
         if (cancelled) {
           ctrl.dispose();
           return;
         }
         controllerRef.current?.dispose();
         controllerRef.current = ctrl;
+        try {
+          basisRef.current = captureModelBasis(ctrl.root);
+          applyModelTransform(
+            ctrl.root,
+            basisRef.current,
+            projection?.transform,
+          );
+        } catch {
+          // Injected/test controllers and unusual loaders may expose a
+          // non-Three root. Rendering and animation remain usable; only
+          // dashboard transform controls are unavailable for that asset.
+          basisRef.current = null;
+        }
         setStatus("ready");
       } catch (e) {
         if (cancelled) return;
@@ -100,15 +163,50 @@ export function ThreeJSRuntime(props: ThreeJSRuntimeProps): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [assetUrl, assetKind, props.vrmLoader, props.gltfLoader]);
+  }, [
+    assetUrl,
+    assetKind,
+    props.vrmLoader,
+    props.gltfLoader,
+    animationManifestKey,
+  ]);
 
   // Tear down the controller on unmount.
   useEffect(() => {
     return () => {
       controllerRef.current?.dispose();
       controllerRef.current = null;
+      basisRef.current = null;
+      sceneRef.current?.dispose();
+      sceneRef.current = null;
+      canvasRef.current?.parentNode?.removeChild(canvasRef.current);
+      canvasRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const controller = controllerRef.current;
+    const basis = basisRef.current;
+    if (!controller || !basis) return;
+    applyModelTransform(controller.root, basis, projection?.transform);
+  }, [status, transformKey]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    let frame = 0;
+    let previous = performance.now();
+    const render = (now: number) => {
+      const delta = Math.min(0.1, Math.max(0, (now - previous) / 1000));
+      previous = now;
+      const speed = Math.max(0.1, Math.min(4, projection?.animationSpeed ?? 1));
+      controllerRef.current?.update?.(delta * speed);
+      scene.renderer.render(scene.scene, scene.camera);
+      frame = requestAnimationFrame(render);
+    };
+    frame = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(frame);
+  }, [status, projection?.animationSpeed]);
 
   // -----------------------------------------------------------------------
   // Directive application
@@ -165,7 +263,7 @@ export function ThreeJSRuntime(props: ThreeJSRuntimeProps): JSX.Element {
     }
     ctrl.setExpression(computed.expressionWeights);
     ctrl.setGazeTarget(computed.gazeTarget);
-  }, [computed]);
+  }, [computed, status]);
 
   // -----------------------------------------------------------------------
   // Render
@@ -197,13 +295,14 @@ export function ThreeJSRuntime(props: ThreeJSRuntimeProps): JSX.Element {
 async function defaultLoad(
   url: string,
   kind: "vrm" | "gltf",
+  scene: import("three").Scene,
 ): Promise<CharacterController> {
   if (kind === "vrm") {
     const mod = await import("./vrm");
-    return mod.loadVrmCharacter({ url });
+    return mod.loadVrmCharacter({ url, scene });
   }
   const mod = await import("./gltf");
-  return mod.loadGltfCharacter({ url });
+  return mod.loadGltfCharacter({ url, scene });
 }
 
 function clamp01(n: number): number {

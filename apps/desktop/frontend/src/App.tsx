@@ -10,8 +10,7 @@
  * the backend-hosted browser dashboard.
  */
 
-import { useEffect } from "react";
-import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 import { OverlayRoute } from "./routes/OverlayRoute";
 import { ControlsRoute } from "./routes/ControlsRoute";
@@ -27,20 +26,28 @@ function DashboardRedirect(): JSX.Element {
 }
 
 export function App(): JSX.Element {
+  const [route, setRoute] = useState(() => currentRoute());
+  useEffect(() => {
+    const update = () => setRoute(currentRoute());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+
+  let content: JSX.Element;
+  if (route === "/overlay") content = <OverlayRoute />;
+  else if (route === "/controls") content = <ControlsRoute />;
+  else if (route === "/composer") content = <ComposerRoute />;
+  else content = <DashboardRedirect />;
+
   return (
     <WSProvider>
       <TauriVoiceBridge />
-      <HashRouter>
-        <Routes>
-          <Route path="/overlay" element={<OverlayRoute />} />
-          <Route path="/controls" element={<ControlsRoute />} />
-          <Route path="/composer" element={<ComposerRoute />} />
-          <Route path="/dashboard" element={<DashboardRedirect />} />
-          <Route path="/panel" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </HashRouter>
+      {content}
     </WSProvider>
   );
+}
+
+function currentRoute(): string {
+  const value = window.location.hash.replace(/^#/, "").split("?")[0] ?? "/";
+  return value.startsWith("/") ? value : "/";
 }

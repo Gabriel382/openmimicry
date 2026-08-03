@@ -101,6 +101,9 @@ def build_threejs_projection(
         "intensity": intensity,
         "gazeTarget": directive.gaze or runtime_cfg.get("default_gaze") or "towards_user",
         "fadeMs": int(runtime_cfg.get("fade_ms", DEFAULT_FADE_MS)),
+        "animationSpeed": float(runtime_cfg.get("animation_speed", 1.0)),
+        "animations": dict(runtime_cfg.get("animations", {})),
+        "transform": _model_transform(pack, runtime_cfg=runtime_cfg),
     }
 
     if directive.gesture:
@@ -233,6 +236,60 @@ def _default_kind(pack: CharacterPack) -> str:
     # because the projector is pure. Default to gltf so the URL is
     # well-formed; the adapter logs the misuse separately.
     return "gltf"
+
+
+def _model_transform(
+    pack: CharacterPack,
+    *,
+    runtime_cfg: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a bounded per-pack transform for the desktop renderer."""
+
+    defaults: dict[str, Any] = {
+        "position": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0],
+        "scale": 1.0,
+        "autoFit": True,
+        "targetHeight": 0.72,
+        "targetY": 1.3,
+    }
+    metadata_value = pack.metadata.get("transform") if pack.metadata else None
+    configured = runtime_cfg.get("transforms", {})
+    pack_value = configured.get(pack.id) if isinstance(configured, dict) else None
+    selected = pack_value if isinstance(pack_value, dict) else metadata_value
+    if not isinstance(selected, dict):
+        return defaults
+
+    def vector(name: str) -> list[float]:
+        raw = selected.get(name, defaults[name])
+        if not isinstance(raw, (list, tuple)) or len(raw) != 3:
+            return list(defaults[name])
+        try:
+            values = [float(item) for item in raw]
+        except (TypeError, ValueError):
+            return list(defaults[name])
+        return [max(-20.0, min(20.0, item)) for item in values]
+
+    def number(name: str, low: float, high: float) -> float:
+        raw = selected.get(name, selected.get(_camel(name), defaults[_camel(name)]))
+        try:
+            return max(low, min(high, float(raw)))
+        except (TypeError, ValueError):
+            return float(defaults[_camel(name)])
+
+    return {
+        "position": vector("position"),
+        "rotation": vector("rotation"),
+        "scale": number("scale", 0.05, 10.0),
+        "autoFit": bool(selected.get("auto_fit", selected.get("autoFit", True))),
+        "targetHeight": number("target_height", 0.1, 3.0),
+        "targetY": number("target_y", -3.0, 5.0),
+    }
+
+
+def _camel(name: str) -> str:
+    head, *tail = name.split("_")
+    return head + "".join(part.title() for part in tail)
 
 
 def _to_static_url(path: str, pack_id: str, static_url_prefix: str) -> str:

@@ -72,8 +72,12 @@ class MockTaskRuntimeAdapter:
     name: str = "mock"
     capabilities: set[str] = {"mock", "shell"}
 
-    def __init__(self, *, scripted_updates: list[TaskUpdate] | None = None,
-                 final_result: TaskResult | None = None) -> None: ...
+    def __init__(
+        self,
+        *,
+        scripted_updates: list[TaskUpdate] | None = None,
+        final_result: TaskResult | None = None,
+    ) -> None: ...
 
     async def submit(self, req: TaskRequest) -> TaskHandle: ...
     async def status(self, handle: TaskHandle) -> TaskStatus: ...

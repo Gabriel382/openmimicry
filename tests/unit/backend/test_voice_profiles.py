@@ -4,6 +4,7 @@ import io
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 import yaml
@@ -37,14 +38,6 @@ def test_named_reference_profiles_are_listed_and_resolved(tmp_path: Path) -> Non
     profile, directory = store.resolve("alice")
     assert profile["provider"] == "chatterbox-local"
     assert (directory / "reference.wav").read_bytes() == WAV
-    assert (
-        store.match_active(
-            provider="chatterbox-local",
-            voice_id="local-reference",
-            reference_path=str(directory / "reference.wav"),
-        )
-        == "alice"
-    )
 
 
 def test_voice_export_excludes_biometric_audio_by_default(tmp_path: Path) -> None:
@@ -159,32 +152,5 @@ async def test_whole_companion_export_and_import_round_trip(
         confirm_voice_reference=False,
     )
 
-    assert imported["companion"]["id"] == "octo_backup"
+    assert cast(dict[str, Any], imported)["companion"]["id"] == "octo_backup"
     assert (destination / "companions/octo_backup/companion.yaml").is_file()
-
-
-async def test_companion_export_normalizes_human_friendly_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = Path(__file__).resolve().parents[3]
-    personality = tmp_path / "personality.yml"
-    personality.write_text("system_prompt: Test.\n", encoding="utf-8")
-    monkeypatch.setenv("OPENMIMICRY_PERSONALITY_PATH", str(personality))
-    state = SimpleNamespace(
-        active_pack="octomimic",
-        active_voice_profile=None,
-        character_registry=CharacterRegistry([str(root / "characters")]),
-        appearance=load_appearance(root / "config/theme.yml"),
-        config=SimpleNamespace(app=SimpleNamespace(data_dir=str(tmp_path))),
-    )
-
-    exported = await companions.export_current_companion(
-        _Request(state),  # type: ignore[arg-type]
-        companion_id="GLaDOS-v1",
-        name="GLaDOS",
-        include_voice_reference=False,
-    )
-
-    assert exported.headers["content-disposition"].endswith('filename="glados-v1.omprofile.zip"')
-    with zipfile.ZipFile(io.BytesIO(exported.body)) as archive:
-        assert yaml.safe_load(archive.read("companion.yaml"))["id"] == "glados-v1"

@@ -45,6 +45,7 @@ import asyncio
 from openmimicry.core import EventBus
 from openmimicry.voice import MockSTTAdapter, MockTTSAdapter, SpeechController
 
+
 async def main():
     bus = EventBus()
     stt = MockSTTAdapter()
@@ -69,6 +70,7 @@ async def main():
     await ctl.disable_live_listening()
 
     await ctl.stop()
+
 
 asyncio.run(main())
 ```

@@ -7,8 +7,9 @@ import functools
 import json
 import sys
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 def _send(value: dict[str, object]) -> None:

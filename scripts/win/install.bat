@@ -42,6 +42,10 @@ if /i "%PROFILE%"=="openrouter-voice" (
     "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
     "%PY%" -m pip install -e "packages\openmimicry-voice[voice,piper-community]" || goto :error
 )
+if /i "%PROFILE%"=="integrated" (
+    "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
+    "%PY%" -m pip install -e "packages\openmimicry-voice[voice,piper-community]" || goto :error
+)
 if /i "%PROFILE%"=="openrouter-commercial" (
     "%PY%" -m pip install -e "packages\openmimicry-llm[litellm]" || goto :error
     "%PY%" -m pip install -e "packages\openmimicry-voice[voice]" || goto :error

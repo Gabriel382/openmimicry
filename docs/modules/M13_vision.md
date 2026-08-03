@@ -37,17 +37,20 @@ class HandLandmark(BaseModel, frozen=True):
     y: float  # 0..1 normalised
     z: float  # depth, relative
 
+
 class HandPose(BaseModel, frozen=True):
     hand: Literal["left", "right"]
-    landmarks: list[HandLandmark]   # exactly 21
+    landmarks: list[HandLandmark]  # exactly 21
     confidence: float
 
+
 class GestureDetection(BaseModel, frozen=True):
-    name: str                       # e.g. "wave", "thumbs_up", "open_palm"
+    name: str  # e.g. "wave", "thumbs_up", "open_palm"
     hand: Literal["left", "right", "both"]
     confidence: float
-    pose: HandPose | None = None    # optional raw landmarks
+    pose: HandPose | None = None  # optional raw landmarks
     metadata: dict[str, Any] = {}
+
 
 class VisionConfig(BaseModel, frozen=True):
     enabled: bool = False
@@ -55,8 +58,8 @@ class VisionConfig(BaseModel, frozen=True):
     target_fps: int = 15
     min_detection_confidence: float = 0.6
     min_tracking_confidence: float = 0.6
-    classifier: str = "default"     # name of registered GestureClassifier
-    gesture_map: dict[str, dict] = {}   # gesture name -> partial AvatarDirective dict
+    classifier: str = "default"  # name of registered GestureClassifier
+    gesture_map: dict[str, dict] = {}  # gesture name -> partial AvatarDirective dict
 ```
 
 ```python
@@ -65,9 +68,11 @@ class HandPoseStarted(_Event):
     kind: Literal["hand_pose_start"] = "hand_pose_start"
     hand: Literal["left", "right"]
 
+
 class HandPoseEnded(_Event):
     kind: Literal["hand_pose_end"] = "hand_pose_end"
     hand: Literal["left", "right"]
+
 
 class GestureDetected(_Event):
     kind: Literal["gesture"] = "gesture"
@@ -79,7 +84,7 @@ class GestureDetected(_Event):
 @runtime_checkable
 class VisionAdapter(Protocol):
     name: str
-    capabilities: set[str]     # e.g. {"hands", "gestures"}; future: {"body", "face"}
+    capabilities: set[str]  # e.g. {"hands", "gestures"}; future: {"body", "face"}
 
     async def start(self, config: VisionConfig) -> None: ...
     async def stop(self) -> None: ...
@@ -99,6 +104,7 @@ class GestureClassifier(Protocol):
     Implementations may be rule-based, scikit-learn, ONNX, TF-lite. The
     adapter does not assume which.
     """
+
     name: str
 
     def classify(self, pose: HandPose) -> GestureDetection | None: ...
@@ -158,12 +164,12 @@ class MockVisionAdapter:
     Call .push_gesture(name, hand="right", confidence=0.95) to drive the
     async stream. .push_pose(hand="right") emits HandPoseStarted/Ended pairs.
     """
+
     name = "mock"
     capabilities = {"hands", "gestures"}
 
     def __init__(self) -> None: ...
-    def push_gesture(self, name: str, *, hand: str = "right",
-                     confidence: float = 0.9) -> None: ...
+    def push_gesture(self, name: str, *, hand: str = "right", confidence: float = 0.9) -> None: ...
     def push_pose(self, hand: str = "right") -> None: ...
     async def start(self, config: VisionConfig) -> None: ...
     async def stop(self) -> None: ...
@@ -176,7 +182,9 @@ class MockVisionAdapter:
 
 class MockGestureClassifier:
     """Returns a scripted sequence regardless of input."""
+
     name = "mock"
+
     def __init__(self, script: list[GestureDetection]) -> None: ...
     def classify(self, pose: HandPose) -> GestureDetection | None: ...
 ```

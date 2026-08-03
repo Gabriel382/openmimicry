@@ -4,7 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OpenMimicry Dashboard</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23ff8a3d'/%3E%3Ccircle cx='32' cy='28' r='13' fill='white'/%3E%3Ccircle cx='32' cy='28' r='5' fill='%23843f20'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
   <body>
@@ -104,7 +103,7 @@
         <div class="card-heading"><h2>Whole companion profile</h2><span class="badge">v1.7</span></div>
         <p class="field-hint">A companion profile combines the current character images, personality, appearance, and selected named voice. API tokens, memory, history, logs, and model caches are never exported.</p>
         <form id="companion-export-form" class="settings-form">
-          <label><span>Profile id</span><input id="companion-export-id" required maxlength="64" placeholder="My companion (normalized on export)" /></label>
+          <label><span>Profile id</span><input id="companion-export-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_companion" /></label>
           <label><span>Display name</span><input id="companion-export-name" required maxlength="128" placeholder="My companion" /></label>
           <label><span>Voice reference</span><select id="companion-export-voice"><option value="false">Exclude biometric audio</option><option value="true">Include WAV/MP3 after rights confirmation</option></select></label>
           <button type="submit">Export whole companion</button>
@@ -126,10 +125,28 @@
         <div class="card-heading"><h2>Avatar settings</h2><span class="badge">live</span></div>
         <form id="settings-form" class="settings-form">
           <label><span>Character pack</span><select id="pack"><option value="octomimic">octomimic</option></select></label>
-          <button id="swap-pack" type="button">Apply pack</button>
-          <label><span>Runtime</span><select id="runtime"><option>sprite2d</option><option>threejs</option><option>live3d</option><option>unity</option><option>external</option></select></label>
-          <button id="swap-runtime" type="button">Apply runtime</button>
+          <button id="swap-pack" type="button">Apply character</button>
+          <label><span>Required runtime</span><select id="runtime" disabled><option>sprite2d</option><option>threejs</option><option>unity</option><option>external</option></select></label>
+          <span class="field-hint">Runtime follows the pack automatically and is saved with it.</span>
         </form>
+        <details id="threejs-settings">
+          <summary>3D framing and animation</summary>
+          <form id="threejs-transform-form" class="settings-form">
+            <label><span>Automatic fit</span><select id="threejs-auto-fit"><option value="true">On — fit and center model</option><option value="false">Off — use asset coordinates</option></select></label>
+            <label><span>Scale multiplier</span><input id="threejs-scale" type="number" min="0.05" max="10" step="0.05" /></label>
+            <label><span>Position X</span><input id="threejs-position-x" type="number" min="-20" max="20" step="0.01" /></label>
+            <label><span>Position Y</span><input id="threejs-position-y" type="number" min="-20" max="20" step="0.01" /></label>
+            <label><span>Position Z</span><input id="threejs-position-z" type="number" min="-20" max="20" step="0.01" /></label>
+            <label><span>Rotation X (°)</span><input id="threejs-rotation-x" type="number" min="-360" max="360" step="1" /></label>
+            <label><span>Rotation Y (°)</span><input id="threejs-rotation-y" type="number" min="-360" max="360" step="1" /></label>
+            <label><span>Rotation Z (°)</span><input id="threejs-rotation-z" type="number" min="-360" max="360" step="1" /></label>
+            <label><span>Fitted height</span><input id="threejs-target-height" type="number" min="0.1" max="3" step="0.01" /></label>
+            <label><span>Vertical center</span><input id="threejs-target-y" type="number" min="-3" max="5" step="0.01" /></label>
+            <label><span>Animation speed</span><input id="threejs-animation-speed" type="number" min="0.1" max="4" step="0.1" /></label>
+            <button type="submit">Save and preview 3D settings</button>
+          </form>
+          <p class="field-hint">Values are saved per character. Changes preview immediately without restarting the backend or accumulating offsets between messages.</p>
+        </details>
         <form id="pack-import-form" class="import-form">
           <label for="pack-zip">Import character ZIP</label>
           <input id="pack-zip" type="file" accept=".zip,application/zip" />
@@ -164,18 +181,17 @@
           <button type="button" id="llm-discover">Load available models</button>
           <span></span><button type="submit">Use model</button>
         </form>
+        <form id="llm-web-form" class="settings-form">
+          <label><span>Internet research</span><select id="llm-web-mode"><option value="off">Off</option><option value="auto">Automatic for current/research questions</option><option value="always">Always (advanced)</option></select></label>
+          <button type="submit">Save web mode</button>
+        </form>
         <form id="llm-token-form" class="settings-form" autocomplete="off">
           <label><span>Session API token</span><input id="llm-token" type="password" maxlength="8192" autocomplete="new-password" placeholder="Not saved to disk" /></label>
           <button type="submit">Use until exit</button>
           <span id="llm-credential-status" class="field-hint">Checking credential source…</span>
           <button type="button" id="llm-token-clear" class="quiet">Clear session token</button>
         </form>
-        <form id="llm-web-form" class="settings-form">
-          <label><span>Internet grounding</span><select id="llm-web-search"><option value="false">Off</option><option value="true">On — search the web for every request</option></select></label>
-          <button type="submit">Save web access</button>
-        </form>
-        <p id="llm-web-hint" class="field-hint">Web grounding is available for OpenRouter backends. It adds linked citations and may add search charges even with a free model.</p>
-        <p class="field-hint">OpenRouter may use <code>OPENROUTER_API_KEY</code> or the session-only token above. Ollama discovery reads installed models from the local <code>/api/tags</code> endpoint. Backend/model switches apply to the next turn.</p>
+        <p class="field-hint">OpenRouter may use <code>OPENROUTER_API_KEY</code> or the session-only token above. Automatic web mode uses research only for time-sensitive or explicit lookup questions, never simple greetings. Ollama discovery reads installed models from the local <code>/api/tags</code> endpoint.</p>
         <p id="llm-error" class="error" role="alert"></p>
       </section>
 
@@ -223,15 +239,25 @@
           <button id="memory-clear" type="button" class="quiet">Delete all</button>
         </div>
         <div id="memory-records" class="memory-records"><p class="empty">No retained facts.</p></div>
-        <p class="field-hint">Turning memory on defaults to private Local SQLite storage. Selecting None turns memory off. Changes require a backend restart. Retrieval is deadline-bounded; writes happen after the reply. Raw audio is never stored. Hindsight retention/deletion policy is managed by its external service.</p>
+        <p class="field-hint">Turning memory on defaults to private Local SQLite storage. Selecting None turns memory off. Settings refresh the memory provider in place while controls are temporarily blocked. Retrieval is deadline-bounded; writes happen after the reply. Raw audio is never stored.</p>
         <p id="memory-error" class="error" role="alert"></p>
       </section>
 
-      <section class="card tasks-card">
-        <div class="card-heading"><h2>Tasks</h2><span id="task-count" class="badge">0 active</span></div>
+      <section id="notifications-section" class="card tasks-card">
+        <div class="card-heading"><h2>Tasks</h2><div><span id="task-count" class="badge">0 active</span> <button id="refresh-task-archive" type="button" class="quiet">Refresh history</button></div></div>
         <div id="tasks" class="tasks" role="list">
           <p class="empty">No tasks running. Tasks appear only after an explicit delegation request.</p>
         </div>
+        <div class="card-heading task-runtime-heading">
+          <h3>Runtime readiness</h3>
+          <button id="refresh-task-runtime" type="button" class="quiet">Check Claude</button>
+        </div>
+        <pre id="task-runtime-status">Loading task runtime diagnostics…</pre>
+        <p class="field-hint">This checks the CLI version, authentication, configured project directory, and persistent journal without sending a model request or consuming Claude usage.</p>
+        <h3>Restart-safe history</h3>
+        <div id="task-archive" class="tasks" role="list"><p class="empty">Loading task journal…</p></div>
+        <h3>Notifications <span id="notification-count" class="badge">0 unread</span></h3>
+        <div id="notifications" class="tasks" role="list"><p class="empty">No task notifications.</p></div>
       </section>
 
       <section class="card diagnostics-card">

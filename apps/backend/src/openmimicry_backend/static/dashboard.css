@@ -75,6 +75,8 @@ textarea { display: block; width: 100%; margin: 8px 0; resize: vertical; }
 .task small, .empty { color: var(--muted); }
 .task button { padding: 5px 9px; }
 .task progress { grid-column: 1 / -1; width: 100%; }
+.task-runtime-heading { margin-top: 18px; }
+.task-error { color: #ff9da3; white-space: pre-wrap; overflow-wrap: anywhere; }
 .quiet { padding: 6px 9px; color: var(--muted); }
 .diagnostics-download { display: inline-block; border: 1px solid var(--line); border-radius: 9px; text-decoration: none; }
 pre { overflow: auto; margin: 0; padding: 12px; border-radius: 10px; background: #111319; color: #b8c0cc; font-size: 12px; }

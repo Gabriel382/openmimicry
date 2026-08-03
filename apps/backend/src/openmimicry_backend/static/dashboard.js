@@ -13,6 +13,8 @@ let wakeAliases = ["Me me"];
 let sttModel = "medium.en";
 let postSpeechSilenceDuration = 1.0;
 let memoryLLMBackend = "";
+let llmProfiles = {};
+let packCatalog = new Map();
 
 async function apiError(response) {
   let detail = "";
@@ -125,7 +127,9 @@ function renderTasks() {
       const runtime = document.createElement("small");
       runtime.textContent = update.handle.runtime;
       const note = document.createElement("span");
-      note.textContent = update.note || update.handle.id;
+      const errorMessage = update.error?.message || "";
+      note.textContent = errorMessage || update.note || update.handle.id;
+      if (errorMessage) note.className = "task-error";
       const status = document.createElement("small");
       status.textContent = update.status;
       row.append(runtime, note, status);
@@ -168,6 +172,10 @@ function handleMessage(message) {
   } else if (message.type === "task.card") {
     tasks.set(message.update.handle.id, message.update);
     renderTasks();
+    if (terminalStatuses.has(message.update.status)) {
+      refreshTaskArchive().catch(() => {});
+      refreshTaskRuntimeStatus().catch(() => {});
+    }
   } else if (message.type === "system.notice") {
     if (message.message === "voice_status" && message.voice) applyVoiceStatus(message.voice);
     if (message.message === "config_updated" && message.diff) applyVoiceStatus(message.diff);
@@ -264,32 +272,20 @@ async function refreshCompanions() {
   if (!select.options.length) select.append(new Option("No imported companions", ""));
 }
 
-async function downloadChecked(path, errorTarget) {
-  const target = byId(errorTarget);
-  target.textContent = "Preparing download…";
-  try {
-    const response = await fetch(path);
-    if (!response.ok) throw new Error(await apiError(response));
-    const blob = await response.blob();
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const match = disposition.match(/filename="?([^";]+)"?/i);
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = match?.[1] || "openmimicry-export.zip";
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(link.href);
-    target.textContent = "Download ready.";
-  } catch (error) {
-    target.textContent = String(error);
-  }
+function downloadFrom(path) {
+  const link = document.createElement("a");
+  link.href = path;
+  link.style.display = "none";
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 
 async function refreshPacks() {
   const response = await fetch("/packs");
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
   const data = await response.json();
+  packCatalog = new Map((data.packs || []).map((pack) => [pack.id, pack]));
   const select = byId("pack");
   const current = select.value;
   select.replaceChildren();
@@ -301,6 +297,48 @@ async function refreshPacks() {
   }
   const selected = data.active_pack || current;
   if ([...select.options].some((option) => option.value === selected)) select.value = selected;
+  updateRequiredRuntime();
+  await refreshAvatarSettings();
+}
+
+function updateRequiredRuntime() {
+  const pack = packCatalog.get(byId("pack").value);
+  const runtime = pack?.required_runtime || "unavailable";
+  const select = byId("runtime");
+  if (![...select.options].some((option) => option.value === runtime)) {
+    select.append(new Option(runtime, runtime));
+  }
+  select.value = runtime;
+  byId("threejs-settings").hidden = runtime !== "threejs";
+}
+
+function setTransformFields(data) {
+  const transform = data.transform || {};
+  const position = transform.position || [0, 0, 0];
+  const rotation = transform.rotation || [0, 0, 0];
+  byId("threejs-auto-fit").value = String(transform.auto_fit ?? transform.autoFit ?? true);
+  byId("threejs-scale").value = String(transform.scale ?? 1);
+  byId("threejs-position-x").value = String(position[0] ?? 0);
+  byId("threejs-position-y").value = String(position[1] ?? 0);
+  byId("threejs-position-z").value = String(position[2] ?? 0);
+  byId("threejs-rotation-x").value = String(rotation[0] ?? 0);
+  byId("threejs-rotation-y").value = String(rotation[1] ?? 0);
+  byId("threejs-rotation-z").value = String(rotation[2] ?? 0);
+  byId("threejs-target-height").value = String(transform.target_height ?? transform.targetHeight ?? 0.72);
+  byId("threejs-target-y").value = String(transform.target_y ?? transform.targetY ?? 1.3);
+  byId("threejs-animation-speed").value = String(data.animation_speed ?? 1);
+}
+
+async function refreshAvatarSettings() {
+  const response = await fetch("/avatar/settings");
+  if (!response.ok) throw new Error(await apiError(response));
+  const data = await response.json();
+  if ([...byId("pack").options].some((option) => option.value === data.pack)) {
+    byId("pack").value = data.pack;
+  }
+  byId("runtime").value = data.runtime;
+  byId("threejs-settings").hidden = data.required_runtime !== "threejs";
+  setTransformFields(data);
 }
 
 async function refreshLLMSettings() {
@@ -309,6 +347,7 @@ async function refreshLLMSettings() {
     const response = await fetch("/llm/settings");
     if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
     const data = await response.json();
+    llmProfiles = data.backends || {};
     const select = byId("llm-backend");
     select.replaceChildren();
     for (const [name, profile] of Object.entries(data.backends || {})) {
@@ -331,6 +370,7 @@ async function refreshLLMSettings() {
     }
     memoryBackend.value = memoryLLMBackend;
     select.value = data.active_backend;
+    byId("llm-web-mode").value = data.backends?.[data.active_backend]?.web_search_mode || "off";
     byId("llm-model").textContent = data.active_model || "unknown";
     const modelSelect = byId("llm-model-select");
     modelSelect.replaceChildren();
@@ -339,18 +379,75 @@ async function refreshLLMSettings() {
     currentModel.textContent = data.active_model || "Load available models";
     modelSelect.append(currentModel);
     const credentials = data.backends?.[data.active_backend]?.credentials || {};
-    const webSearch = data.backends?.[data.active_backend]?.web_search || {};
-    const webSelect = byId("llm-web-search");
-    webSelect.value = String(webSearch.enabled === true);
-    webSelect.disabled = webSearch.supported !== true;
-    byId("llm-web-hint").textContent = webSearch.supported === true
-      ? "OpenRouter web grounding is available. Results include linked citations and may add search charges."
-      : "Web grounding is unavailable for this backend; switch to OpenRouter to enable it.";
     byId("llm-credential-status").textContent = credentials.session
       ? "Using a session-only token (cleared on exit)."
       : credentials.environment
         ? "Using the configured environment variable."
         : "No credential detected for this backend.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+}
+
+async function refreshTaskArchive() {
+  try {
+    const [taskResponse, notificationResponse] = await Promise.all([
+      fetch("/tasks?limit=50"),
+      fetch("/tasks/notifications"),
+    ]);
+    if (!taskResponse.ok) throw new Error(await apiError(taskResponse));
+    if (!notificationResponse.ok) throw new Error(await apiError(notificationResponse));
+    const taskData = await taskResponse.json();
+    const notificationData = await notificationResponse.json();
+    const archive = byId("task-archive");
+    archive.replaceChildren();
+    for (const task of taskData.tasks || []) {
+      const row = document.createElement("div");
+      row.className = "task";
+      const title = document.createElement("strong");
+      title.textContent = task.summary;
+      const status = document.createElement("small");
+      status.textContent = `${task.runtime} · ${task.status}`;
+      const note = document.createElement("span");
+      let resultError = "";
+      try {
+        const result = task.result_json ? JSON.parse(task.result_json) : null;
+        resultError = result?.error?.message || "";
+      } catch { /* retain the stored note */ }
+      note.textContent = resultError || task.note || task.updated_at;
+      if (resultError) note.className = "task-error";
+      row.append(title, status, note);
+      archive.append(row);
+    }
+    if (!archive.children.length) archive.innerHTML = '<p class="empty">No persisted tasks yet.</p>';
+    const notifications = byId("notifications");
+    notifications.replaceChildren();
+    for (const item of notificationData.notifications || []) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "task";
+      row.textContent = `${item.title}: ${item.message}`;
+      if (!item.read_at) row.addEventListener("click", async () => {
+        await fetch(`/tasks/notifications/${encodeURIComponent(item.id)}/read`, { method: "POST" });
+        await refreshTaskArchive();
+      });
+      notifications.append(row);
+    }
+    if (!notifications.children.length) notifications.innerHTML = '<p class="empty">No task notifications.</p>';
+    byId("notification-count").textContent = `${notificationData.unread || 0} unread`;
+  } catch (error) {
+    byId("task-archive").textContent = String(error);
+  }
+}
+
+async function refreshTaskRuntimeStatus() {
+  const target = byId("task-runtime-status");
+  target.textContent = "Checking Claude installation and authentication…";
+  try {
+    const response = await fetch("/tasks/runtime-status");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    target.textContent = JSON.stringify(data, null, 2);
   } catch (error) {
     target.textContent = String(error);
   }
@@ -529,8 +626,60 @@ for (const eventName of ["pointerup", "pointercancel"]) {
     send({ type: "ptt.up" });
   });
 }
-byId("swap-pack").addEventListener("click", () => post("/pack/swap", { pack: byId("pack").value }, "settings-error"));
-byId("swap-runtime").addEventListener("click", () => post("/runtime/swap", { runtime: byId("runtime").value }, "settings-error"));
+byId("pack").addEventListener("change", updateRequiredRuntime);
+byId("swap-pack").addEventListener("click", async () => {
+  const target = byId("settings-error");
+  target.textContent = "Loading character and compatible runtime…";
+  try {
+    const response = await fetch("/pack/swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack: byId("pack").value }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    byId("runtime").value = data.runtime;
+    target.textContent = `Saved ${data.pack} with ${data.runtime}.`;
+    await refreshAvatarSettings();
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
+byId("threejs-transform-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("settings-error");
+  target.textContent = "Applying 3D settings…";
+  const number = (id) => Number(byId(id).value);
+  try {
+    const response = await fetch("/avatar/transform", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        auto_fit: byId("threejs-auto-fit").value === "true",
+        scale: number("threejs-scale"),
+        position: [
+          number("threejs-position-x"),
+          number("threejs-position-y"),
+          number("threejs-position-z"),
+        ],
+        rotation: [
+          number("threejs-rotation-x"),
+          number("threejs-rotation-y"),
+          number("threejs-rotation-z"),
+        ],
+        target_height: number("threejs-target-height"),
+        target_y: number("threejs-target-y"),
+        animation_speed: number("threejs-animation-speed"),
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    setTransformFields(data);
+    target.textContent = "3D settings saved and previewed.";
+  } catch (error) {
+    target.textContent = String(error);
+  }
+});
 byId("wake-name-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("voice-error");
@@ -633,12 +782,12 @@ byId("voice-profile-activate").addEventListener("click", async () => {
     target.textContent = data.message;
   } catch (error) { target.textContent = String(error); }
 });
-byId("voice-profile-export").addEventListener("click", async () => {
+byId("voice-profile-export").addEventListener("click", () => {
   const id = byId("voice-profile-select").value;
   if (!id) { byId("voice-error").textContent = "Choose a saved voice first."; return; }
   const include = byId("voice-export-reference").checked;
   if (include && !window.confirm("Export the biometric reference recording? Share it only when the speaker and asset rights permit this.")) return;
-  await downloadChecked(`/voice/profiles/${encodeURIComponent(id)}/export?include_reference=${include}`, "voice-error");
+  downloadFrom(`/voice/profiles/${encodeURIComponent(id)}/export?include_reference=${include}`);
 });
 byId("voice-profile-import-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -778,6 +927,7 @@ byId("llm-form").addEventListener("submit", async (event) => {
 byId("llm-backend").addEventListener("change", () => {
   byId("llm-model-select").replaceChildren();
   byId("llm-credential-status").textContent = "Switch the backend to inspect credentials.";
+  byId("llm-web-mode").value = llmProfiles[byId("llm-backend").value]?.web_search_mode || "off";
 });
 byId("llm-discover").addEventListener("click", discoverLLMModels);
 byId("llm-model-form").addEventListener("submit", async (event) => {
@@ -842,16 +992,20 @@ byId("llm-web-form").addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         backend: byId("llm-backend").value,
-        enabled: byId("llm-web-search").value === "true",
+        mode: byId("llm-web-mode").value,
       }),
     });
     if (!response.ok) throw new Error(await apiError(response));
     await refreshLLMSettings();
-    target.textContent = "Web access saved. It applies to the next request.";
+    target.textContent = "Web research mode saved for this backend session.";
   } catch (error) {
     target.textContent = String(error);
   }
 });
+byId("refresh-task-archive").addEventListener("click", async () => {
+  await Promise.all([refreshTaskArchive(), refreshTaskRuntimeStatus()]);
+});
+byId("refresh-task-runtime").addEventListener("click", refreshTaskRuntimeStatus);
 byId("interaction-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("interaction-error");
@@ -906,7 +1060,7 @@ byId("memory-settings-form").addEventListener("submit", async (event) => {
       }),
     });
     if (!response.ok) throw new Error(await apiError(response));
-    target.textContent = "Saved. Restart the backend to activate the memory provider.";
+    target.textContent = "Saved. The memory provider was refreshed without restarting the backend.";
   } catch (error) {
     target.textContent = String(error);
   }
@@ -942,13 +1096,13 @@ byId("personality-form").addEventListener("submit", async (event) => {
   }
 });
 
-byId("companion-export-form").addEventListener("submit", async (event) => {
+byId("companion-export-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const id = byId("companion-export-id").value.trim();
   const name = byId("companion-export-name").value.trim();
   const include = byId("companion-export-voice").value === "true";
   if (include && !window.confirm("Include the selected voice reference? This is biometric material; export only with permission.")) return;
-  await downloadChecked(`/companions/current/export?companion_id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}&include_voice_reference=${include}`, "companion-error");
+  downloadFrom(`/companions/current/export?companion_id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}&include_voice_reference=${include}`);
 });
 byId("companion-import-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -988,6 +1142,8 @@ renderVoice();
 renderConversation();
 renderTasks();
 refreshHealth();
+refreshTaskArchive();
+refreshTaskRuntimeStatus();
 refreshVoiceSettings();
 refreshVoiceProfiles().catch((error) => { byId("voice-error").textContent = String(error); });
 refreshCompanions().catch((error) => { byId("companion-error").textContent = String(error); });

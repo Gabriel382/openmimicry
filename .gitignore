@@ -67,7 +67,6 @@ Thumbs.db
 !/characters/octomimic/**
 !/characters/octomimic_vrm/
 !/characters/octomimic_vrm/**
-/characters/octomimic_vrm/*.vrm
 /config/personality.local.yml
 /config/companions/
 /config/voice-profiles/

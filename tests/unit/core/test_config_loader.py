@@ -134,6 +134,43 @@ def test_user_overlay_wins_over_profile_but_env_still_wins(tmp_path: Path) -> No
     assert cfg.voice.stt.wake.names == ["EnvName"]
 
 
+def test_integrated_profile_accepts_claude_user_overlay(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[3]
+    user = tmp_path / "user.yaml"
+    user.write_text(
+        dedent(
+            """
+            tasks:
+              default_runtime: claude_code
+              database_path: ~/.openmimicry/tasks/tasks.sqlite3
+              runtimes:
+                claude_code:
+                  adapter: claude_code
+                  cli: claude
+                  auth_mode: subscription
+                  working_dir: C:/projects/openmimicry
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+    cwd_before = Path.cwd()
+    import os
+
+    os.chdir(root)
+    try:
+        cfg = load(
+            root / "config/app.yaml",
+            env={"OPENMIMICRY_USER_CONFIG": str(user)},
+            profile="integrated",
+        )
+    finally:
+        os.chdir(cwd_before)
+
+    assert cfg.llm.backends["openrouter"].web_search_mode == "off"
+    assert cfg.tasks.default_runtime == "claude_code"
+    assert cfg.tasks.runtimes["claude_code"].working_dir == "C:/projects/openmimicry"
+
+
 def test_missing_profile_raises(tmp_path: Path) -> None:
     cwd_before = Path.cwd()
     import os
@@ -203,6 +240,79 @@ def test_v1_migration_is_in_memory_and_preserves_source(tmp_path: Path) -> None:
     assert cfg.interaction.response_presentation.mode == "voice_only"
     assert cfg.memory.enabled is False
     assert yaml.read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize(
+    ("legacy_value", "expected_mode"),
+    [(True, "auto"), (False, "off"), ("yes", "auto"), ("no", "off")],
+)
+def test_legacy_backend_web_search_is_normalised_in_memory(
+    tmp_path: Path,
+    legacy_value: bool | str,
+    expected_mode: str,
+) -> None:
+    yaml = tmp_path / "app.yaml"
+    rendered = f'"{legacy_value}"' if isinstance(legacy_value, str) else str(legacy_value).lower()
+    source = dedent(
+        f"""
+        schema_version: 2
+        llm:
+          backends:
+            openrouter:
+              model: openrouter/openai/gpt-oss-20b
+              web_search: {rendered}
+        """
+    ).strip()
+    yaml.write_text(source, encoding="utf-8")
+
+    cfg = load(yaml, env={}, allow_migrate=True)
+
+    assert cfg.llm.backends["openrouter"].web_search_mode == expected_mode
+    assert yaml.read_text(encoding="utf-8") == source
+
+
+def test_current_web_search_mode_wins_over_legacy_alias(tmp_path: Path) -> None:
+    yaml = tmp_path / "app.yaml"
+    yaml.write_text(
+        dedent(
+            """
+            schema_version: 2
+            llm:
+              backends:
+                openrouter:
+                  model: openrouter/openai/gpt-oss-20b
+                  web_search: false
+                  web_search_mode: always
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load(yaml, env={})
+
+    assert cfg.llm.backends["openrouter"].web_search_mode == "always"
+
+
+def test_invalid_legacy_web_search_has_actionable_error(tmp_path: Path) -> None:
+    yaml = tmp_path / "app.yaml"
+    yaml.write_text(
+        dedent(
+            """
+            schema_version: 2
+            llm:
+              backends:
+                openrouter:
+                  model: openrouter/openai/gpt-oss-20b
+                  web_search: sometimes
+            """
+        ).strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match="web_search_mode") as exc:
+        load(yaml, env={})
+
+    assert exc.value.where == "llm.backends.openrouter.web_search"
 
 
 def test_diff_dicts_only_changed_leaves() -> None:

@@ -36,47 +36,56 @@ from typing import Literal, Union
 from pydantic import BaseModel
 from datetime import datetime
 
+
 class _Event(BaseModel, frozen=True):
     ts: datetime
+
 
 class UserTextSubmitted(_Event):
     kind: Literal["user_text"] = "user_text"
     text: str
 
+
 class UserSpeechStarted(_Event):
     kind: Literal["speech_start"] = "speech_start"
+
 
 class UserSpeechFinal(_Event):
     kind: Literal["speech_final"] = "speech_final"
     text: str
     reason: Literal["normal", "no_speech", "interrupted"] = "normal"
 
+
 class TranscriptPreview(_Event):
     kind: Literal["transcript_preview"] = "transcript_preview"
     text: str
     is_final: bool = False
 
+
 class WakeDetected(_Event):
     kind: Literal["wake"] = "wake"
     name: str
+
 
 class TurnStateChanged(_Event):
     kind: Literal["turn_state"] = "turn_state"
     turn_id: str
     sequence: int
-    state: Literal["accepted", "thinking", "presenting", "completed",
-                   "failed", "cancelled", "rejected"]
+    state: Literal[
+        "accepted", "thinking", "presenting", "completed", "failed", "cancelled", "rejected"
+    ]
     source: Literal["text", "push_to_talk", "continuous", "wake", "task"]
     reason: str | None = None
     active_turn_id: str | None = None
 
+
 class RuntimeStateChanged(_Event):
     kind: Literal["runtime_state"] = "runtime_state"
     instance_id: str
-    state: Literal["starting", "ready", "refreshing", "stopping",
-                   "stopped", "degraded"]
+    state: Literal["starting", "ready", "refreshing", "stopping", "stopped", "degraded"]
     ready: bool
     reason: str | None = None
+
 
 class ComponentHealthChanged(_Event):
     kind: Literal["component_health"] = "component_health"
@@ -87,66 +96,96 @@ class ComponentHealthChanged(_Event):
     state: Literal["unknown", "healthy", "degraded", "unavailable"]
     required: bool
 
+
 class LLMStarted(_Event):
     kind: Literal["llm_start"] = "llm_start"
+
 
 class LLMTokenStreamed(_Event):
     kind: Literal["llm_token"] = "llm_token"
     delta: str
 
+
 class LLMReplyComplete(_Event):
     kind: Literal["llm_done"] = "llm_done"
     full_text: str
 
+
 class AvatarCue(_Event):
     kind: Literal["avatar_cue"] = "avatar_cue"
-    emotion: str = "neutral"   # backend allow-listed before publication
-    action: str = "idle"       # backend allow-listed before publication
+    emotion: str = "neutral"  # backend allow-listed before publication
+    action: str = "idle"  # backend allow-listed before publication
     intensity: float = 0.6
     duration_ms: int = 1800
+
 
 class TTSStarted(_Event):
     kind: Literal["tts_start"] = "tts_start"
 
+
 class TTSChunkSpoken(_Event):
     kind: Literal["tts_chunk"] = "tts_chunk"
+
 
 class TTSFinished(_Event):
     kind: Literal["tts_done"] = "tts_done"
 
+
 class TTSInterrupted(_Event):
     kind: Literal["tts_interrupted"] = "tts_interrupted"
+
 
 class TaskSubmitted(_Event):
     kind: Literal["task_submitted"] = "task_submitted"
     handle: "TaskHandle"
     summary: str
 
+
 class TaskUpdatedEvent(_Event):
     kind: Literal["task_update"] = "task_update"
     update: "TaskUpdate"
+
 
 class TaskCompleted(_Event):
     kind: Literal["task_done"] = "task_done"
     handle: "TaskHandle"
     result: "TaskResult"
 
+
 class ConfigUpdated(_Event):
     kind: Literal["config_update"] = "config_update"
     diff: dict
 
+
 class ErrorEvent(_Event):
     kind: Literal["error"] = "error"
-    where: str           # module name
+    where: str  # module name
     message: str
     recoverable: bool = True
 
+
 RuntimeEvent = Union[
-    UserTextSubmitted, UserSpeechStarted, UserSpeechFinal, TranscriptPreview,
-    WakeDetected, TurnStateChanged, RuntimeStateChanged, ComponentHealthChanged,
-    LLMStarted, LLMTokenStreamed, LLMReplyComplete, AvatarCue,
-    TTSStarted, TTSChunkSpoken, TTSFinished, TTSInterrupted,
-    TaskSubmitted, TaskUpdatedEvent, TaskCompleted, ConfigUpdated, ErrorEvent,
+    UserTextSubmitted,
+    UserSpeechStarted,
+    UserSpeechFinal,
+    TranscriptPreview,
+    WakeDetected,
+    TurnStateChanged,
+    RuntimeStateChanged,
+    ComponentHealthChanged,
+    LLMStarted,
+    LLMTokenStreamed,
+    LLMReplyComplete,
+    AvatarCue,
+    TTSStarted,
+    TTSChunkSpoken,
+    TTSFinished,
+    TTSInterrupted,
+    TaskSubmitted,
+    TaskUpdatedEvent,
+    TaskCompleted,
+    ConfigUpdated,
+    ErrorEvent,
 ]
 ```
 
@@ -169,9 +208,8 @@ from typing import Literal, Any
 from pydantic import BaseModel
 
 State = Literal["idle", "listening", "thinking", "speaking", "happy", "error"]
-Emotion = Literal[
-    "neutral", "happy", "sad", "angry", "confused", "focused", "worried"
-]
+Emotion = Literal["neutral", "happy", "sad", "angry", "confused", "focused", "worried"]
+
 
 class AvatarDirective(BaseModel, frozen=True):
     state: State
@@ -192,12 +230,13 @@ class AvatarDirective(BaseModel, frozen=True):
 ```python
 # openmimicry.core.schemas.avatar (cont.)
 class EmotionFrames(BaseModel, frozen=True):
-    frames: str | list[str]                # folder path or explicit list
+    frames: str | list[str]  # folder path or explicit list
     speaking_frames: str | list[str] | None = None
     fps: int = 10
     loop: bool = True
     return_to: State | None = None
     hold_ms: int | None = None
+
 
 class CharacterPack(BaseModel, frozen=True):
     schema_version: int = 1
@@ -209,7 +248,9 @@ class CharacterPack(BaseModel, frozen=True):
     default_state: State = "idle"
     default_emotion: Emotion = "neutral"
     transition_ms: int = 120
-    kind: Literal["sprite2d", "advanced2d", "threejs", "vrm", "gltf", "unity", "external"] = "sprite2d"
+    kind: Literal["sprite2d", "advanced2d", "threejs", "vrm", "gltf", "unity", "external"] = (
+        "sprite2d"
+    )
     emotions: dict[State, EmotionFrames] = {}
     voice_hint: dict[str, str] = {}
     metadata: dict[str, Any] = {}
@@ -225,15 +266,18 @@ class LLMMessage(BaseModel, frozen=True):
     tool_call_id: str | None = None
     name: str | None = None
 
+
 class ToolSpec(BaseModel, frozen=True):
     name: str
     description: str
-    parameters: dict     # JSON schema
+    parameters: dict  # JSON schema
+
 
 class LLMUsage(BaseModel, frozen=True):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+
 
 class LLMChunk(BaseModel, frozen=True):
     delta: str = ""
@@ -242,8 +286,10 @@ class LLMChunk(BaseModel, frozen=True):
     tool_calls: list[dict] = []
     usage: LLMUsage | None = None
 
+
 # openmimicry.core.contracts.llm
 from typing import AsyncIterator, Protocol, Sequence, runtime_checkable
+
 
 @runtime_checkable
 class LLMAdapter(Protocol):
@@ -275,11 +321,13 @@ class STTConfig(BaseModel, frozen=True):
     vad: Literal["silero", "webrtc", "none"] = "silero"
     post_speech_silence_duration: float = 1.0  # inclusive range: 0.2..3.0
 
+
 class TTSConfig(BaseModel, frozen=True):
     engine: str = "coqui"
     voice: str = "en_female_1"
     rate: float = 1.0
     interruptible: bool = True
+
 
 class Transcript(BaseModel, frozen=True):
     text: str
@@ -287,13 +335,16 @@ class Transcript(BaseModel, frozen=True):
     confidence: float | None = None
     segments: list[dict] = []
 
+
 class WakeEvent(BaseModel, frozen=True):
     name: str
     confidence: float | None = None
 
+
 class TTSChunkBoundary(BaseModel, frozen=True):
     bytes_played: int
     timestamp_ms: int
+
 
 # openmimicry.core.contracts.voice
 @runtime_checkable
@@ -308,9 +359,11 @@ class STTAdapter(Protocol):
     def vad_active(self) -> bool: ...
     async def healthcheck(self) -> bool: ...
 
+
 from typing import AsyncIterable, Callable
 
 OnChunk = Callable[[TTSChunkBoundary], None]
+
 
 @runtime_checkable
 class TTSAdapter(Protocol):
@@ -328,6 +381,7 @@ class TTSAdapter(Protocol):
     def is_speaking(self) -> bool: ...
     async def healthcheck(self) -> bool: ...
 
+
 class SpeechController(Protocol):
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
@@ -338,6 +392,7 @@ class SpeechController(Protocol):
     async def enable_continuous_listening(self) -> None: ...
     async def enable_live_listening(self, *, wake_names: list[str] | None) -> None: ...
     async def disable_live_listening(self) -> None: ...
+
 
 class WakeController(Protocol):
     async def enable(self) -> None: ...
@@ -351,7 +406,7 @@ class WakeController(Protocol):
 @runtime_checkable
 class AvatarRuntimeAdapter(Protocol):
     name: str
-    capabilities: set[str]    # e.g. {"2d","speaking_variants"} or {"3d","gestures","gaze"}
+    capabilities: set[str]  # e.g. {"2d","speaking_variants"} or {"3d","gestures","gaze"}
 
     async def load_character(self, character_id: str, config: dict) -> None: ...
     async def apply_directive(self, directive: AvatarDirective) -> None: ...
@@ -362,10 +417,13 @@ class AvatarRuntimeAdapter(Protocol):
     async def healthcheck(self) -> bool: ...
     async def shutdown(self) -> None: ...
 
+
 class AvatarDirector(Protocol):
     """Translates RuntimeEvent into AvatarDirective. Stateless from the caller's
     perspective: side effects live on the orchestrator."""
+
     def on_event(self, event: RuntimeEvent) -> AvatarDirective | None: ...
+
 
 class AvatarOrchestrator(Protocol):
     async def start(self) -> None: ...
@@ -382,11 +440,13 @@ class TaskInput(BaseModel, frozen=True):
     value: str
     mime: str | None = None
 
+
 class TaskConstraints(BaseModel, frozen=True):
     timeout_s: int | None = None
     max_cost_usd: float | None = None
     working_dir: str | None = None
     network: bool = True
+
 
 class TaskRequest(BaseModel, frozen=True):
     summary: str
@@ -397,15 +457,19 @@ class TaskRequest(BaseModel, frozen=True):
     constraints: TaskConstraints = TaskConstraints()
     metadata: dict[str, Any] = {}
 
+
 class TaskHandle(BaseModel, frozen=True):
     id: str
     runtime: str
 
+
 TaskStatusName = Literal["queued", "running", "succeeded", "failed", "cancelled"]
+
 
 class TaskError(BaseModel, frozen=True):
     code: str
     message: str
+
 
 class Artifact(BaseModel, frozen=True):
     name: str
@@ -413,11 +477,13 @@ class Artifact(BaseModel, frozen=True):
     path: str | None = None
     inline: str | None = None
 
+
 class TaskStatus(BaseModel, frozen=True):
     handle: TaskHandle
     status: TaskStatusName
     note: str | None = None
     progress: float | None = None
+
 
 class TaskUpdate(BaseModel, frozen=True):
     handle: TaskHandle
@@ -429,12 +495,14 @@ class TaskUpdate(BaseModel, frozen=True):
     error: TaskError | None = None
     ts: datetime
 
+
 class TaskResult(BaseModel, frozen=True):
     handle: TaskHandle
     status: TaskStatusName
     artifacts: list[Artifact] = []
     summary: str | None = None
     error: TaskError | None = None
+
 
 # openmimicry.core.contracts.tasks
 @runtime_checkable
@@ -480,16 +548,20 @@ These are the canonical mocks every other module may rely on:
 class MockLLMAdapter:
     """Yields a scripted sequence of LLMChunks. Pass `script=["Hello", " ", "world"]`."""
 
+
 # openmimicry.voice.mocks
 class MockSTTAdapter:
     """Programmable: call .push_transcript(...) to drive the async stream."""
 
+
 class MockTTSAdapter:
     """Records every speak() call; stop() is honoured immediately."""
+
 
 # openmimicry.avatar.mocks
 class MockAvatarRuntimeAdapter:
     """Records every apply_directive() call into .directives_received."""
+
 
 # openmimicry.tasks.mocks
 class MockTaskRuntimeAdapter:

@@ -148,7 +148,15 @@ async def _run_task_path(
         from openmimicry.core import ErrorEvent
 
         bus.publish(ErrorEvent(ts=_now(), where="backend.chat.task", message=str(exc)))
+        _log.exception("Task submission failed")
         return
+
+    _log.info(
+        "Task %s submitted: runtime=%s summary=%s",
+        handle.id,
+        handle.runtime,
+        getattr(request_obj, "summary", "") or "",
+    )
 
     bus.publish(
         TaskSubmitted(
@@ -172,6 +180,7 @@ async def _run_task_path(
                 message=str(exc),
             )
         )
+        _log.exception("Task %s update stream failed", handle.id)
 
     try:
         result = await tasks.result(handle)
@@ -185,9 +194,24 @@ async def _run_task_path(
                 message=str(exc),
             )
         )
+        _log.exception("Task %s result lookup failed", handle.id)
         return
 
     bus.publish(TaskCompleted(ts=_now(), handle=handle, result=result))
+    if result.status == "succeeded":
+        _log.info("Task %s completed successfully", handle.id)
+    else:
+        detail = result.error.message if result.error is not None else result.summary
+        _log.error("Task %s completed with status=%s: %s", handle.id, result.status, detail)
+        from openmimicry.core import ErrorEvent
+
+        bus.publish(
+            ErrorEvent(
+                ts=_now(),
+                where="backend.chat.task",
+                message=detail or f"Task {handle.id} {result.status}",
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -222,14 +246,12 @@ async def _run_llm_path(
     except Exception as exc:
         from openmimicry.core import ErrorEvent
 
-        _log.error(
-            "LLM turn failed: adapter=%s error=%s: %s",
-            getattr(llm, "name", type(llm).__name__),
-            type(exc).__name__,
-            exc,
-            exc_info=True,
-        )
         bus.publish(ErrorEvent(ts=_now(), where="backend.chat.llm", message=str(exc)))
+        # The conversation coordinator owns the turn lease. Propagating the
+        # provider failure lets it publish a terminal ``failed`` state and
+        # release that lease; swallowing it here left the desktop permanently
+        # stuck in ``thinking`` when a provider stream hung or timed out.
+        raise
 
     reply = parse_assistant_reply("".join(raw_parts), settings)
     # Fast local/mock models can otherwise advance from thinking to the reply

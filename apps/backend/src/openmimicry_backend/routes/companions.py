@@ -9,17 +9,19 @@ import os
 import re
 import stat
 import tempfile
-import unicodedata
 import zipfile
 from pathlib import Path, PurePosixPath
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from openmimicry.core.schemas.app import TTSConfigSection
 
 from ..appearance import AppearanceConfig
-from ..user_settings import persist_avatar_pack, persist_tts_clone
+from ..avatar_selection import runtime_for_pack_kind
+from ..user_settings import persist_avatar_selection, persist_tts_clone
 from ..voice_profiles import VoiceProfileError, VoiceProfileStore
+from ..wiring import refresh_tts
 
 __all__ = ["router"]
 
@@ -29,15 +31,6 @@ _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _MAX_COMPRESSED = 96 * 1024 * 1024
 _MAX_EXPANDED = 320 * 1024 * 1024
 _MAX_ENTRIES = 3000
-
-
-def _canonical_id(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
-    slug = re.sub(r"[^a-z0-9_-]+", "-", normalized.casefold())
-    slug = re.sub(r"[-_]{2,}", "-", slug).strip("-_")[:64]
-    if not slug:
-        raise ValueError("companion id must contain a letter or number")
-    return slug
 
 
 def _safe_member(member: zipfile.ZipInfo) -> PurePosixPath:
@@ -102,8 +95,9 @@ async def export_current_companion(
     name: str = Query(min_length=1, max_length=128),
     include_voice_reference: bool = Query(default=False),
 ) -> Response:
+    if not _ID.fullmatch(companion_id):
+        raise HTTPException(status_code=422, detail="invalid companion id")
     try:
-        companion_id = _canonical_id(companion_id)
         pack_id = str(request.app.state.active_pack)
         pack_root = request.app.state.character_registry.resolve(pack_id)
         personality_path = Path(
@@ -240,10 +234,43 @@ async def activate_companion(companion_id: str, request: Request) -> dict[str, o
                         archive.write(candidate, f"{pack_id}/{candidate.relative_to(pack_root)}")
             request.app.state.character_registry.install_zip(buffer.getvalue())
             pack_path = request.app.state.character_registry.resolve(pack_id)
-        runtime = request.app.state.wiring.orchestrator.runtime
-        await runtime.load_character(pack_id, {"pack_path": str(pack_path)})
+        pack_summary = next(
+            item for item in request.app.state.character_registry.list() if item["id"] == pack_id
+        )
+        runtime_name = runtime_for_pack_kind(pack_summary["kind"])
+        if runtime_name is None:
+            raise ValueError(
+                f"companion pack kind {pack_summary['kind']!r} has no built-in runtime"
+            )
+        wiring = request.app.state.wiring
+        orchestrator = wiring.orchestrator
+        factory = getattr(wiring, "runtime_factories", {}).get(runtime_name)
+        if factory is None:
+            raise ValueError(f"avatar runtime {runtime_name!r} is unavailable")
+        runtime = orchestrator.runtime if orchestrator.runtime.name == runtime_name else factory()
+        runtime_cfg = dict(request.app.state.config.avatar.runtimes.get(runtime_name, {}))
+        if runtime_name == "threejs":
+            runtime_cfg["animation_speed"] = request.app.state.config.avatar.animation_speed
+        await orchestrator.select_character(
+            character_id=pack_id,
+            runtime=runtime,
+            runtime_name=runtime_name,
+            character_config={
+                "pack_path": str(pack_path),
+                "runtime": runtime_cfg,
+            },
+        )
+        wiring.avatar_runtime = runtime
         request.app.state.active_pack = pack_id
-        persist_avatar_pack(pack_id)
+        persist_avatar_selection(pack=pack_id, runtime=runtime_name)
+        current_config = request.app.state.config
+        request.app.state.config = current_config.model_copy(
+            update={
+                "avatar": current_config.avatar.model_copy(
+                    update={"pack": pack_id, "runtime": runtime_name}
+                )
+            }
+        )
         personality = root / "personality" / "personality.yaml"
         personality_target = Path(
             os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "~/.openmimicry/personality.yml")
@@ -267,7 +294,7 @@ async def activate_companion(companion_id: str, request: Request) -> dict[str, o
         )
         os.replace(appearance_temporary, appearance_target)
         voice_manifest = root / "voice" / "profile.yaml"
-        restart_required = True
+        restart_required = False
         if voice_manifest.is_file():
             profile = _yaml(voice_manifest.read_bytes(), "voice profile")
             profile_id = str(profile["id"])
@@ -292,14 +319,48 @@ async def activate_companion(companion_id: str, request: Request) -> dict[str, o
                     reference_path=(
                         str(directory / reference) if isinstance(reference, str) else None
                     ),
+                    profile_id=profile_id,
                 )
                 request.app.state.active_voice_profile = profile_id
-                restart_required = True
+                current = request.app.state.config
+                tts = TTSConfigSection.model_validate(
+                    {
+                        **current.voice.tts.model_dump(mode="json"),
+                        "adapter": str(stored["provider"]),
+                        "engine": str(stored["provider"]),
+                        "voice": str(stored["voice_id"]),
+                        "clone": {
+                            "provider": str(stored["provider"]),
+                            "voice_id": str(stored["voice_id"]),
+                            "consent_record": str(stored["consent_record"]),
+                            "reference_path": (
+                                str(directory / reference) if isinstance(reference, str) else None
+                            ),
+                            "store_reference_locally": True,
+                        },
+                    }
+                )
+                candidate = current.model_copy(
+                    update={
+                        "voice": current.voice.model_copy(update={"tts": tts}),
+                        "avatar": current.avatar.model_copy(
+                            update={"pack": pack_id, "runtime": runtime_name}
+                        ),
+                    }
+                )
+                supervisor = request.app.state.supervisor
+                await supervisor.set_runtime_state("refreshing", reason="companion_profile")
+                try:
+                    await refresh_tts(request.app.state.wiring, candidate)
+                finally:
+                    await supervisor.set_runtime_state("ready")
+                request.app.state.config = candidate
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
         "ok": True,
         "active_companion": companion_id,
         "active_pack": pack_id,
+        "active_runtime": runtime_name,
         "restart_required": restart_required,
     }

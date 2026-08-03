@@ -24,6 +24,7 @@ import asyncio
 from openmimicry.core.schemas import LLMMessage
 from openmimicry.llm import LiteLLMAdapter, LLMRouter, MockLLMAdapter
 
+
 async def main():
     primary = LiteLLMAdapter(model="openrouter/anthropic/claude-3.5-sonnet")
     fallback = LiteLLMAdapter(model="ollama/llama3.1")
@@ -34,6 +35,7 @@ async def main():
         if chunk.delta:
             print(chunk.delta, end="", flush=True)
     await llm.close()
+
 
 asyncio.run(main())
 ```
@@ -50,6 +52,7 @@ asyncio.run(main())
 
 ```python
 from openmimicry.llm.prompts import load
+
 system = load("system_personality", name="Mimi", style="playful")
 ```
 

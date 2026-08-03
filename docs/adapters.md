@@ -13,6 +13,7 @@ The full discussion of the six avatar modalities (Sprite2D, Advanced 2D, Three.j
 from typing import AsyncIterator, Protocol, Sequence
 from openmimicry.core.schemas.llm import LLMChunk, LLMMessage, ToolSpec
 
+
 class LLMAdapter(Protocol):
     name: str
     """Stable id used in config (e.g. 'litellm', 'mock')."""
@@ -51,6 +52,7 @@ Routing: `openmimicry.llm.router.LLMRouter` wraps a primary adapter and an optio
 from typing import AsyncIterator, Protocol
 from openmimicry.core.schemas.voice import Transcript, STTConfig
 
+
 class STTAdapter(Protocol):
     name: str
 
@@ -78,6 +80,7 @@ from typing import AsyncIterable, Callable, Protocol
 from openmimicry.core.schemas.voice import TTSConfig, TTSChunkBoundary
 
 OnChunk = Callable[[TTSChunkBoundary], None]
+
 
 class TTSAdapter(Protocol):
     name: str
@@ -151,8 +154,13 @@ The wake controller is a small wrapper that puts the STT into a low-cost wake-li
 # packages/openmimicry-tasks/src/openmimicry/tasks/base.py
 from typing import AsyncIterator, Protocol
 from openmimicry.core.schemas.tasks import (
-    TaskRequest, TaskHandle, TaskStatus, TaskUpdate, TaskResult,
+    TaskRequest,
+    TaskHandle,
+    TaskStatus,
+    TaskUpdate,
+    TaskResult,
 )
+
 
 class TaskRuntimeAdapter(Protocol):
     name: str
@@ -185,6 +193,7 @@ The avatar runtime is the fifth and final outward-facing adapter. It is the cont
 # packages/openmimicry-avatar/src/openmimicry/avatar/runtimes/base.py
 from typing import Protocol
 from openmimicry.core.schemas.avatar import AvatarDirective
+
 
 class AvatarRuntimeAdapter(Protocol):
     name: str
@@ -231,6 +240,7 @@ class AvatarDirector:
     def on_event(self, event: RuntimeEvent) -> AvatarDirective | None:
         """Return a new directive if state changed, else None."""
 
+
 # packages/openmimicry-avatar/src/openmimicry/avatar/orchestrator.py
 class AvatarOrchestrator:
     def __init__(self, director, runtime: AvatarRuntimeAdapter, bus, cfg): ...
@@ -247,10 +257,10 @@ The backend assembles adapters in `apps/backend/wiring.py`:
 
 ```python
 def build_runtime(cfg: AppConfig, bus: EventBus) -> Runtime:
-    llm = build_llm_adapter(cfg.llm)                 # picks LiteLLMAdapter
-    stt = build_stt_adapter(cfg.voice.stt)           # picks RealtimeSTTAdapter
-    tts = build_tts_adapter(cfg.voice.tts)           # picks RealtimeTTSAdapter
-    tasks = build_task_router(cfg.tasks)             # composes task adapters
+    llm = build_llm_adapter(cfg.llm)  # picks LiteLLMAdapter
+    stt = build_stt_adapter(cfg.voice.stt)  # picks RealtimeSTTAdapter
+    tts = build_tts_adapter(cfg.voice.tts)  # picks RealtimeTTSAdapter
+    tasks = build_task_router(cfg.tasks)  # composes task adapters
     speech = SpeechController(stt, tts, bus, cfg.voice)
     director = AvatarDirector(load_pack(cfg.avatar.pack), cfg.avatar)
     avatar_runtime = build_avatar_runtime(cfg.avatar)  # Sprite2D / ThreeJS / Unity / ...

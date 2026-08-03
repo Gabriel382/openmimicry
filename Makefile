@@ -45,7 +45,7 @@ help:
 	@echo ""
 	@echo "Setup"
 	@echo "  make install PROFILE=basic         Install workspace + selected profile"
-	@echo "    PROFILES: basic | openrouter-commercial | openrouter-voice | openrouter-chatterbox"
+	@echo "    PROFILES: basic | integrated | openrouter-commercial | openrouter-voice | openrouter-chatterbox"
 	@echo "              openrouter-elevenlabs | voice | threejs | live3d | unity | agent"
 	@echo "              vision (optional — webcam + MediaPipe, off by default)"
 	@echo "              full | full-vision | studio | dev"
@@ -85,7 +85,7 @@ help:
 	@echo "  make m2-demo-barge-in              Exercise the barge-in path"
 	@echo ""
 	@echo "Release"
-	@echo "  make release-preview               Show the v1.6.4 publish plan"
+	@echo "  make release-preview               Show the v1.8.5 publish plan"
 	@echo "  make clean                         Remove venv + build artefacts"
 
 $(VENV_DIR):
@@ -111,6 +111,10 @@ install-workspace: $(VENV_DIR)
 		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,piper-community]"; \
 	fi
 	@if [ "$(PROFILE)" = "openrouter-voice" ]; then \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
+		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,piper-community]"; \
+	fi
+	@if [ "$(PROFILE)" = "integrated" ]; then \
 		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-llm[litellm]"; \
 		$(VENV_PYTHON) -m pip install -e "packages/openmimicry-voice[voice,piper-community]"; \
 	fi
@@ -222,8 +226,8 @@ cleanup-legacy:
 	bash scripts/cleanup-legacy.sh --apply
 
 release-preview:
-	@echo "v1.6.4 publish plan (dry run)"
-	@echo "  1. git tag v1.6.4 && git push origin v1.6.4"
+	@echo "v1.8.5 publish plan (dry run)"
+	@echo "  1. git tag v1.8.5 && git push origin v1.8.5"
 	@echo "  2. GitHub release workflow (.github/workflows/release.yml) picks it up"
 	@echo "  3. Manual: pnpm --filter @openmimicry/desktop-frontend build"
 	@echo "  4. Manual: cd apps/desktop/src-tauri && cargo tauri build"

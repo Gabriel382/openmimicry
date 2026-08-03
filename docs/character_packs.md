@@ -1,8 +1,12 @@
-# Character packs (Sprite2D modality)
+# Character packs
 
 A character pack is a self-contained folder that defines an avatar's identity: its name, voice preferences, default emotion, and a frame set per emotion. Packs are loaded at startup and validated by `openmimicry-avatar`.
 
-This document specifies the pack format for the **Sprite2D** modality — the default, batteries-included rendering path. Other modalities have their own asset conventions (a `.vrm` or `.gltf` file for Three.js, a `.unitypackage` for Unity, etc.); the full modality matrix lives in [`avatar_modalities.md`](./avatar_modalities.md). The runtime sees only the normalized `AvatarDirective`; this doc explains how Sprite2D maps that directive to folders of frames.
+This document specifies the default **Sprite2D** pack format and the bundled
+**VRM/Three.js** test pack. Other modalities have their own asset conventions;
+the full modality matrix lives in
+[`avatar_modalities.md`](./avatar_modalities.md). The runtime sees only the
+normalized `AvatarDirective`.
 
 ## 1. Folder layout
 
@@ -191,10 +195,43 @@ These rules make a half-finished pack still demoable, which matters for portfoli
 
 - `characters/octomimic/` — main demo character (already in repo).
 - `characters/mimic_blue/` — secondary character used in tests and screenshots (already in repo).
+- `characters/octomimic_vrm/` — ready-to-run CC0 VRM 1.0 model for the
+  Three.js runtime. It embeds lifecycle and gesture animation clips and needs
+  no external download.
 
 Both already follow the emotion + emotion_speaking convention, so the migration to the new loader is a renaming/validation pass, not a re-authoring exercise.
 
-## 8. Forward-compatibility with other modalities
+## 8. Bundled VRM/Three.js test character
+
+Select runtime `threejs` and pack `octomimic_vrm` in the dashboard. The pack
+loads `characters/octomimic_vrm/octomimic.vrm`, a valid VRM 1.0 binary tested
+with the same `GLTFLoader` and `VRMLoaderPlugin` used in production.
+
+It contains these embedded clips:
+
+| Directive or gesture | Clip |
+|---|---|
+| idle | `idle` |
+| microphone active | `listening` |
+| admitted turn processing | `thinking` |
+| reply audio active | `speaking` |
+| successful completion | `happy` |
+| terminal failure | `error` |
+| wave | `wave`, `gesture_wave` |
+| celebrate | `celebrate`, `gesture_celebrate` |
+
+The asset is generated from project-owned primitive geometry and dedicated to
+the public domain under CC0-1.0. Its embedded VRM metadata permits commercial
+use, modification, and redistribution. Regenerate it deterministically with:
+
+```bash
+python scripts/assets/generate_octomimic_vrm.py
+```
+
+Imported third-party models retain their own licenses; the bundled model's
+license does not extend to user imports.
+
+## 9. Forward-compatibility with other modalities
 
 This pack format is specifically the Sprite2D contract. The same `AvatarDirective` flows to every modality; only the renderer differs.
 

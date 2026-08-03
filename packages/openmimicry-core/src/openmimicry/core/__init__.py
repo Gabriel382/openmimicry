@@ -39,9 +39,9 @@ from .schemas import (
     Artifact,
     AvatarCue,
     AvatarDirective,
-    ComponentHealthChanged,
     BodyPose,
     CharacterPack,
+    ComponentHealthChanged,
     ConfigUpdated,
     ConsentRequired,
     ConsentResolved,
@@ -84,7 +84,6 @@ from .schemas import (
     ToolSpec,
     Transcript,
     TranscriptPreview,
-    TurnStateChanged,
     TTSChunkBoundary,
     TTSChunkSpoken,
     TTSConfig,
@@ -94,6 +93,7 @@ from .schemas import (
     TTSQueued,
     TTSReady,
     TTSStarted,
+    TurnStateChanged,
     UserSpeechFinal,
     UserSpeechStarted,
     UserTextSubmitted,
@@ -113,7 +113,6 @@ __all__ = [
     "Artifact",
     "AvatarCue",
     "AvatarDirective",
-    "ComponentHealthChanged",
     # Protocols
     "AvatarDirector",
     "AvatarOrchestrator",
@@ -121,6 +120,7 @@ __all__ = [
     "BodyDetector",
     "BodyPose",
     "CharacterPack",
+    "ComponentHealthChanged",
     "ConfigUpdated",
     "ConsentRequired",
     "ConsentResolved",
@@ -201,4 +201,4 @@ __all__ = [
     "create_runtime",
 ]
 
-__version__ = "1.6.4"
+__version__ = "1.8.5"

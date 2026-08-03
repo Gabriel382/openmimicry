@@ -102,6 +102,7 @@ The point is that someone with a Blender plugin and an afternoon can write an ad
 from typing import Protocol
 from openmimicry.core.schemas.avatar import AvatarDirective
 
+
 class AvatarRuntimeAdapter(Protocol):
     name: str
     capabilities: set[str]  # e.g. {"2d", "speaking_variants"}, {"3d", "gestures", "gaze"}
@@ -158,17 +159,17 @@ The directive is the contract the runtime emits. Every modality consumes it; los
 # packages/openmimicry-core/src/openmimicry/core/schemas/avatar.py
 class AvatarDirective(BaseModel):
     state: Literal["idle", "listening", "thinking", "speaking", "happy", "error"]
-    emotion: Literal[
-        "neutral", "happy", "sad", "angry", "confused", "focused", "worried"
-    ] = "neutral"
-    animation: str | None = None        # adapter-specific clip/folder name
+    emotion: Literal["neutral", "happy", "sad", "angry", "confused", "focused", "worried"] = (
+        "neutral"
+    )
+    animation: str | None = None  # adapter-specific clip/folder name
     speaking: bool = False
-    text: str | None = None             # speech bubble / caption update
-    next_state: str | None = None       # adapter hint: state to return to
+    text: str | None = None  # speech bubble / caption update
+    next_state: str | None = None  # adapter hint: state to return to
     duration_ms: int | None = None
-    intensity: float | None = None      # 0.0..1.0; for blending / strength
-    gesture: str | None = None          # e.g. "wave", "shrug", "nod"
-    gaze: str | None = None             # e.g. "towards_user", "down_left"
+    intensity: float | None = None  # 0.0..1.0; for blending / strength
+    gesture: str | None = None  # e.g. "wave", "shrug", "nod"
+    gaze: str | None = None  # e.g. "towards_user", "down_left"
     metadata: dict[str, Any] = {}
 ```
 
@@ -215,8 +216,8 @@ Between the runtime's event bus and the chosen `AvatarRuntimeAdapter` sits the `
 class AvatarOrchestrator:
     def __init__(
         self,
-        director: AvatarDirector,        # event -> directive translator
-        runtime: AvatarRuntimeAdapter,   # the chosen modality
+        director: AvatarDirector,  # event -> directive translator
+        runtime: AvatarRuntimeAdapter,  # the chosen modality
         bus: EventBus,
         cfg: AvatarConfig,
     ): ...

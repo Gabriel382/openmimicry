@@ -1,0 +1,89 @@
+# OpenMimicry v1.8 integrated desktop profile.
+#
+# External CLIs are optional and discovered on PATH.  Claude defaults to the
+# user's locally authenticated Claude subscription; Anthropic API mode remains
+# available by setting auth_mode: api and ANTHROPIC_API_KEY.
+schema_version: 2
+
+llm:
+  active_backend: openrouter
+  history_turns: 5
+  backends:
+    openrouter:
+      adapter: litellm
+      provider: openrouter
+      model: openrouter/openai/gpt-oss-20b
+      api_key_env: OPENROUTER_API_KEY
+      web_search_mode: "off"
+      request_timeout_s: 90
+    ollama:
+      adapter: litellm
+      provider: ollama
+      model: ollama_chat/gpt-oss:20b
+      api_base: http://127.0.0.1:11434
+      api_key_env: null
+      web_search_mode: "off"
+      request_timeout_s: 180
+
+voice:
+  stt:
+    adapter: isolated-faster-whisper
+    language: en
+    model: medium.en
+    device: auto
+    compute_type: auto
+    post_speech_silence_duration: 1.0
+    wake:
+      enabled: true
+      names: [Mimi, Hey Mimi]
+      aliases: [Me me]
+  tts:
+    adapter: isolated-piper
+    engine: piper
+    voice: en_US-lessac-medium
+    data_dir: ~/.openmimicry/voices
+    readiness_timeout_s: 30
+  modes:
+    text_always_on: true
+    continuous_listening: false
+    live_wake: false
+    agent_voice: true
+    barge_in_enabled: false
+
+memory:
+  enabled: false
+  provider: none
+
+avatar:
+  runtime: sprite2d
+  pack: octomimic
+  animation_speed: 1.0
+  pack_roots:
+    - ./characters
+    - ~/.openmimicry/characters
+  runtimes:
+    sprite2d:
+      pack_path: ./characters/octomimic
+    threejs:
+      pack_path: ./characters/octomimic_vrm
+      animation_speed: 1.0
+
+tasks:
+  default_runtime: claude_code
+  database_path: ~/.openmimicry/tasks/tasks.sqlite3
+  runtimes:
+    claude_code:
+      adapter: claude_code
+      cli: claude
+      auth_mode: subscription
+      permission_mode: acceptEdits
+      working_dir: .
+    picoclaw:
+      adapter: picoclaw
+      cli: picoclaw
+      working_dir: .
+    mcp_agent:
+      adapter: mcp_agent
+
+ui:
+  locale: en

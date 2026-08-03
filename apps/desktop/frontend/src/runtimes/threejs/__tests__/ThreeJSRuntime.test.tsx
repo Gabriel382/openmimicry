@@ -9,6 +9,7 @@
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Object3D } from "three";
 
 import { ThreeJSRuntime, type ThreeJSProjection } from "../ThreeJSRuntime";
 import type { CharacterController } from "../types";
@@ -16,7 +17,7 @@ import type { CharacterController } from "../types";
 function makeFakeController(): CharacterController {
   return {
     kind: "vrm",
-    root: {} as never,
+    root: new Object3D(),
     clipNames: ["idle", "speaking", "happy_speaking_speaking", "wave"],
     setExpression: vi.fn(),
     playClip: vi.fn(),
@@ -112,6 +113,36 @@ describe("<ThreeJSRuntime />", () => {
     await waitFor(() => {
       expect(host.getAttribute("data-state")).toBe("speaking");
     });
+    expect(vrmLoader).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reload when an equivalent animation map is reallocated", async () => {
+    const controller = makeFakeController();
+    const vrmLoader = vi.fn().mockResolvedValue(controller);
+    const { container, rerender } = render(
+      <ThreeJSRuntime
+        projection={projection({ animations: { wave: "/wave.vrma" } })}
+        vrmLoader={vrmLoader}
+      />,
+    );
+    await waitFor(() =>
+      expect(getHost(container).getAttribute("data-status")).toBe("ready"),
+    );
+
+    rerender(
+      <ThreeJSRuntime
+        projection={projection({
+          directive: { state: "thinking", emotion: "focused", speaking: false },
+          animations: { wave: "/wave.vrma" },
+        })}
+        vrmLoader={vrmLoader}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(getHost(container).getAttribute("data-state")).toBe("thinking"),
+    );
+    expect(vrmLoader).toHaveBeenCalledTimes(1);
   });
 
   it("keeps ready state when a gesture clip is named", async () => {

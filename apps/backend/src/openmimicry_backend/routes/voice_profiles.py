@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
+from openmimicry.core.schemas.app import TTSConfigSection
 from pydantic import BaseModel, Field
 
 from ..user_settings import persist_tts_clone
 from ..voice_profiles import VoiceProfileError, VoiceProfileStore
+from ..wiring import refresh_tts
 
 __all__ = ["router"]
 
@@ -93,15 +95,44 @@ async def activate_voice_profile(profile_id: str, request: Request) -> dict[str,
             voice_id=str(profile["voice_id"]),
             consent_record=str(profile["consent_record"]),
             reference_path=str(directory / reference) if isinstance(reference, str) else None,
+            profile_id=profile_id,
         )
+        current = request.app.state.config
+        tts = TTSConfigSection.model_validate(
+            {
+                **current.voice.tts.model_dump(mode="json"),
+                "adapter": str(profile["provider"]),
+                "engine": str(profile["provider"]),
+                "voice": str(profile["voice_id"]),
+                "clone": {
+                    "provider": str(profile["provider"]),
+                    "voice_id": str(profile["voice_id"]),
+                    "consent_record": str(profile["consent_record"]),
+                    "reference_path": (
+                        str(directory / reference) if isinstance(reference, str) else None
+                    ),
+                    "store_reference_locally": True,
+                },
+            }
+        )
+        candidate = current.model_copy(
+            update={"voice": current.voice.model_copy(update={"tts": tts})}
+        )
+        supervisor = request.app.state.supervisor
+        await supervisor.set_runtime_state("refreshing", reason="voice_profile")
+        try:
+            await refresh_tts(request.app.state.wiring, candidate)
+        finally:
+            await supervisor.set_runtime_state("ready")
+        request.app.state.config = candidate
     except (VoiceProfileError, OSError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     request.app.state.active_voice_profile = profile_id
     return {
         "ok": True,
         "active_profile": profile_id,
-        "restart_required": True,
-        "message": "Voice selected. Restart the backend to load its provider safely.",
+        "restart_required": False,
+        "message": "Voice profile warmed and activated without a backend restart.",
     }
 
 

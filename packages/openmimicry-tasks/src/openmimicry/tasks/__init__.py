@@ -27,6 +27,7 @@ from .adapters import (
     MCPAgentUnavailable,
     OpenClawAdapter,
     PicoClawAdapter,
+    PicoClawSettings,
     ShellNotAllowed,
 )
 from .base import TaskRuntimeAdapter
@@ -37,6 +38,7 @@ from .errors import (
     TaskRoutingError,
 )
 from .intent import detect_task_intent
+from .journal import JournaledTaskRuntime, TaskJournal
 from .mocks import MockTaskRuntimeAdapter
 from .router import TaskRouter
 
@@ -44,6 +46,7 @@ __all__ = [
     "AllowlistEntry",
     "ClaudeCodeAdapter",
     "ClaudeCodeSettings",
+    "JournaledTaskRuntime",
     "LocalShellAdapter",
     "LocalShellSettings",
     "MCPAgentAdapter",
@@ -53,13 +56,15 @@ __all__ = [
     "NoAdapterForCapabilities",
     "OpenClawAdapter",
     "PicoClawAdapter",
+    "PicoClawSettings",
     "ShellNotAllowed",
     "TaskAdapterError",
     "TaskError",
+    "TaskJournal",
     "TaskRouter",
     "TaskRoutingError",
     "TaskRuntimeAdapter",
     "detect_task_intent",
 ]
 
-__version__ = "1.6.4"
+__version__ = "1.8.5"

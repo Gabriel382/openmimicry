@@ -33,9 +33,8 @@ from openmimicry.core import (
 )
 
 from .conversation import TurnSubmission
-from .supervisor import TurnSource
-
 from .projection import project_messages
+from .supervisor import TurnSource
 
 __all__ = [
     "BroadcastBridge",
@@ -364,5 +363,3 @@ async def _dispatch_inbound(
         return
 
     _log.info("WS: ignoring unknown inbound type=%r", msg_type)
-
-

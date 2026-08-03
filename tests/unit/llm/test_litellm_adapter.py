@@ -7,6 +7,7 @@ fake — no real network call, no real LiteLLM in the dependency tree.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import types
 from typing import Any
@@ -75,6 +76,15 @@ class _FakeStream:
         return self._chunks.pop(0)
 
 
+class _HangingStream:
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Future()
+        raise StopAsyncIteration
+
+
 def _install_fake_litellm(monkeypatch: pytest.MonkeyPatch, behaviour: dict[str, Any]) -> dict:
     """Inject a fake ``litellm`` module exposing ``acompletion``.
 
@@ -91,6 +101,8 @@ def _install_fake_litellm(monkeypatch: pytest.MonkeyPatch, behaviour: dict[str, 
             raise behaviour["exception"]
         if behaviour["mode"] == "stream":
             return _FakeStream(behaviour["chunks"])
+        if behaviour["mode"] == "hang_stream":
+            return _HangingStream()
         if behaviour["mode"] == "complete":
             return behaviour["response"]
         raise AssertionError(f"unknown mode: {behaviour['mode']}")
@@ -134,31 +146,6 @@ async def test_streaming_translates_chunks(monkeypatch: pytest.MonkeyPatch) -> N
     assert call["max_tokens"] == 64
     assert call["messages"] == [{"role": "user", "content": "hi"}]
     assert call["tools"][0]["function"]["name"] == "fs.read"
-
-
-async def test_openrouter_web_search_uses_online_variant(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured = _install_fake_litellm(
-        monkeypatch,
-        {"mode": "stream", "chunks": [_FakeChunk(finish_reason="stop")]},
-    )
-    adapter = LiteLLMAdapter(
-        settings=LiteLLMSettings(model="openrouter/openai/gpt-oss-20b", web_search=True)
-    )
-
-    async for _ in adapter.generate([LLMMessage(role="user", content="weather now")]):
-        pass
-
-    assert captured["calls"][0]["model"] == "openrouter/openai/gpt-oss-20b:online"
-    assert adapter.web_search_supported is True
-    assert adapter.web_search_enabled is True
-
-
-def test_web_search_rejects_non_openrouter_backend() -> None:
-    adapter = LiteLLMAdapter(model="ollama_chat/gpt-oss:20b")
-    with pytest.raises(ValueError, match="only for OpenRouter"):
-        adapter.set_web_search(True)
 
 
 async def test_non_streaming_yields_single_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,6 +199,22 @@ async def test_litellm_exception_maps_to_transport(monkeypatch: pytest.MonkeyPat
             pass
 
 
+async def test_stream_deadline_covers_a_provider_that_stops_yielding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_litellm(monkeypatch, {"mode": "hang_stream"})
+    adapter = LiteLLMAdapter(
+        settings=LiteLLMSettings(
+            model="openrouter/mock",
+            request_timeout_s=0,
+        )
+    )
+
+    with pytest.raises(LLMTransportError, match="timed out"):
+        async for _ in adapter.generate([LLMMessage(role="user", content="hi")]):
+            pass
+
+
 async def test_litellm_auth_named_exception_maps_to_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeAuthenticationError(Exception):
         pass
@@ -254,3 +257,47 @@ async def test_healthcheck_without_litellm_returns_false(monkeypatch: pytest.Mon
     )
     adapter = LiteLLMAdapter(model="openrouter/mock")
     assert await adapter.healthcheck() is False
+
+
+@pytest.mark.parametrize(
+    ("mode", "prompt", "expects_web"),
+    [
+        ("off", "What is today's weather?", False),
+        ("always", "Hello!", True),
+        ("auto", "Hello!", False),
+        ("auto", "What is today's weather?", True),
+    ],
+)
+async def test_web_research_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    prompt: str,
+    expects_web: bool,
+) -> None:
+    captured = _install_fake_litellm(
+        monkeypatch,
+        {"mode": "stream", "chunks": [_FakeChunk(finish_reason="stop")]},
+    )
+    adapter = LiteLLMAdapter(
+        settings=LiteLLMSettings(
+            model="openrouter/mock",
+            web_search_mode=mode,  # type: ignore[arg-type]
+        )
+    )
+    async for _ in adapter.generate([LLMMessage(role="user", content=prompt)]):
+        pass
+
+    plugins = captured["calls"][0].get("extra_body", {}).get("plugins", [])
+    assert any(plugin.get("id") == "web" for plugin in plugins) is expects_web
+
+
+def test_model_override_preserves_web_mode() -> None:
+    adapter = LiteLLMAdapter(
+        model="openrouter/replacement",
+        settings=LiteLLMSettings(
+            model="openrouter/original",
+            web_search_mode="auto",
+        ),
+    )
+    assert adapter.model == "openrouter/replacement"
+    assert adapter.web_search_mode == "auto"

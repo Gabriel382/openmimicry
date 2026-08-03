@@ -57,4 +57,4 @@ __all__ = [
     "make_mediapipe_vision_adapter",
 ]
 
-__version__ = "1.6.4"
+__version__ = "1.8.5"

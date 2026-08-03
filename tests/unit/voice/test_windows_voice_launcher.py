@@ -50,7 +50,7 @@ def test_standard_voice_launcher_detects_repairs_and_prewarms_chatterbox() -> No
     assert '"--check-only"' in script
     assert '"openmimicry.voice.workers.chatterbox_job"' in script
     assert '"--preflight", "--device", "auto"' in script
-    assert "chatterbox-preflight-v1.6.4.ok" in script
+    assert "chatterbox-preflight-v1.8.0.ok" in script
     assert 'OPENMIMICRY__VOICE__TTS__READINESS_TIMEOUT_S = "180"' in script
     assert '& ".\\scripts\\win\\backend.bat" "--no-reload"' in script
     assert not (ROOT / "scripts/win/start-openrouter-chatterbox.ps1").exists()

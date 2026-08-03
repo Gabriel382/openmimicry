@@ -58,37 +58,6 @@ class VoiceProfileStore:
             raise VoiceProfileError(f"voice profile {profile_id!r} is not installed")
         return self._read_manifest(directory), directory
 
-    def match_active(
-        self,
-        *,
-        provider: str,
-        voice_id: str,
-        reference_path: str | None,
-    ) -> str | None:
-        """Recover the named profile represented by the loaded TTS config."""
-
-        configured_reference = (
-            Path(reference_path).expanduser().resolve() if reference_path else None
-        )
-        if not self.root.is_dir():
-            return None
-        for manifest in sorted(self.root.glob("*/profile.yaml")):
-            directory = manifest.parent
-            try:
-                profile = self._read_manifest(directory)
-            except VoiceProfileError:
-                continue
-            if profile.get("provider") != provider or profile.get("voice_id") != voice_id:
-                continue
-            reference = profile.get("reference")
-            if provider == "chatterbox-local":
-                if not isinstance(reference, str) or configured_reference is None:
-                    continue
-                if (directory / reference).resolve() != configured_reference:
-                    continue
-            return str(profile["id"])
-        return None
-
     def create_reference(
         self,
         *,

@@ -1,29 +1,38 @@
-# OpenMimicry v1.6.4 release manifest
+# OpenMimicry v1.8.5 release manifest
 
 ## Contents
 
-- MIT-licensed OpenMimicry v1.6.4 source with configuration schema v2.
-- Permanent detection and targeted repair of Perth's non-callable watermark
-  constructor, pinned to the official MIT upstream commit.
-- The v1.6.3 unified launcher and non-destructive CUDA selection fixes.
-- The v1.6.2 Chatterbox/NumPy 2 dtype compatibility boundary and persistent
-  isolated synthesis worker.
-- The v1.6.1 memory-settings validation fix and v1.6.0 configuration,
-  personality, optional memory, character import, and voice-provider features.
-- GitHub issue text, release notes, verification record, and target-hardware
-  acceptance procedure for the Perth startup repair.
-- Commercial and optional community dependency profiles; optional provider,
-  model, and reference-audio terms remain separate.
-- The unchanged character template under
-  `examples/OpenMimicry-character-template-v1.6.0.zip`.
+- Complete MIT-licensed OpenMimicry v1.8.5 source.
+- All integrated v1.8.0 features: Three.js/VRM, local Claude CLI and PicoClaw
+  task adapters, durable tasks, selective research, voice profiles, optional
+  memory, and private companion profiles.
+- The v1.8.1 same-schema compatibility fix for the retired Boolean
+  `web_search` key.
+- White avatar thinking balloon with red reserved for actual failures.
+- A whole-stream LLM deadline and terminal failure propagation that always
+  releases the active turn.
+- A bundled, ready-to-run CC0 VRM 1.0 Octomimic with lifecycle, emotion, and
+  gesture animation clips.
+- Deterministic VRM generation and production-loader regressions.
+- Atomic pack/runtime compatibility, startup repair, and saved per-pack 3D
+  framing/animation speed.
+- Stable Three.js asset/canvas lifecycle and 13–19-keyframe bundled clips.
+- Toolbar task notifications and the local Claude subscription quickstart.
+- Reliable Windows Claude executable discovery and `.cmd` launcher support.
+- Visible, no-credit Claude version/authentication/working-directory
+  diagnostics.
+- Durable stderr/error details plus late-subscriber replay for fast failures.
+- Release notes, migration notes, verification record, and checksums.
 
-## Source archive policy
+## Artifacts
 
-`OpenMimicry-v1.6.4-perth-repair-source.zip` contains this directory at its top
-level. It excludes local virtual environments, `node_modules`, build output,
-caches, bytecode, egg metadata, Rust targets, logs, databases, and user-secret
-overlays. Restore dependencies only from the checked-in manifests and locks.
+- `OpenMimicry-v1.8.5-claude-task-runtime-hotfix-source.zip`
+- `OpenMimicry-v1.8.5-claude-task-runtime-hotfix-docs.zip`
+- `OpenMimicry-v1.8.5-SHA256SUMS.txt`
 
-The source archive checksum is recorded next to the archive in
-`OpenMimicry-v1.6.4-SHA256SUMS.txt`; it cannot be embedded inside the archive
-without changing the checksum it describes.
+The source archive excludes environments, dependencies, build outputs, caches,
+credentials, databases, logs, raw/reference audio, local characters,
+personalities, task journals, memory stores, and companion exports.
+
+Claude CLI, PicoClaw, cloud services, provider credentials, imported models,
+and user assets are not bundled and retain independent terms.

@@ -116,12 +116,9 @@ class LLMBackendConfig(BaseModel):
     api_key_env: str | None = None
     secret: SecretReference | None = None
     catalog_url: str | None = None
+    web_search_mode: Literal["off", "auto", "always"] = "off"
     enabled: bool = True
     request_timeout_s: int = 60
-    # OpenRouter's :online model variant enables provider-managed web
-    # grounding and standardized URL citations. It is opt-in because searches
-    # can add provider charges even when the selected model is free.
-    web_search: bool = False
 
 
 class LLMRoleAssignments(BaseModel):
@@ -159,7 +156,6 @@ class LLMConfig(BaseModel):
     backends: dict[str, LLMBackendConfig] = {}
     roles: LLMRoleAssignments = Field(default_factory=LLMRoleAssignments)
     history_turns: int = Field(default=4, ge=0, le=10)
-    web_search: bool = False
 
     @model_validator(mode="after")
     def active_backend_is_configured(self) -> LLMConfig:
@@ -273,6 +269,7 @@ class VoiceConfig(BaseModel):
     stt: STTConfigSection = Field(default_factory=STTConfigSection)
     tts: TTSConfigSection = Field(default_factory=TTSConfigSection)
     modes: VoiceModesConfig = Field(default_factory=VoiceModesConfig)
+    active_profile: str | None = Field(default=None, max_length=64)
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +366,7 @@ class AvatarConfig(BaseModel):
     transition_ms: int = 120
     celebration_ms: int = 1200
     error_ms: int = 1000
+    animation_speed: float = Field(default=1.0, ge=0.1, le=4.0)
     runtimes: dict[str, dict[str, Any]] = {}
 
 
@@ -395,6 +393,8 @@ class TasksConfig(BaseModel):
 
     default_runtime: str = "mcp_agent"
     runtimes: dict[str, TaskRuntimeConfigEntry] = {}
+    database_path: str = "~/.openmimicry/tasks/tasks.sqlite3"
+    notification_retention_days: int = Field(default=90, ge=1, le=3650)
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +442,7 @@ class UIConfig(BaseModel):
     panel: PanelConfig = Field(default_factory=PanelConfig)
     tray: TrayConfig = Field(default_factory=TrayConfig)
     hotkeys: HotkeysConfig = Field(default_factory=HotkeysConfig)
+    locale: Literal["en", "fr", "es", "pt"] = "en"
 
 
 # ---------------------------------------------------------------------------

@@ -44,6 +44,7 @@ pub fn run() {
             commands::swap_avatar_runtime,
             commands::set_position_locked,
             commands::open_backend_dashboard,
+            commands::open_backend_dashboard_section,
             commands::move_overlay_to_saved_position,
             commands::save_overlay_position,
             commands::overlay_info,

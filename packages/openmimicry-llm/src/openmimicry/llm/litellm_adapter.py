@@ -15,7 +15,9 @@ Error mapping:
 
 from __future__ import annotations
 
+import asyncio
 import os
+import re
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
@@ -46,7 +48,7 @@ class LiteLLMSettings:
     api_base: str | None = None
     api_key_env: str | None = None
     request_timeout_s: int = 60
-    web_search: bool = False
+    web_search_mode: Literal["off", "auto", "always"] = "off"
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -92,7 +94,7 @@ class LiteLLMAdapter:
                 request_timeout_s=(
                     settings.request_timeout_s if request_timeout_s is None else request_timeout_s
                 ),
-                web_search=settings.web_search,
+                web_search_mode=settings.web_search_mode,
                 extra=dict(settings.extra),
             )
         self._settings = settings
@@ -125,17 +127,13 @@ class LiteLLMAdapter:
         self._settings = replace(self._settings, model=selected)
 
     @property
-    def web_search_enabled(self) -> bool:
-        return self._settings.web_search
+    def web_search_mode(self) -> str:
+        return self._settings.web_search_mode
 
-    @property
-    def web_search_supported(self) -> bool:
-        return self._settings.model.startswith("openrouter/")
-
-    def set_web_search(self, enabled: bool) -> None:
-        if enabled and not self.web_search_supported:
-            raise ValueError("web search is currently available only for OpenRouter backends")
-        self._settings = replace(self._settings, web_search=bool(enabled))
+    def set_web_search_mode(self, mode: str) -> None:
+        if mode not in {"off", "auto", "always"}:
+            raise ValueError("web search mode must be off, auto, or always")
+        self._settings = replace(self._settings, web_search_mode=cast(Any, mode))
 
     # ------------------------------------------------------------------ API
 
@@ -169,16 +167,9 @@ class LiteLLMAdapter:
             raise LLMTransportError("LiteLLMAdapter is closed")
 
         litellm = _import_litellm()
-        # LiteLLM otherwise prints a generic GitHub feedback footer for some
-        # provider exceptions. OpenMimicry records the real classified error in
-        # its diagnostics and UI, so suppress that unrelated console noise.
-        if hasattr(litellm, "suppress_debug_info"):
-            litellm.suppress_debug_info = True
 
         kwargs: dict[str, Any] = {
-            "model": _online_model(self._settings.model)
-            if self._settings.web_search
-            else self._settings.model,
+            "model": self._settings.model,
             "messages": [_to_litellm_message(m) for m in messages],
             "stream": stream,
             "timeout": self._settings.request_timeout_s,
@@ -203,23 +194,36 @@ class LiteLLMAdapter:
             kwargs["tools"] = [_to_litellm_tool(t) for t in tools]
         if self._settings.extra:
             kwargs.update(self._settings.extra)
+        if _should_use_web(self._settings.web_search_mode, messages):
+            extra_body = dict(kwargs.get("extra_body") or {})
+            plugins = list(extra_body.get("plugins") or [])
+            if not any(plugin.get("id") == "web" for plugin in plugins if isinstance(plugin, dict)):
+                plugins.append({"id": "web", "max_results": 5})
+            extra_body["plugins"] = plugins
+            kwargs["extra_body"] = extra_body
 
         try:
-            response = await litellm.acompletion(**kwargs)
-        except Exception as exc:
-            raise _classify_litellm_exception(exc) from exc
+            # LiteLLM's ``timeout`` argument covers its request transport, but
+            # some providers can open a streaming response and then stop
+            # yielding indefinitely. Keep one deadline around both connection
+            # setup and consumption of the complete stream.
+            async with asyncio.timeout(float(self._settings.request_timeout_s)):
+                response = await litellm.acompletion(**kwargs)
 
-        if not stream:
-            # Non-streaming: response is a single completion object.
-            yield _completion_to_chunk(response, terminal=True)
-            return
+                if not stream:
+                    # Non-streaming: response is a single completion object.
+                    yield _completion_to_chunk(response, terminal=True)
+                    return
 
-        try:
-            async for raw_chunk in response:
-                chunk = _streaming_chunk_to_llm_chunk(raw_chunk)
-                if chunk is None:
-                    continue
-                yield chunk
+                async for raw_chunk in response:
+                    chunk = _streaming_chunk_to_llm_chunk(raw_chunk)
+                    if chunk is None:
+                        continue
+                    yield chunk
+        except TimeoutError as exc:
+            raise LLMTransportError(
+                f"LLM response timed out after {self._settings.request_timeout_s} seconds"
+            ) from exc
         except LLMError:
             raise
         except Exception as exc:
@@ -258,12 +262,32 @@ def _import_litellm() -> Any:
     return litellm
 
 
-def _online_model(model: str) -> str:
-    """Enable OpenRouter web grounding without provider-specific SDK kwargs."""
+_RESEARCH_RE = re.compile(
+    r"\b("
+    r"latest|current|today|tonight|tomorrow|weather|temperature|forecast|"
+    r"news|price|stock|score|schedule|search|research|look\s+up|find\s+online|"
+    r"who\s+is\s+(?:the\s+)?(?:current|president|ceo)|what\s+time"
+    r")\b",
+    re.IGNORECASE,
+)
+_CASUAL_RE = re.compile(
+    r"^\s*(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|thanks?|"
+    r"how\s+are\s+you|what(?:'s|\s+is)\s+your\s+name)[.!?\s]*$",
+    re.IGNORECASE,
+)
 
-    if not model.startswith("openrouter/"):
-        raise LLMTransportError("web search is enabled for a non-OpenRouter model")
-    return model if model.endswith(":online") else f"{model}:online"
+
+def _should_use_web(mode: str, messages: list[LLMMessage]) -> bool:
+    """Deterministic gate: web is never spent on greetings in automatic mode."""
+
+    if mode == "off":
+        return False
+    if mode == "always":
+        return True
+    text = next((message.content for message in reversed(messages) if message.role == "user"), "")
+    if _CASUAL_RE.match(text):
+        return False
+    return bool(_RESEARCH_RE.search(text))
 
 
 def _to_litellm_message(msg: LLMMessage) -> dict[str, Any]:

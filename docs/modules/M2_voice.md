@@ -79,14 +79,17 @@ class MockSTTAdapter:
     # Test helpers (not part of the Protocol):
     async def push_transcript(self, text: str, is_final: bool = True) -> None:
         """Queue a Transcript onto the async stream."""
+
     async def trigger_speech_start(self) -> None:
         """Set vad_active=True."""
+
     async def trigger_speech_end(self) -> None:
         """Set vad_active=False."""
 
+
 class MockTTSAdapter:
     name: str = "mock-tts"
-    spoken: list[str]       # everything passed to speak()
+    spoken: list[str]  # everything passed to speak()
     interrupt_calls: int
 
     def __init__(self, *, chunk_interval_s: float = 0.01) -> None: ...

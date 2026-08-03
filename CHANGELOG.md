@@ -7,11 +7,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.5] — Observable and reliable Claude Code tasks
+
 ### Added
 
-- Added explicit, persisted OpenRouter internet grounding in the dashboard.
-  It uses OpenRouter's documented online model variant, remains off by default,
-  and surfaces the provider's linked citations in normal assistant replies.
+- A no-credit task-runtime readiness panel that reports the resolved Claude
+  executable, version, authentication state, working directory, permission
+  mode, and persistent journal path.
+- Automatic discovery of the official Windows native Claude installation and
+  safe `cmd.exe` wrapping for legacy npm `.cmd` launchers.
+
+### Changed
+
+- Claude tasks now run with an explicit text input format and configurable
+  non-interactive permission mode (`acceptEdits` by default).
+- The curated Claude child environment retains the Windows runtime variables
+  required by native and batch launchers without forwarding unrelated secrets.
+
+### Fixed
+
+- Claude stderr, spawn failures, authentication/trust failures, and non-zero
+  exits are retained in the task result, terminal log, dashboard, journal, and
+  notification instead of collapsing to a silent `exit 1`.
+- Fast tasks and fast failures are replayed to late websocket subscribers, so
+  the dashboard cannot miss their update stream.
+- Terminal task cards refresh restart-safe history and notifications
+  automatically.
+
+## [1.8.4] — Persistent compatible avatars and stable 3D lifecycle
+
+### Added
+
+- Per-character automatic fit, position, rotation, scale, target framing, and
+  animation-speed controls that save to the user overlay and preview live.
+- A toolbar bell with an unread task-notification badge.
+- A Tasks/Claude guide for subscription authentication and project folders.
+
+### Changed
+
+- Character selection now derives and atomically saves the compatible runtime
+  from the pack kind; stale VRM/Sprite2D combinations self-repair at startup.
+- The bundled CC0 Octomimic VRM now uses 13–19 keyframes per embedded animation.
+
+### Fixed
+
+- Ordinary directives no longer reload Three.js assets or append renderer
+  canvases, eliminating per-message drift, cropping, and disappearing models.
+
+## [1.8.3] — Bundled animated VRM test character
+
+### Added
+
+- Replaced the empty `octomimic_vrm` placeholder with a real, compact VRM 1.0
+  model generated from project-owned geometry and dedicated to the public
+  domain under CC0-1.0.
+- Embedded `idle`, `listening`, `thinking`, `speaking`, `happy`, `error`,
+  `wave`, and `celebrate` animation clips for end-to-end Three.js state
+  testing.
+- Added a deterministic standard-library asset generator and CI regressions
+  that parse the checked-in model with the production `GLTFLoader` and
+  `VRMLoaderPlugin`.
+
+### Fixed
+
+- VRM expression changes now reset the previous expression before applying the
+  next one, preventing a prior emotion from remaining visually active.
+
+## [1.8.2] — Thinking-state and provider-stream recovery
+
+### Fixed
+
+- Restored the white thinking balloon above the avatar and reserved the red
+  toolbar banner for real errors.
+- The thinking balloon now disappears as soon as text or audio presentation
+  begins and on every terminal turn state.
+- LiteLLM streaming calls now enforce `request_timeout_s` across both
+  connection setup and the complete response stream.
+- Provider errors propagate to the conversation coordinator, which publishes
+  a terminal failed state and releases the single-flight turn lease.
+- A timed-out OpenRouter response can no longer leave text, PTT, or wake input
+  permanently disabled.
+
+## [1.8.1] — Configuration compatibility hotfix
+
+### Fixed
+
+- Schema-v2 configurations created before the final v1.8 web-research selector
+  now start normally. The loader translates the retired per-backend
+  `web_search: true|false` option to `web_search_mode: auto|off` in memory.
+- When both names are present, the current `web_search_mode` value wins.
+- Invalid legacy values now produce an actionable configuration path and
+  replacement syntax instead of Pydantic's generic extra-field startup error.
+- The compatibility conversion never rewrites `config/app.yaml` or
+  `config/user.yaml`.
+
+## [1.8.0] — Integrated 3D, local agents, and durable tasks
+
+### Added
+
+- Added restart-safe SQLite projects, task events, terminal results, and
+  notification history behind `JournaledTaskRuntime`.
+- Added local Claude CLI subscription/API modes, project working directories,
+  stream-JSON progress, and resumable provider session metadata.
+- Added an optional PicoClaw executable adapter.
+- Added transparent Three.js VRM/glTF/GLB rendering, animation cross-fades,
+  optional VRMA clips, VRM updates, and configurable animation speed.
+- Added per-backend OpenRouter web research modes: off, deterministic
+  automatic, and always.
+- Added an integrated install/configuration profile and dashboard task archive.
+
+### Changed
+
+- Saved voice profiles and memory provider settings now hot-refresh under a
+  visible supervisor state instead of requiring a backend restart.
+- Pack, avatar runtime, and active voice selection persist between launches.
+- Three-dimensional pack validation accepts VRM, glTF, and GLB metadata without
+  requiring Sprite2D emotion directories.
+- Automatic web research excludes greetings and ordinary conversation.
+- Removed the unnecessary `react-router-dom` frontend dependency.
+
+### Security
+
+- Locally created character, personality, voice, and companion-export assets
+  remain ignored by default. Only `mimic_blue`, `octomimic`, and
+  `octomimic_vrm` are source-controlled defaults.
+- Claude subscription mode does not forward Anthropic API credentials.
+- Task journals exclude secrets, raw audio, and provider environment dumps.
+
+### Added
 
 - Added named Voice Profiles stored outside the repository, with Chatterbox
   WAV/MP3 references, ElevenLabs voice IDs, consent metadata, selection,
@@ -40,27 +163,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file.
 
 ### Fixed
-
-- Automatic Faster-Whisper device selection now proves the CUDA 12 cuBLAS and
-  cuDNN speech DLLs on Windows before opening the microphone. An incompatible
-  CUDA 11/PyTorch environment selects the stable CPU/INT8 lane immediately
-  instead of failing on the first utterance and retrying noisily.
-- Thinking, listening, transcription, refresh, and backend-availability states
-  now use a white status balloon above the avatar. The red toolbar banner is
-  reserved exclusively for actionable errors.
-- The last successfully loaded character pack is persisted, private pack paths
-  are resolved before orchestrator startup, and the active named voice is
-  recovered from the persisted TTS profile. Personality remains in the private
-  persistent personality overlay.
-- Companion export accepts human-friendly IDs such as `GLaDOS-v1`, normalizes
-  them to safe portable IDs, downloads through a checked blob response, and
-  reports failures inline instead of navigating to a 422 response.
-- Desktop appearance loading waits for the direct backend WebSocket to connect,
-  eliminating repeated Vite `/appearance` proxy errors during backend startup
-  or refresh. The dashboard embeds its favicon and no longer requests a missing
-  `/favicon.ico`.
-- LiteLLM's generic feedback footer is suppressed while the concrete classified
-  provider exception and traceback are retained in OpenMimicry diagnostics.
 
 - User-created and imported character packs now install under the private
   OpenMimicry data directory; bundled character roots remain discoverable and

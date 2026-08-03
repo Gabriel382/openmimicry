@@ -21,11 +21,13 @@ import asyncio
 from openmimicry.core import AppConfig
 from openmimicry.core.runtime import Runtime
 
+
 async def main():
     config = AppConfig()
     async with Runtime(config=config) as rt:
         # rt.bus is the event bus; rt.store is the live snapshot.
         ...
+
 
 asyncio.run(main())
 ```
@@ -34,7 +36,10 @@ asyncio.run(main())
 
 ```python
 from openmimicry.core.config import load
-config = load("./config/app.yaml")  # respects OPENMIMICRY_CONFIG, OPENMIMICRY_PROFILE, OPENMIMICRY__SECTION__KEY
+
+config = load(
+    "./config/app.yaml"
+)  # respects OPENMIMICRY_CONFIG, OPENMIMICRY_PROFILE, OPENMIMICRY__SECTION__KEY
 ```
 
 ## Tests

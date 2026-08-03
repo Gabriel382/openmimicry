@@ -16,9 +16,11 @@ import zipfile
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
+from openmimicry.core import AppConfig
 from pydantic import BaseModel, Field, model_validator
 
-from ..user_settings import persist_avatar_pack
+from ..avatar_selection import runtime_for_pack_kind
+from ..user_settings import persist_avatar_selection, persist_avatar_transform
 
 __all__ = ["PackCreateRequest", "PackSwapRequest", "RuntimeSwapRequest", "router"]
 
@@ -32,6 +34,19 @@ class PackSwapRequest(BaseModel):
 
 class RuntimeSwapRequest(BaseModel):
     runtime: str
+
+
+class ModelTransform(BaseModel):
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    scale: float = Field(default=1.0, ge=0.05, le=10.0)
+    auto_fit: bool = True
+    target_height: float = Field(default=0.72, ge=0.1, le=3.0)
+    target_y: float = Field(default=1.3, ge=-3.0, le=5.0)
+
+
+class AvatarVisualSettings(ModelTransform):
+    animation_speed: float = Field(default=1.0, ge=0.1, le=4.0)
 
 
 class PackCreateRequest(BaseModel):
@@ -70,9 +85,31 @@ async def character_asset(pack_id: str, asset_path: str, request: Request) -> Fi
 
 @router.get("/packs")
 async def packs(request: Request) -> dict[str, object]:
+    values = request.app.state.character_registry.list()
+    enriched = [
+        {
+            **value,
+            "required_runtime": runtime_for_pack_kind(value["kind"]) or "unavailable",
+        }
+        for value in values
+    ]
     return {
-        "packs": request.app.state.character_registry.list(),
+        "packs": enriched,
         "active_pack": request.app.state.active_pack,
+        "active_runtime": request.app.state.wiring.orchestrator.runtime.name,
+    }
+
+
+@router.get("/avatar/settings")
+async def avatar_settings(request: Request) -> dict[str, object]:
+    pack_id = str(request.app.state.active_pack)
+    pack = _pack_summary(request, pack_id)
+    return {
+        "pack": pack_id,
+        "runtime": request.app.state.wiring.orchestrator.runtime.name,
+        "required_runtime": runtime_for_pack_kind(pack["kind"]) or "unavailable",
+        "transform": _threejs_transform(request.app.state.config, pack_id),
+        "animation_speed": request.app.state.config.avatar.animation_speed,
     }
 
 
@@ -185,30 +222,43 @@ from the dashboard.
 async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]:
     wiring = request.app.state.wiring
     orchestrator = wiring.orchestrator
-    runtime = orchestrator.runtime
+    pack = _pack_summary(request, req.pack)
+    required_runtime = runtime_for_pack_kind(pack["kind"]) or "unavailable"
+    factory = getattr(wiring, "runtime_factories", {}).get(required_runtime)
+    if factory is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"pack {req.pack!r} requires unavailable runtime {required_runtime!r}"),
+        )
+    runtime = orchestrator.runtime if orchestrator.runtime.name == required_runtime else factory()
     try:
         pack_path = request.app.state.character_registry.resolve(req.pack)
-        await runtime.load_character(req.pack, {"pack_path": str(pack_path)})
+        runtime_cfg = dict(request.app.state.config.avatar.runtimes.get(required_runtime, {}))
+        if required_runtime == "threejs":
+            runtime_cfg["animation_speed"] = request.app.state.config.avatar.animation_speed
+        await orchestrator.select_character(
+            character_id=req.pack,
+            runtime=runtime,
+            runtime_name=required_runtime,
+            character_config={
+                "pack_path": str(pack_path),
+                "runtime": runtime_cfg,
+            },
+        )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # Mirror the current directive so the new pack reflects state. The
-    # orchestrator owns ``_current``; we ask it (best-effort, via getattr).
-    current = getattr(orchestrator, "current", None)
-    if current is not None:
-        try:
-            await runtime.apply_directive(current)
-        except Exception as exc:
-            _log.warning("re-apply current directive after pack swap: %s", exc)
+    wiring.avatar_runtime = runtime
     request.app.state.active_pack = req.pack
-    try:
-        persist_avatar_pack(req.pack)
-    except (OSError, ValueError) as exc:
-        _log.error("could not persist active avatar pack %r: %s", req.pack, exc)
-        raise HTTPException(
-            status_code=500,
-            detail="The pack loaded, but its restart selection could not be saved.",
-        ) from exc
-    return {"ok": True, "pack": req.pack}
+    current_config = request.app.state.config
+    request.app.state.config = current_config.model_copy(
+        update={
+            "avatar": current_config.avatar.model_copy(
+                update={"pack": req.pack, "runtime": required_runtime}
+            )
+        }
+    )
+    persist_avatar_selection(pack=req.pack, runtime=required_runtime)
+    return {"ok": True, "pack": req.pack, "runtime": required_runtime}
 
 
 @router.post("/runtime/swap")
@@ -219,6 +269,17 @@ async def runtime_swap(req: RuntimeSwapRequest, request: Request) -> dict[str, o
     # requires concrete classes which only ``wiring.py`` may import. We
     # therefore expose a per-name factory side-channel on ``wiring`` (set
     # up in ``main.py`` so this file stays Protocol-only).
+    active_pack = str(request.app.state.active_pack)
+    pack = _pack_summary(request, active_pack)
+    required_runtime = runtime_for_pack_kind(pack["kind"]) or "unavailable"
+    if req.runtime != required_runtime:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"pack {active_pack!r} requires runtime {required_runtime!r}; "
+                "selecting the character changes its runtime automatically"
+            ),
+        )
     factory = getattr(wiring, "runtime_factories", {}).get(req.runtime)
     if factory is None:
         raise HTTPException(
@@ -226,10 +287,90 @@ async def runtime_swap(req: RuntimeSwapRequest, request: Request) -> dict[str, o
             detail=f"unknown runtime {req.runtime!r}; expected one of "
             f"{sorted(getattr(wiring, 'runtime_factories', {}))}",
         )
-    new_runtime = factory()
-    try:
-        await orchestrator.swap_runtime(new_runtime)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    wiring.avatar_runtime = new_runtime
+    # The requested runtime is already canonical for this pack.  Re-selecting
+    # through the character endpoint is the only supported mutation path and
+    # avoids loading a stale pack from the orchestrator's old config.
+    if orchestrator.runtime.name != req.runtime:
+        raise HTTPException(
+            status_code=409,
+            detail="re-select the active character to repair its runtime",
+        )
+    persist_avatar_selection(pack=active_pack, runtime=req.runtime)
     return {"ok": True, "runtime": req.runtime}
+
+
+@router.post("/avatar/transform")
+async def update_avatar_transform(
+    values: AvatarVisualSettings,
+    request: Request,
+) -> dict[str, object]:
+    pack_id = str(request.app.state.active_pack)
+    pack = _pack_summary(request, pack_id)
+    if runtime_for_pack_kind(pack["kind"]) != "threejs":
+        raise HTTPException(
+            status_code=409,
+            detail="3D transforms are available only for VRM/glTF characters",
+        )
+
+    transform = values.model_dump(mode="json", exclude={"animation_speed"})
+    current = request.app.state.config
+    runtime_cfg = dict(current.avatar.runtimes.get("threejs", {}))
+    runtime_cfg["animation_speed"] = values.animation_speed
+    transforms = dict(runtime_cfg.get("transforms", {}))
+    transforms[pack_id] = transform
+    runtime_cfg["transforms"] = transforms
+    runtimes = dict(current.avatar.runtimes)
+    runtimes["threejs"] = runtime_cfg
+    candidate = current.model_copy(
+        update={
+            "avatar": current.avatar.model_copy(
+                update={
+                    "runtimes": runtimes,
+                    "animation_speed": values.animation_speed,
+                }
+            )
+        }
+    )
+
+    try:
+        pack_path = request.app.state.character_registry.resolve(pack_id)
+        runtime = request.app.state.wiring.orchestrator.runtime
+        await request.app.state.wiring.orchestrator.select_character(
+            character_id=pack_id,
+            runtime=runtime,
+            runtime_name="threejs",
+            character_config={
+                "pack_path": str(pack_path),
+                "runtime": runtime_cfg,
+            },
+        )
+        persist_avatar_transform(
+            pack_id,
+            transform,
+            animation_speed=values.animation_speed,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    request.app.state.config = candidate
+    return {
+        "ok": True,
+        "pack": pack_id,
+        "runtime": "threejs",
+        "transform": transform,
+        "animation_speed": values.animation_speed,
+    }
+
+
+def _pack_summary(request: Request, pack_id: str) -> dict[str, str]:
+    for item in request.app.state.character_registry.list():
+        if item["id"] == pack_id:
+            return item
+    raise HTTPException(status_code=404, detail=f"character pack {pack_id!r} is not installed")
+
+
+def _threejs_transform(config: AppConfig, pack_id: str) -> dict[str, object]:
+    runtime_cfg = dict(config.avatar.runtimes.get("threejs", {}))
+    values = runtime_cfg.get("transforms", {}).get(pack_id, {})
+    if not isinstance(values, dict):
+        values = {}
+    return ModelTransform.model_validate(values).model_dump(mode="json")

@@ -17,7 +17,7 @@ attributes.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -54,9 +54,14 @@ from openmimicry.memory import HindsightMemory, LocalSQLiteMemory, MemoryService
 from openmimicry.memory.extractors import LLMExtractor
 from openmimicry.tasks import (
     ClaudeCodeAdapter,
+    ClaudeCodeSettings,
+    JournaledTaskRuntime,
     LocalShellAdapter,
     MCPAgentAdapter,
     MockTaskRuntimeAdapter,
+    PicoClawAdapter,
+    PicoClawSettings,
+    TaskJournal,
     TaskRouter,
     detect_task_intent,
 )
@@ -79,7 +84,14 @@ from openmimicry.voice import (
     SpeechController as ConcreteSpeechController,
 )
 
-__all__ = ["IntentClassifier", "Wiring", "WiringError", "build_runtime"]
+__all__ = [
+    "IntentClassifier",
+    "Wiring",
+    "WiringError",
+    "build_runtime",
+    "refresh_memory",
+    "refresh_tts",
+]
 
 
 # The intent classifier signature, re-exposed so consumers in this
@@ -158,6 +170,10 @@ async def build_runtime(
     )
 
     task_router = _build_task_router(config)
+    tasks = JournaledTaskRuntime(
+        task_router,
+        TaskJournal(config.tasks.database_path),
+    )
 
     runtime_names = ("sprite2d", "threejs", "live3d", "unity", "external")
     runtime_factories: dict[str, Callable[[], AvatarRuntimeAdapter]] = {}
@@ -176,7 +192,7 @@ async def build_runtime(
         director=director,
         avatar_runtime=avatar_runtime,
         orchestrator=orchestrator,
-        tasks=task_router,
+        tasks=tasks,
         memory=memory,
         adapters_by_family={
             "llm": {llm.name: llm},
@@ -211,7 +227,7 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
                         request_timeout_s=backend.request_timeout_s,
                         temperature=backend.temperature,
                         max_tokens=backend.max_tokens,
-                        web_search=backend.web_search,
+                        web_search_mode=backend.web_search_mode,
                     )
                 )
             else:
@@ -234,7 +250,6 @@ def _build_llm(config: AppConfig) -> LLMAdapter:
             request_timeout_s=config.llm.request_timeout_s,
             temperature=config.llm.temperature,
             max_tokens=config.llm.max_tokens,
-            web_search=config.llm.web_search,
         )
         return LiteLLMAdapter(settings=settings)
     raise WiringError(f"unknown llm.adapter: {name!r}")
@@ -326,6 +341,16 @@ def _build_memory(config: AppConfig, llm: LLMAdapter) -> MemoryService:
     )
 
 
+async def refresh_memory(wiring: Wiring, candidate: AppConfig) -> MemoryService:
+    """Build a replacement memory service, then retire the previous service."""
+
+    replacement = _build_memory(candidate, wiring.llm)
+    previous = wiring.memory
+    wiring.memory = replacement
+    await previous.close()
+    return replacement
+
+
 def _build_tts(config: AppConfig) -> TTSAdapter:
     name = config.voice.tts.adapter
     if name == "mock":
@@ -370,6 +395,23 @@ def _build_tts(config: AppConfig) -> TTSAdapter:
     raise WiringError(f"unknown voice.tts.adapter: {name!r}")
 
 
+async def refresh_tts(wiring: Wiring, candidate: AppConfig) -> None:
+    """Warm and swap only TTS while keeping the backend, STT, and tasks alive."""
+
+    replacement = _build_tts(candidate)
+    replacer = getattr(wiring.speech, "replace_tts", None)
+    if not callable(replacer):
+        raise WiringError("the active speech controller does not support hot TTS refresh")
+    await cast(Callable[..., Awaitable[Any]], replacer)(
+        replacement,
+        config=candidate.voice,
+    )
+    wiring.tts = replacement
+    families = wiring.adapters_by_family
+    if isinstance(families, dict):
+        families["tts"] = {replacement.name: replacement}
+
+
 def _build_avatar_runtime(config: AppConfig, *, ws_bridge: Any | None) -> AvatarRuntimeAdapter:
     name = config.avatar.runtime
     if name == "mock":
@@ -377,7 +419,10 @@ def _build_avatar_runtime(config: AppConfig, *, ws_bridge: Any | None) -> Avatar
     if name == "sprite2d":
         return Sprite2DAvatarAdapter(ws_bridge=ws_bridge)
     if name == "threejs":
-        runtime_cfg = config.avatar.runtimes.get("threejs", {})
+        runtime_cfg = {
+            **config.avatar.runtimes.get("threejs", {}),
+            "animation_speed": config.avatar.animation_speed,
+        }
         return ThreeJSAvatarAdapter(ws_bridge=ws_bridge, runtime_cfg=runtime_cfg)
     if name == "live3d":
         runtime_cfg = config.avatar.runtimes.get("live3d", {})
@@ -404,7 +449,10 @@ def _build_named_avatar_runtime(
     if name == "threejs":
         return ThreeJSAvatarAdapter(
             ws_bridge=ws_bridge,
-            runtime_cfg=config.avatar.runtimes.get("threejs", {}),
+            runtime_cfg={
+                **config.avatar.runtimes.get("threejs", {}),
+                "animation_speed": config.avatar.animation_speed,
+            },
         )
     if name == "live3d":
         return Live3DAvatarAdapter(
@@ -421,7 +469,7 @@ def _build_named_avatar_runtime(
 def _build_task_router(config: AppConfig) -> TaskRouter:
     adapters: dict[str, Any] = {}
     for runtime_name, entry in config.tasks.runtimes.items():
-        adapters[runtime_name] = _build_task_adapter(runtime_name, entry.adapter)
+        adapters[runtime_name] = _build_task_adapter(runtime_name, entry)
     if not adapters:
         adapters["mock"] = MockTaskRuntimeAdapter()
     default = config.tasks.default_runtime
@@ -435,13 +483,34 @@ def _build_task_router(config: AppConfig) -> TaskRouter:
     return TaskRouter(adapters=adapters, default_runtime=default)
 
 
-def _build_task_adapter(name: str, adapter_kind: str) -> Any:
+def _build_task_adapter(name: str, entry: Any) -> Any:
+    adapter_kind = entry.adapter
+    options = entry.model_dump(exclude={"adapter"})
     if adapter_kind == "mock":
         return MockTaskRuntimeAdapter()
     if adapter_kind == "local_shell":
         return LocalShellAdapter()
     if adapter_kind == "claude_code":
-        return ClaudeCodeAdapter()
+        return ClaudeCodeAdapter(
+            settings=ClaudeCodeSettings(
+                cli=str(options.get("cli", "claude")),
+                working_dir=str(options.get("working_dir", ".")),
+                auth_mode=str(options.get("auth_mode", "subscription")),
+                permission_mode=str(options.get("permission_mode", "acceptEdits")),
+                max_turns=(
+                    int(options["max_turns"]) if options.get("max_turns") is not None else None
+                ),
+                diagnostic_timeout_s=float(options.get("diagnostic_timeout_s", 8.0)),
+                extra_args=tuple(options.get("extra_args", ())),
+            )
+        )
+    if adapter_kind == "picoclaw":
+        return PicoClawAdapter(
+            settings=PicoClawSettings(
+                cli=str(options.get("cli", "picoclaw")),
+                working_dir=str(options.get("working_dir", ".")),
+            )
+        )
     if adapter_kind == "mcp_agent":
         return MCPAgentAdapter()
     raise WiringError(f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}")

@@ -27,5 +27,7 @@ export interface CharacterController {
   playClip(name: string, fadeMs?: number): void;
   currentClip(): string | null;
   setGazeTarget(target: string): void;
+  loadAnimation?(url: string, name?: string): Promise<void>;
+  update?(deltaSec: number): void;
   dispose(): void;
 }

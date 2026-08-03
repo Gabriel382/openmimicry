@@ -130,6 +130,7 @@ The helper is pure:
 
 ```python
 from openmimicry.vision import directive_from_gesture
+
 directive = directive_from_gesture(detection, gesture_map=cfg.gesture_map)
 ```
 

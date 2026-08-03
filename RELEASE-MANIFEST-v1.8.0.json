@@ -1,0 +1,70 @@
+{
+  "name": "OpenMimicry",
+  "version": "1.8.0",
+  "configuration_schema": 2,
+  "artifact": "OpenMimicry-v1.8.0-integrated-source.zip",
+  "documentation_artifact": "OpenMimicry-v1.8.0-collaborator-docs.zip",
+  "license": "MIT",
+  "profiles": [
+    "basic",
+    "integrated",
+    "openrouter-commercial",
+    "openrouter-voice",
+    "openrouter-chatterbox",
+    "openrouter-elevenlabs",
+    "voice",
+    "threejs",
+    "live3d",
+    "unity",
+    "agent",
+    "vision",
+    "full",
+    "full-vision",
+    "studio",
+    "dev"
+  ],
+  "integrated_capabilities": [
+    "sprite2d",
+    "threejs-vrm-gltf-glb-vrma",
+    "saved-voice-hot-refresh",
+    "optional-memory-hot-refresh",
+    "openrouter-ollama-switchboard",
+    "selective-web-research",
+    "claude-cli-subscription-or-api",
+    "picoclaw-cli",
+    "durable-project-task-event-notification-journal"
+  ],
+  "bundled_default_characters": [
+    "mimic_blue",
+    "octomimic",
+    "octomimic_vrm"
+  ],
+  "excluded_private_data": [
+    "credentials",
+    "config/user.yaml",
+    "raw_audio",
+    "voice_references",
+    "memory_databases",
+    "task_journals",
+    "logs",
+    "model_caches",
+    "local_characters",
+    "local_personalities",
+    "companion_exports"
+  ],
+  "verification": {
+    "python": {
+      "passed": 630,
+      "skipped": 1
+    },
+    "frontend": {
+      "test_files_passed": 17,
+      "tests_passed": 94
+    },
+    "ruff": "passed",
+    "pyright": "passed",
+    "typescript": "passed",
+    "production_dependency_audit": "no_known_vulnerabilities",
+    "native_tauri": "target_machine_required"
+  }
+}

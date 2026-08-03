@@ -7,7 +7,12 @@
  * pluggable so unit tests inject a fake.
  */
 
-import type { AnimationClip, Object3D } from "three";
+import {
+  AnimationMixer,
+  type AnimationAction,
+  type AnimationClip,
+  type Object3D,
+} from "three";
 
 import type { CharacterController, CharacterLoadOptions, ExpressionWeights } from "./types";
 
@@ -43,6 +48,8 @@ export async function loadGltfCharacter(
   }
 
   let activeClip: string | null = null;
+  let activeAction: AnimationAction | null = null;
+  const mixer = new AnimationMixer(root);
 
   return {
     kind: "gltf",
@@ -52,8 +59,14 @@ export async function loadGltfCharacter(
       // plain glTF doesn't carry VRM expressions; morph-target packs
       // would override this via a sibling loader.
     },
-    playClip(name: string, _fadeMs = 0): void {
-      activeClip = clips.has(name) ? name : activeClip;
+    playClip(name: string, fadeMs = 0): void {
+      const clip = clips.get(name);
+      if (!clip || name === activeClip) return;
+      const next = mixer.clipAction(clip);
+      next.reset().play();
+      if (activeAction) next.crossFadeFrom(activeAction, fadeMs / 1000, true);
+      activeAction = next;
+      activeClip = name;
     },
     currentClip(): string | null {
       return activeClip;
@@ -61,7 +74,12 @@ export async function loadGltfCharacter(
     setGazeTarget(_target: string): void {
       // gaze is renderer-specific; default impl is a no-op.
     },
+    update(deltaSec: number): void {
+      mixer.update(deltaSec);
+    },
     dispose(): void {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(root);
       if (opts.scene) opts.scene.remove(root);
     },
   };

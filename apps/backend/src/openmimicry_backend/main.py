@@ -15,10 +15,11 @@ import asyncio
 import importlib.util
 import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, cast
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
@@ -32,6 +33,7 @@ from openmimicry.core import (
 from openmimicry.core.config import load as load_config
 
 from .appearance import load_appearance
+from .avatar_selection import runtime_for_pack_kind
 from .character_import import CharacterRegistry
 from .conversation import ConversationCoordinator, TurnSubmission
 from .diagnostics import install_diagnostics
@@ -49,12 +51,13 @@ from .routes import (
     mode_router,
     pack_router,
     personality_router,
+    tasks_router,
     voice_clone_router,
     voice_profiles_router,
 )
 from .routes.chat import run_chat_turn
 from .supervisor import RuntimeSupervisor, TurnAdmission, TurnSource
-from .voice_profiles import VoiceProfileStore
+from .user_settings import persist_avatar_selection
 from .wiring import Wiring, build_runtime
 from .ws import BroadcastBridge, ws_endpoint
 
@@ -124,35 +127,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
-    # The dashboard persists the selected pack in the per-user overlay. Resolve
-    # its concrete private/bundled path before the orchestrator starts; a stale
-    # selection falls back to the bundled default without making the backend
-    # unavailable.
-    selected_pack = config.avatar.pack
-    try:
-        selected_pack_path = character_registry.resolve(selected_pack)
-    except ValueError as exc:
-        fallback_pack = "octomimic"
-        _log.warning(
-            "saved avatar pack %r is unavailable (%s); using %s",
-            selected_pack,
-            exc,
-            fallback_pack,
-        )
-        selected_pack = fallback_pack
-        selected_pack_path = character_registry.resolve(selected_pack)
-    runtime_settings = {name: dict(values) for name, values in config.avatar.runtimes.items()}
-    runtime_settings[config.avatar.runtime] = {
-        **runtime_settings.get(config.avatar.runtime, {}),
-        "pack_path": str(selected_pack_path),
-    }
-    config = config.model_copy(
-        update={
-            "avatar": config.avatar.model_copy(
-                update={"pack": selected_pack, "runtimes": runtime_settings}
-            )
-        }
+    # Repair stale pack/runtime combinations from earlier builds before an
+    # adapter is constructed.  This makes a persisted VRM+sprite2d pairing
+    # self-healing on the next launch.
+    selected_pack = next(
+        (item for item in character_registry.list() if item["id"] == config.avatar.pack),
+        None,
     )
+    if selected_pack is not None:
+        required_runtime = runtime_for_pack_kind(selected_pack["kind"])
+        if required_runtime is not None:
+            repaired_runtime = required_runtime != config.avatar.runtime
+            runtime_values = dict(config.avatar.runtimes.get(required_runtime, {}))
+            runtime_values["pack_path"] = str(character_registry.resolve(config.avatar.pack))
+            if required_runtime == "threejs":
+                runtime_values["animation_speed"] = config.avatar.animation_speed
+            runtimes = dict(config.avatar.runtimes)
+            runtimes[required_runtime] = runtime_values
+            config = config.model_copy(
+                update={
+                    "avatar": config.avatar.model_copy(
+                        update={
+                            "runtime": required_runtime,
+                            "runtimes": runtimes,
+                        }
+                    )
+                }
+            )
+            if repaired_runtime:
+                persist_avatar_selection(
+                    pack=config.avatar.pack,
+                    runtime=required_runtime,
+                )
 
     bridge = BroadcastBridge()
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
@@ -186,7 +192,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             presentation=presentation_state["value"],
             voice_enabled=bool(mode_state["agent_voice"]),
         )
-        if reply and config.memory.enabled:
+        if reply:
             wiring.memory.observe(
                 text,
                 reply,
@@ -316,17 +322,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.conversation = conversation
     app.state.supervisor = supervisor
     app.state.character_registry = character_registry
-    app.state.active_pack = selected_pack
-    clone = config.voice.tts.clone
-    app.state.active_voice_profile = (
-        VoiceProfileStore(config.app.data_dir).match_active(
-            provider=clone.provider,
-            voice_id=clone.voice_id,
-            reference_path=clone.reference_path,
-        )
-        if clone is not None
-        else None
-    )
+    app.state.active_pack = config.avatar.pack
+    app.state.active_voice_profile = config.voice.active_profile
     app.state.memory = wiring.memory
     app.state.diagnostics = diagnostics
 
@@ -378,15 +375,22 @@ async def _graceful_shutdown(wiring: Wiring) -> None:
         wiring.orchestrator.stop(),
         wiring.speech.stop(),
         wiring.memory.close(),
+        _close_tasks(wiring.tasks),
         return_exceptions=True,
     )
     await wiring.runtime.stop()
 
 
+async def _close_tasks(tasks: object) -> None:
+    closer = getattr(tasks, "close", None)
+    if callable(closer):
+        await cast(Callable[[], Awaitable[Any]], closer)()
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.6.4",
+        version="1.8.5",
         lifespan=lifespan,
     )
 
@@ -400,6 +404,7 @@ def create_app() -> FastAPI:
     app.include_router(interaction_router)
     app.include_router(memory_router)
     app.include_router(personality_router)
+    app.include_router(tasks_router)
     app.include_router(voice_clone_router)
     app.include_router(voice_profiles_router)
     app.include_router(pack_router)

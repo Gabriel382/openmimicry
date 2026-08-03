@@ -284,7 +284,7 @@ class IsolatedFasterWhisperAdapter:
                     self._vad_active = bool(message.get("active"))
                 elif event == "error":
                     _log.error("isolated STT worker: %s", message.get("message"))
-                elif event in {"runtime", "warning"}:
+                elif event == "warning":
                     self._runtime_info.update(
                         {
                             "device": message.get("device"),
@@ -292,8 +292,7 @@ class IsolatedFasterWhisperAdapter:
                             "fallback_reason": message.get("message"),
                         }
                     )
-                    log = _log.info if event == "runtime" else _log.warning
-                    log("isolated STT runtime: %s", message.get("message"))
+                    _log.warning("isolated STT worker: %s", message.get("message"))
         except asyncio.CancelledError:
             raise
         finally:

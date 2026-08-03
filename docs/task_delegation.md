@@ -22,13 +22,14 @@ Schemas:
 
 ```python
 class TaskRequest(BaseModel):
-    summary: str                          # short human description
-    instructions: str                     # full task text
-    inputs: list[TaskInput] = []          # files, URLs, blobs
+    summary: str  # short human description
+    instructions: str  # full task text
+    inputs: list[TaskInput] = []  # files, URLs, blobs
     capabilities_required: set[str] = set()
     preferred_runtime: str | None = None
     constraints: TaskConstraints = TaskConstraints()
     metadata: dict[str, Any] = {}
+
 
 class TaskUpdate(BaseModel):
     handle: TaskHandle
@@ -48,6 +49,7 @@ The `updates(...)` stream is the live channel: status changes, log lines, progre
 ```python
 class TaskRouter(TaskRuntimeAdapter):
     """A TaskRuntimeAdapter whose impl is 'pick the right adapter'."""
+
     def __init__(self, registry: dict[str, TaskRuntimeAdapter], cfg: TasksConfig): ...
 ```
 

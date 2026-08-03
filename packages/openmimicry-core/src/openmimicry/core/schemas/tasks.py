@@ -24,7 +24,15 @@ __all__ = [
 ]
 
 
-TaskStatusName = Literal["queued", "running", "succeeded", "failed", "cancelled"]
+TaskStatusName = Literal[
+    "queued",
+    "running",
+    "waiting_for_user",
+    "interrupted",
+    "succeeded",
+    "failed",
+    "cancelled",
+]
 
 
 class TaskInput(BaseModel):
@@ -118,6 +126,7 @@ class TaskUpdate(BaseModel):
     stdout: str | None = None
     artifacts: list[Artifact] = []
     error: TaskError | None = None
+    metadata: dict[str, Any] = {}
     ts: datetime
 
 
@@ -131,3 +140,4 @@ class TaskResult(BaseModel):
     artifacts: list[Artifact] = []
     summary: str | None = None
     error: TaskError | None = None
+    metadata: dict[str, Any] = {}

@@ -25,35 +25,40 @@ pip install "openmimicry-tasks[tasks]"              # everything
 ```python
 import asyncio
 from openmimicry.tasks import (
-    AllowlistEntry, LocalShellAdapter, LocalShellSettings,
-    MockTaskRuntimeAdapter, TaskRouter,
+    AllowlistEntry,
+    LocalShellAdapter,
+    LocalShellSettings,
+    MockTaskRuntimeAdapter,
+    TaskRouter,
 )
 from openmimicry.core.schemas.tasks import TaskRequest
+
 
 async def main():
     shell = LocalShellAdapter(
         settings=LocalShellSettings(
             working_dir="/tmp",
             audit_log="~/.openmimicry/shell-audit.log",
-            allowlist=(
-                AllowlistEntry(cmd="ls", flag_patterns=("-la", "-l", "-a")),
-            ),
+            allowlist=(AllowlistEntry(cmd="ls", flag_patterns=("-la", "-l", "-a")),),
         ),
     )
     router = TaskRouter(
         adapters={"local_shell": shell, "mock": MockTaskRuntimeAdapter()},
         default_runtime="mock",
     )
-    handle = await router.submit(TaskRequest(
-        summary="list /tmp",
-        instructions="ls -la",
-        preferred_runtime="local_shell",
-        capabilities_required={"shell"},
-    ))
+    handle = await router.submit(
+        TaskRequest(
+            summary="list /tmp",
+            instructions="ls -la",
+            preferred_runtime="local_shell",
+            capabilities_required={"shell"},
+        )
+    )
     async for update in router.updates(handle):
         print(update.status, update.stdout or update.note or "")
     final = await router.result(handle)
     print("final:", final.status)
+
 
 asyncio.run(main())
 ```

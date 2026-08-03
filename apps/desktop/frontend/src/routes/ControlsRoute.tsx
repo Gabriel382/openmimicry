@@ -13,6 +13,7 @@ export function ControlsRoute(): JSX.Element {
   const {
     configureOverlayWindows,
     openBackendDashboard,
+    openBackendDashboardSection,
     overlayInfo,
     quitApp,
     setOverlayInteractive,
@@ -23,6 +24,7 @@ export function ControlsRoute(): JSX.Element {
   const controls = appearance.behaviour.controls;
   const [locked, setLocked] = useState(false);
   const [overlayInteractive, setOverlayInteractiveState] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pointerPtt = useRef(false);
 
   useEffect(() => {
@@ -49,6 +51,26 @@ export function ControlsRoute(): JSX.Element {
       }
     });
   }, [overlayInfo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async (): Promise<void> => {
+      try {
+        const response = await fetch("/tasks/notifications?unread_only=true");
+        if (!response.ok) return;
+        const payload = (await response.json()) as { unread?: number };
+        if (!cancelled) setUnreadNotifications(Math.max(0, Number(payload.unread) || 0));
+      } catch {
+        // Backend availability is already surfaced by useRuntimeState.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -110,6 +132,14 @@ export function ControlsRoute(): JSX.Element {
     "--om-input-border": appearance.theme.input_border,
     "--om-accent": appearance.theme.accent,
   };
+  const runtimeError =
+    runtime.turn?.state === "failed"
+      ? runtime.turn.reason || "The current request failed."
+      : runtime.runtime?.state === "degraded"
+        ? runtime.runtime.reason || "The backend is degraded."
+        : runtime.statusLabel === "Backend unavailable"
+          ? runtime.statusLabel
+          : null;
 
   return (
     <div className="controls-route" data-route="controls" style={style}>
@@ -126,6 +156,28 @@ export function ControlsRoute(): JSX.Element {
             <ToolbarIcon name="drag" />
           </button>
         )}
+        <button
+          type="button"
+          className="avatar-toolbar__button"
+          aria-label={
+            unreadNotifications
+              ? `Open task notifications (${unreadNotifications} unread)`
+              : "Open task notifications"
+          }
+          title={
+            unreadNotifications
+              ? `${unreadNotifications} unread task notification${unreadNotifications === 1 ? "" : "s"}`
+              : "Open task notifications"
+          }
+          onClick={() => void openBackendDashboardSection("notifications-section")}
+        >
+          <ToolbarIcon name="notifications" />
+          {unreadNotifications > 0 && (
+            <span className="avatar-toolbar__badge" aria-hidden="true">
+              {unreadNotifications > 99 ? "99+" : unreadNotifications}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           className="avatar-toolbar__button"
@@ -207,6 +259,20 @@ export function ControlsRoute(): JSX.Element {
       {voice.error && (
         <div className="avatar-toolbar__error" role="alert" title={voice.error}>
           {voice.error}
+        </div>
+      )}
+      {!voice.error && runtimeError && (
+        <div className="avatar-toolbar__error" role="alert" title={runtimeError}>
+          {runtimeError}
+        </div>
+      )}
+      {!voice.error && !runtimeError && runtime.runtime?.state === "refreshing" && (
+        <div
+          className="avatar-toolbar__status"
+          role="status"
+          title={runtime.statusLabel}
+        >
+          {runtime.statusLabel}
         </div>
       )}
     </div>

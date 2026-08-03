@@ -17,12 +17,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
 import shutil
+import subprocess
 import uuid
-from collections.abc import AsyncIterator
+from collections import deque
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,7 +64,13 @@ class ClaudeCodeUnavailable(RuntimeError):
 class ClaudeCodeSettings:
     cli: str = "claude"
     working_dir: str = "."
+    auth_mode: str = "subscription"
+    output_format: str = "stream-json"
+    permission_mode: str = "acceptEdits"
+    max_turns: int | None = None
+    resume_sessions: bool = True
     cancel_grace_s: float = 3.0
+    diagnostic_timeout_s: float = 8.0
     extra_args: tuple[str, ...] = ()
     queue_maxsize: int = 256
     env_overrides: dict[str, str] = field(default_factory=dict)
@@ -77,12 +86,16 @@ class _ClaudeTask:
         "artifacts",
         "cancelled",
         "exit_code",
+        "failure",
         "handle",
         "last_note",
         "last_status",
         "process",
         "queue",
         "request",
+        "session_id",
+        "stderr_tail",
+        "summary",
         "task",
     )
 
@@ -97,6 +110,10 @@ class _ClaudeTask:
         self.last_note: str | None = None
         self.process: asyncio.subprocess.Process | None = None
         self.task: asyncio.Task | None = None
+        self.session_id: str | None = None
+        self.failure: TaskError | None = None
+        self.stderr_tail: deque[str] = deque(maxlen=12)
+        self.summary: str | None = None
 
 
 class ClaudeCodeAdapter:
@@ -171,9 +188,15 @@ class ClaudeCodeAdapter:
                 handle=handle,
                 status="failed",
                 artifacts=t.artifacts,
-                error=TaskError(code="exit", message=t.last_note or "non-zero exit"),
+                error=t.failure or TaskError(code="exit", message=t.last_note or "non-zero exit"),
             )
-        return TaskResult(handle=handle, status="succeeded", artifacts=t.artifacts)
+        return TaskResult(
+            handle=handle,
+            status="succeeded",
+            artifacts=t.artifacts,
+            summary=t.summary,
+            metadata={"session_id": t.session_id} if t.session_id else {},
+        )
 
     async def healthcheck(self) -> bool:
         if self._closed:
@@ -182,7 +205,60 @@ class ClaudeCodeAdapter:
             self._resolve_cli()
         except ClaudeCodeUnavailable:
             return False
-        return True
+        return Path(self._settings.working_dir).expanduser().is_dir()
+
+    async def diagnostics(self) -> dict[str, Any]:
+        """Return actionable, secret-free CLI/auth/cwd diagnostics.
+
+        The probes do not submit a model request and therefore do not consume
+        Claude usage.  They intentionally use the same curated environment,
+        wrapper handling, and working directory as a real task.
+        """
+
+        cwd = Path(self._settings.working_dir).expanduser()
+        result: dict[str, Any] = {
+            "adapter": self.name,
+            "configured_cli": self._settings.cli,
+            "working_dir": str(cwd),
+            "working_dir_exists": cwd.is_dir(),
+            "auth_mode": self._settings.auth_mode,
+            "permission_mode": self._settings.permission_mode,
+            "available": False,
+            "authenticated": False,
+        }
+        try:
+            cli = self._resolve_cli()
+        except ClaudeCodeUnavailable as exc:
+            result["error"] = str(exc)
+            return result
+        result["resolved_cli"] = cli
+        if not cwd.is_dir():
+            result["error"] = (
+                "Configured Claude working directory does not exist. "
+                "Correct tasks.runtimes.claude_code.working_dir."
+            )
+            return result
+
+        version = await self._probe(cli, ("--version",), cwd=str(cwd))
+        result["version"] = version["output"]
+        if version["returncode"] != 0:
+            result["error"] = version["error"] or "claude --version failed"
+            return result
+
+        auth = await self._probe(cli, ("auth", "status"), cwd=str(cwd))
+        result["auth_status"] = auth["output"]
+        result["authenticated"] = auth["returncode"] == 0
+        result["available"] = result["authenticated"]
+        if not result["authenticated"]:
+            result["error"] = (
+                auth["error"]
+                or auth["output"]
+                or (
+                    "Claude is not authenticated for the account that starts OpenMimicry. "
+                    "Run `claude auth login`, then restart the backend."
+                )
+            )
+        return result
 
     # --------------------------------------------------------------- runner
 
@@ -194,11 +270,30 @@ class ClaudeCodeAdapter:
                 raise ClaudeCodeUnavailable(f"claude CLI not found at {cli!r}")
             return cli
         found = shutil.which(cli)
-        if found is None:
-            raise ClaudeCodeUnavailable(
-                f"{cli!r} not on PATH; install Claude Code or set tasks.runtimes.claude_code.cli"
-            )
-        return found
+        if found is not None:
+            return found
+        if os.name == "nt" and cli.casefold() in {"claude", "claude.exe"}:
+            for candidate in self._windows_cli_candidates():
+                if candidate.is_file():
+                    return str(candidate)
+        raise ClaudeCodeUnavailable(
+            f"{cli!r} not on the backend PATH; restart PowerShell after installing Claude "
+            "Code or set tasks.runtimes.claude_code.cli to the absolute executable path"
+        )
+
+    @staticmethod
+    def _windows_cli_candidates() -> tuple[Path, ...]:
+        """Known native/npm/WinGet locations used by Claude Code on Windows."""
+
+        user = Path(os.environ.get("USERPROFILE", ""))
+        local = Path(os.environ.get("LOCALAPPDATA", ""))
+        roaming = Path(os.environ.get("APPDATA", ""))
+        candidates = (
+            user / ".local" / "bin" / "claude.exe",
+            local / "Microsoft" / "WinGet" / "Links" / "claude.exe",
+            roaming / "npm" / "claude.cmd",
+        )
+        return tuple(path for path in candidates if str(path.parent) not in {".", ""})
 
     def _build_prompt(self, req: TaskRequest) -> str:
         parts: list[str] = [req.instructions.strip()]
@@ -216,16 +311,97 @@ class ClaudeCodeAdapter:
     def _build_env(self) -> dict[str, str]:
         # Start from a minimal subset and apply overrides. PATH must be
         # present so the CLI can locate its own subcommands.
-        env: dict[str, str] = {
-            "PATH": os.environ.get("PATH", ""),
-            "HOME": os.environ.get("HOME", ""),
-        }
-        # Forward the common Anthropic env vars without grabbing the kitchen sink.
-        for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_HOME"):
-            if key in os.environ:
-                env[key] = os.environ[key]
+        env: dict[str, str] = {}
+        for key in (
+            "PATH",
+            "HOME",
+            "USERPROFILE",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "SYSTEMROOT",
+            "WINDIR",
+            "SYSTEMDRIVE",
+            "COMSPEC",
+            "PATHEXT",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "TEMP",
+            "TMP",
+            "LANG",
+            "LC_ALL",
+            "CLAUDE_HOME",
+            "CLAUDE_CONFIG_DIR",
+            "CLAUDE_CODE_GIT_BASH_PATH",
+            "CLAUDE_CODE_USE_POWERSHELL_TOOL",
+        ):
+            value = os.environ.get(key)
+            if value:
+                env[key] = value
+        # Subscription mode deliberately leaves API credentials out so the
+        # locally authenticated Claude CLI uses the user's Claude plan.
+        if self._settings.auth_mode == "api":
+            for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"):
+                if key in os.environ:
+                    env[key] = os.environ[key]
         env.update(self._settings.env_overrides)
         return env
+
+    def _build_command(
+        self,
+        cli: str,
+        args: Sequence[str],
+        *,
+        env: dict[str, str],
+        windows: bool | None = None,
+    ) -> tuple[str, ...]:
+        """Build a direct executable command, safely wrapping Windows batch shims."""
+
+        is_windows = os.name == "nt" if windows is None else windows
+        if is_windows and Path(cli).suffix.casefold() in {".cmd", ".bat"}:
+            comspec = env.get("COMSPEC") or os.environ.get("COMSPEC") or "cmd.exe"
+            command_line = subprocess.list2cmdline([cli, *args])
+            return (comspec, "/d", "/s", "/c", command_line)
+        return (cli, *args)
+
+    async def _probe(
+        self,
+        cli: str,
+        args: Sequence[str],
+        *,
+        cwd: str,
+    ) -> dict[str, Any]:
+        env = self._build_env()
+        argv = self._build_command(cli, args, env=env)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *argv,
+                cwd=cwd,
+                env=env,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=self._settings.diagnostic_timeout_s,
+            )
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            with contextlib.suppress(Exception):
+                await process.wait()
+            return {
+                "returncode": -1,
+                "output": "",
+                "error": f"`{' '.join(args)}` timed out",
+            }
+        except Exception as exc:
+            return {"returncode": -1, "output": "", "error": str(exc)}
+        return {
+            "returncode": int(process.returncode or 0),
+            "output": stdout.decode("utf-8", errors="replace").strip(),
+            "error": stderr.decode("utf-8", errors="replace").strip(),
+        }
 
     async def _run(self, t: _ClaudeTask) -> None:
         try:
@@ -233,27 +409,80 @@ class ClaudeCodeAdapter:
         except ClaudeCodeUnavailable as exc:
             t.last_status = "failed"
             t.last_note = str(exc)
+            t.failure = TaskError(code="cli_missing", message=str(exc))
+            _log.error("Claude task %s rejected: %s", t.handle.id, exc)
             await self._offer(
                 t.queue,
                 TaskUpdate(
                     handle=t.handle,
                     status="failed",
                     ts=_now(),
-                    error=TaskError(code="cli_missing", message=str(exc)),
+                    note=str(exc),
+                    error=t.failure,
                 ),
             )
             await self._offer(t.queue, None)
             return
 
         prompt = self._build_prompt(t.request)
-        argv = [cli, *self._settings.extra_args]
+        args = [
+            "-p",
+            "--input-format",
+            "text",
+            "--output-format",
+            self._settings.output_format,
+            "--verbose",
+            "--permission-mode",
+            self._settings.permission_mode,
+        ]
+        if self._settings.max_turns is not None:
+            args.extend(["--max-turns", str(self._settings.max_turns)])
+        requested_session = t.request.metadata.get("provider_session_id")
+        if (
+            self._settings.resume_sessions
+            and isinstance(requested_session, str)
+            and requested_session.strip()
+        ):
+            args.extend(["--resume", requested_session.strip()])
+        args.extend(self._settings.extra_args)
         env = self._build_env()
         cwd = t.request.constraints.working_dir or self._settings.working_dir
+        cwd_path = Path(cwd).expanduser()
+        if not cwd_path.is_dir():
+            message = (
+                f"Claude working directory does not exist: {cwd_path}. "
+                "Correct tasks.runtimes.claude_code.working_dir."
+            )
+            t.last_status = "failed"
+            t.last_note = message
+            t.failure = TaskError(code="working_directory_missing", message=message)
+            _log.error("Claude task %s rejected: %s", t.handle.id, message)
+            await self._offer(
+                t.queue,
+                TaskUpdate(
+                    handle=t.handle,
+                    status="failed",
+                    ts=_now(),
+                    note=message,
+                    error=t.failure,
+                ),
+            )
+            await self._offer(t.queue, None)
+            return
+        argv = self._build_command(cli, args, env=env)
+        _log.info(
+            "Claude task %s starting: cli=%s cwd=%s auth=%s permission=%s",
+            t.handle.id,
+            cli,
+            cwd_path,
+            self._settings.auth_mode,
+            self._settings.permission_mode,
+        )
 
         try:
             t.process = await asyncio.create_subprocess_exec(
                 *argv,
-                cwd=cwd,
+                cwd=str(cwd_path),
                 env=env,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -261,20 +490,33 @@ class ClaudeCodeAdapter:
             )
         except Exception as exc:
             t.last_status = "failed"
-            t.last_note = str(exc)
+            t.last_note = f"{type(exc).__name__}: {exc}"
+            t.failure = TaskError(code="spawn_failed", message=t.last_note)
+            _log.exception(
+                "Claude task %s could not start: cli=%s cwd=%s",
+                t.handle.id,
+                cli,
+                cwd_path,
+            )
             await self._offer(
                 t.queue,
                 TaskUpdate(
                     handle=t.handle,
                     status="failed",
                     ts=_now(),
-                    error=TaskError(code="spawn_failed", message=str(exc)),
+                    note=t.last_note,
+                    error=t.failure,
                 ),
             )
             await self._offer(t.queue, None)
             return
 
         t.last_status = "running"
+        _log.info(
+            "Claude task %s spawned: pid=%s",
+            t.handle.id,
+            getattr(t.process, "pid", "unknown"),
+        )
         await self._offer(
             t.queue,
             TaskUpdate(handle=t.handle, status="running", ts=_now(), note="claude spawned"),
@@ -310,8 +552,9 @@ class ClaudeCodeAdapter:
                 t.queue,
                 TaskUpdate(handle=t.handle, status="cancelled", ts=_now()),
             )
-        elif exit_code == 0:
+        elif exit_code == 0 and t.failure is None:
             t.last_status = "succeeded"
+            _log.info("Claude task %s completed successfully", t.handle.id)
             await self._offer(
                 t.queue,
                 TaskUpdate(
@@ -323,14 +566,29 @@ class ClaudeCodeAdapter:
             )
         else:
             t.last_status = "failed"
-            t.last_note = f"exit {exit_code}"
+            stderr_detail = "\n".join(t.stderr_tail).strip()
+            if t.failure is None:
+                t.last_note = stderr_detail or f"Claude exited with code {exit_code}"
+                t.failure = TaskError(
+                    code=f"exit_{exit_code}",
+                    message=t.last_note,
+                )
+            else:
+                t.last_note = t.failure.message
+            _log.error(
+                "Claude task %s failed: exit=%s detail=%s",
+                t.handle.id,
+                exit_code,
+                t.last_note,
+            )
             await self._offer(
                 t.queue,
                 TaskUpdate(
                     handle=t.handle,
                     status="failed",
                     ts=_now(),
-                    error=TaskError(code=f"exit_{exit_code}", message=t.last_note),
+                    note=t.last_note,
+                    error=t.failure,
                 ),
             )
 
@@ -346,15 +604,16 @@ class ClaudeCodeAdapter:
                 if not raw:
                     return
                 line = raw.decode("utf-8", errors="replace").rstrip()
-                note = self._parse_note(line, t)
+                display, note, metadata = self._parse_output(line, t)
                 await self._offer(
                     t.queue,
                     TaskUpdate(
                         handle=t.handle,
                         status="running",
                         ts=_now(),
-                        stdout=line,
+                        stdout=display,
                         note=note,
+                        metadata=metadata,
                     ),
                 )
         except asyncio.CancelledError:
@@ -372,6 +631,9 @@ class ClaudeCodeAdapter:
                 if not raw:
                     return
                 line = raw.decode("utf-8", errors="replace").rstrip()
+                if line:
+                    t.stderr_tail.append(line)
+                    _log.warning("Claude task %s stderr: %s", t.handle.id, line)
                 await self._offer(
                     t.queue,
                     TaskUpdate(
@@ -396,6 +658,44 @@ class ClaudeCodeAdapter:
         if m := _ERROR_RE.match(line):
             return f"error: {m.group('msg').strip()}"
         return None
+
+    def _parse_output(self, line: str, t: _ClaudeTask) -> tuple[str, str | None, dict[str, Any]]:
+        """Parse Claude's stream-json while remaining compatible with plain output."""
+
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return line, self._parse_note(line, t), {}
+        if not isinstance(event, dict):
+            return line, None, {}
+        metadata: dict[str, Any] = {}
+        session_id = event.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            t.session_id = session_id
+            metadata["session_id"] = session_id
+        event_type = str(event.get("type", "event"))
+        if event_type == "result":
+            result = event.get("result")
+            if isinstance(result, str):
+                t.summary = result
+                if event.get("is_error") is True:
+                    subtype = str(event.get("subtype") or "provider_error")
+                    t.failure = TaskError(code=subtype, message=result)
+                    t.last_note = result
+                return result, "Claude completed", metadata
+        message = event.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, list):
+                chunks = [
+                    str(item.get("text", ""))
+                    for item in content
+                    if isinstance(item, dict) and item.get("type") == "text"
+                ]
+                text = "".join(chunks)
+                if text:
+                    return text, None, metadata
+        return line, event_type, metadata
 
     async def _offer(self, queue: asyncio.Queue, item: Any) -> None:
         try:

@@ -11,7 +11,7 @@ from .local_shell_adapter import (
 )
 from .mcp_agent_adapter import MCPAgentAdapter, MCPAgentSettings, MCPAgentUnavailable
 from .openclaw_adapter import OpenClawAdapter
-from .picoclaw_adapter import PicoClawAdapter
+from .picoclaw_adapter import PicoClawAdapter, PicoClawSettings
 
 __all__ = [
     "AllowlistEntry",
@@ -24,5 +24,6 @@ __all__ = [
     "MCPAgentUnavailable",
     "OpenClawAdapter",
     "PicoClawAdapter",
+    "PicoClawSettings",
     "ShellNotAllowed",
 ]

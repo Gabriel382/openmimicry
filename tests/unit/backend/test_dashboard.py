@@ -61,6 +61,11 @@ def test_dashboard_exposes_v16_configuration_surfaces() -> None:
         "voice-clone-form",
         "voice-token-form",
         "pack-create-form",
+        "threejs-transform-form",
+        "threejs-animation-speed",
+        "notifications-section",
+        "task-runtime-status",
+        "refresh-task-runtime",
     ):
         assert f'id="{element_id}"' in text
 

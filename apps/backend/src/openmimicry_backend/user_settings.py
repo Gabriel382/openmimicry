@@ -9,32 +9,17 @@ from typing import Any
 import yaml
 
 __all__ = [
-    "persist_avatar_pack",
+    "persist_avatar_selection",
+    "persist_avatar_transform",
     "persist_interaction_settings",
     "persist_llm_backend",
     "persist_llm_model",
-    "persist_llm_web_search",
     "persist_memory_settings",
     "persist_tts_clone",
     "persist_voice_settings",
     "persist_wake_names",
     "user_config_path",
 ]
-
-
-def persist_avatar_pack(pack_id: str, path: Path | None = None) -> Path:
-    """Persist the last successfully loaded avatar pack."""
-
-    selected = pack_id.strip()
-    if not selected or len(selected) > 64:
-        raise ValueError("avatar pack id must contain 1 to 64 characters")
-    target = path or user_config_path()
-    data = _read_user_mapping(target)
-    avatar = data.setdefault("avatar", {})
-    if not isinstance(avatar, dict):
-        raise ValueError("user settings avatar section must be a mapping")
-    avatar["pack"] = selected
-    return _write_user_mapping(target, data)
 
 
 def user_config_path() -> Path:
@@ -154,24 +139,6 @@ def persist_llm_model(backend: str, model: str, path: Path | None = None) -> Pat
     return _write_user_mapping(target, data)
 
 
-def persist_llm_web_search(backend: str, enabled: bool, path: Path | None = None) -> Path:
-    """Persist an opt-in OpenRouter web-grounding choice per backend."""
-
-    target = path or user_config_path()
-    data = _read_user_mapping(target)
-    llm = data.setdefault("llm", {})
-    if not isinstance(llm, dict):
-        raise ValueError("user settings llm section must be a mapping")
-    backends = llm.setdefault("backends", {})
-    if not isinstance(backends, dict):
-        raise ValueError("user settings llm.backends section must be a mapping")
-    entry = backends.setdefault(backend, {})
-    if not isinstance(entry, dict):
-        raise ValueError(f"user settings llm.backends.{backend} must be a mapping")
-    entry["web_search"] = bool(enabled)
-    return _write_user_mapping(target, data)
-
-
 def persist_interaction_settings(values: dict[str, Any], path: Path | None = None) -> Path:
     """Persist validated response-presentation values only."""
 
@@ -199,6 +166,7 @@ def persist_tts_clone(
     voice_id: str,
     consent_record: str,
     reference_path: str | None,
+    profile_id: str | None = None,
     path: Path | None = None,
 ) -> Path:
     """Persist clone metadata and references, but never an API token."""
@@ -229,6 +197,64 @@ def persist_tts_clone(
         "reference_path": reference_path,
         "store_reference_locally": provider == "chatterbox-local",
     }
+    if profile_id is not None:
+        voice["active_profile"] = profile_id
+    return _write_user_mapping(target, data)
+
+
+def persist_avatar_selection(
+    *,
+    pack: str | None = None,
+    runtime: str | None = None,
+    path: Path | None = None,
+) -> Path:
+    """Persist the last safe avatar selectors; local pack bytes stay private."""
+
+    if pack is None and runtime is None:
+        raise ValueError("pack or runtime is required")
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    avatar = data.setdefault("avatar", {})
+    if not isinstance(avatar, dict):
+        raise ValueError("user settings avatar section must be a mapping")
+    if pack is not None:
+        avatar["pack"] = pack
+    if runtime is not None:
+        avatar["runtime"] = runtime
+    return _write_user_mapping(target, data)
+
+
+def persist_avatar_transform(
+    pack: str,
+    values: dict[str, Any],
+    *,
+    animation_speed: float | None = None,
+    path: Path | None = None,
+) -> Path:
+    """Persist a validated per-pack Three.js transform.
+
+    Keeping transforms keyed by pack prevents settings for a human VRM from
+    leaking into a mascot or a plain glTF model.  The dashboard never writes
+    arbitrary runtime keys through this helper.
+    """
+
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    avatar = data.setdefault("avatar", {})
+    if not isinstance(avatar, dict):
+        raise ValueError("user settings avatar section must be a mapping")
+    if animation_speed is not None:
+        avatar["animation_speed"] = float(animation_speed)
+    runtimes = avatar.setdefault("runtimes", {})
+    if not isinstance(runtimes, dict):
+        raise ValueError("user settings avatar.runtimes section must be a mapping")
+    threejs = runtimes.setdefault("threejs", {})
+    if not isinstance(threejs, dict):
+        raise ValueError("user settings avatar.runtimes.threejs must be a mapping")
+    transforms = threejs.setdefault("transforms", {})
+    if not isinstance(transforms, dict):
+        raise ValueError("user settings avatar.runtimes.threejs.transforms must be a mapping")
+    transforms[pack] = dict(values)
     return _write_user_mapping(target, data)
 
 

@@ -19,8 +19,8 @@ handle → adapter mapping for the lifetime of the task.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
-from typing import ClassVar
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, ClassVar, cast
 
 from openmimicry.core.contracts import TaskRuntimeAdapter
 from openmimicry.core.schemas.tasks import (
@@ -94,21 +94,8 @@ class TaskRouter:
 
     async def submit(self, req: TaskRequest) -> TaskHandle:
         """Submit a task to the selected adapter and remember ownership."""
-        requested_runtime = req.preferred_runtime
-        runtime = requested_runtime or self._default_runtime
-
-        # In production, a preferred runtime may be unavailable depending on the
-        # installed profile. In tests/dev, intents can request "claude_code" or
-        # "mcp_agent" while only a mock/default adapter is registered.
-        if runtime not in self._adapters:
-            runtime = self._default_runtime
-
-        if runtime is None:
-            raise TaskRoutingError("no runtime selected and no default runtime configured")
-
-        adapter = self._adapters.get(runtime)
-        if adapter is None:
-            raise TaskRoutingError(f"unknown runtime {runtime!r}")
+        adapter = self.select(req)
+        runtime = next(name for name, candidate in self._adapters.items() if candidate is adapter)
 
         handle = await adapter.submit(req)
 
@@ -139,6 +126,51 @@ class TaskRouter:
             except Exception:
                 continue
         return False
+
+    async def diagnostics(self) -> dict[str, Any]:
+        """Return per-adapter readiness without submitting a model request."""
+
+        result: dict[str, Any] = {}
+        for name, adapter in self._adapters.items():
+            probe = getattr(adapter, "diagnostics", None)
+            if callable(probe):
+                try:
+                    result[name] = await probe()
+                except Exception as exc:
+                    _log.exception("TaskRouter: diagnostics failed for %s", name)
+                    result[name] = {
+                        "adapter": getattr(adapter, "name", name),
+                        "available": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                continue
+            try:
+                healthy = await adapter.healthcheck()
+            except Exception as exc:
+                healthy = False
+                result[name] = {
+                    "adapter": getattr(adapter, "name", name),
+                    "available": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            else:
+                result[name] = {
+                    "adapter": getattr(adapter, "name", name),
+                    "available": bool(healthy),
+                }
+        return result
+
+    async def close(self) -> None:
+        """Close every registered adapter, continuing after individual errors."""
+
+        for adapter in self._adapters.values():
+            closer = getattr(adapter, "close", None)
+            if not callable(closer):
+                continue
+            try:
+                await cast(Callable[[], Awaitable[Any]], closer)()
+            except Exception:
+                _log.exception("TaskRouter: adapter close failed")
 
     # ----------------------------------------------------------------- util
 

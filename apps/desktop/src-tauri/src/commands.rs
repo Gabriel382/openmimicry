@@ -141,11 +141,26 @@ pub fn set_position_locked<R: Runtime>(app: AppHandle<R>, locked: bool) -> Resul
 /// Open the local FastAPI dashboard in the operating system's default browser.
 #[tauri::command]
 pub fn open_backend_dashboard() -> Result<(), String> {
+    open_dashboard_url(None)
+}
+
+/// Open a safe, named dashboard section in the default browser.
+#[tauri::command]
+pub fn open_backend_dashboard_section(section: String) -> Result<(), String> {
+    let allowed = ["notifications-section", "avatar-settings", "tasks"];
+    if !allowed.contains(&section.as_str()) {
+        return Err("unknown dashboard section".to_string());
+    }
+    open_dashboard_url(Some(section.as_str()))
+}
+
+fn open_dashboard_url(section: Option<&str>) -> Result<(), String> {
     let port = std::env::var("OPENMIMICRY_PORT")
         .unwrap_or_else(|_| "8000".to_string())
         .parse::<u16>()
         .map_err(|_| "OPENMIMICRY_PORT must be a number from 1 to 65535".to_string())?;
-    let url = format!("http://127.0.0.1:{port}/dashboard");
+    let suffix = section.map(|value| format!("#{value}")).unwrap_or_default();
+    let url = format!("http://127.0.0.1:{port}/dashboard{suffix}");
     #[cfg(target_os = "windows")]
     let mut command = {
         let mut command = Command::new("cmd");

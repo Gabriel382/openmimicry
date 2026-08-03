@@ -19,6 +19,7 @@ from .vision import GestureDetection, MovementDetection
 
 __all__ = [
     "AvatarCue",
+    "ComponentHealthChanged",
     "ConfigUpdated",
     "ConsentRequired",
     "ConsentResolved",
@@ -30,7 +31,6 @@ __all__ = [
     "LLMStarted",
     "LLMTokenStreamed",
     "MovementDetected",
-    "ComponentHealthChanged",
     "RuntimeEvent",
     "RuntimeEventAdapter",
     "RuntimeStateChanged",

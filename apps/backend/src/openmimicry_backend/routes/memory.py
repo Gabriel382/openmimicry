@@ -10,6 +10,7 @@ from openmimicry.core.schemas.app import MemoryConfig
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ..user_settings import persist_memory_settings
+from ..wiring import refresh_memory
 
 __all__ = ["router"]
 
@@ -96,9 +97,30 @@ async def update_memory_settings(
         raise HTTPException(status_code=422, detail=details) from exc
     if candidate.llm_backend and candidate.llm_backend not in request.app.state.config.llm.backends:
         raise HTTPException(status_code=422, detail="memory LLM backend is not configured")
+    supervisor = getattr(request.app.state, "supervisor", None)
+    wiring = getattr(request.app.state, "wiring", None)
+    if supervisor is None or wiring is None:
+        persist_memory_settings(candidate.model_dump(mode="json"))
+        result = candidate.model_dump(mode="json")
+        result.update({"ok": True, "restart_required": True})
+        return result
+    if supervisor.active_turn_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for the current conversation turn before refreshing memory.",
+        )
     persist_memory_settings(candidate.model_dump(mode="json"))
+    current = request.app.state.config
+    candidate_app = current.model_copy(update={"memory": candidate})
+    await supervisor.set_runtime_state("refreshing", reason="memory_settings")
+    try:
+        replacement = await refresh_memory(wiring, candidate_app)
+        request.app.state.memory = replacement
+        request.app.state.config = candidate_app
+    finally:
+        await supervisor.set_runtime_state("ready")
     result = candidate.model_dump(mode="json")
-    result.update({"ok": True, "restart_required": True})
+    result.update({"ok": True, "restart_required": False})
     return result
 
 

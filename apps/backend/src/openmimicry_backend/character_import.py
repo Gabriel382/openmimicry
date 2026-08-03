@@ -263,7 +263,25 @@ class CharacterRegistry:
             raise CharacterImportError(
                 "pack id must use 1-64 lowercase letters, numbers, '-' or '_'"
             )
-        if not pack.emotions:
+        if pack.kind in {"vrm", "gltf", "threejs"}:
+            metadata_asset = pack.metadata.get("asset") if pack.metadata else None
+            candidates = [
+                root / "character.vrm",
+                root / "character.gltf",
+                root / "character.glb",
+            ]
+            if isinstance(metadata_asset, dict) and metadata_asset.get("path"):
+                candidates.insert(0, root / str(metadata_asset["path"]))
+            resolved_root = root.resolve()
+            if not any(
+                item.resolve().is_file() and resolved_root in item.resolve().parents
+                for item in candidates
+            ):
+                raise CharacterImportError(
+                    "3D packs require character.vrm, character.gltf, character.glb, "
+                    "or metadata.asset.path"
+                )
+        elif not pack.emotions:
             raise CharacterImportError("pack.yaml must define at least one emotions state")
         for state_name, frames in pack.emotions.items():
             CharacterRegistry._validate_frames(root, state_name, "frames", frames.frames)

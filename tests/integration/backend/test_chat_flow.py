@@ -14,8 +14,8 @@ get us full M6 chat-flow coverage anyway:
 from __future__ import annotations
 
 import asyncio
-import time
 import contextlib
+import time
 from typing import Any
 
 import pytest

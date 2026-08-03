@@ -140,6 +140,50 @@ async def test_swap_runtime_preserves_visual_state() -> None:
         await bus.aclose()
 
 
+async def test_select_character_updates_future_runtime_swaps_atomically() -> None:
+    orch, bus, old_runtime, _director = await _make_started_orch()
+    try:
+        candidate = MockAvatarRuntimeAdapter()
+        await orch.select_character(
+            character_id="friend_vrm",
+            runtime=candidate,
+            runtime_name="threejs",
+            character_config={"pack_path": "/characters/friend_vrm", "runtime": {}},
+        )
+
+        assert orch.runtime is candidate
+        assert candidate.loaded_character == "friend_vrm"
+        assert old_runtime.shutdown_calls == 1
+
+        later = MockAvatarRuntimeAdapter()
+        await orch.swap_runtime(later)
+        assert later.loaded_character == "friend_vrm"
+    finally:
+        await orch.stop()
+        await bus.aclose()
+
+
+async def test_select_character_keeps_live_runtime_when_candidate_load_fails() -> None:
+    class Broken(MockAvatarRuntimeAdapter):
+        async def load_character(self, character_id, config) -> None:  # type: ignore[override]
+            raise RuntimeError("broken character")
+
+    orch, bus, old_runtime, _director = await _make_started_orch()
+    try:
+        with pytest.raises(RuntimeError, match="broken character"):
+            await orch.select_character(
+                character_id="broken",
+                runtime=Broken(),
+                runtime_name="threejs",
+                character_config={},
+            )
+        assert orch.runtime is old_runtime
+        assert old_runtime.shutdown_calls == 0
+    finally:
+        await orch.stop()
+        await bus.aclose()
+
+
 async def test_stop_is_idempotent() -> None:
     orch, bus, runtime, _director = await _make_started_orch()
     await orch.stop()

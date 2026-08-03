@@ -107,7 +107,10 @@ if ($useChatterbox) {
     }
     Write-Host $runtimeCheck.Output -ForegroundColor Green
 
-    $preflightMarker = Join-Path $HOME ".openmimicry\chatterbox-preflight-v1.6.4.ok"
+    # v1.8.1 changes configuration loading only. Keep the verified v1.8.0
+    # voice-runtime marker so existing users do not redownload or rewarm an
+    # unchanged Chatterbox stack.
+    $preflightMarker = Join-Path $HOME ".openmimicry\chatterbox-preflight-v1.8.0.ok"
     $forcePreflight = $env:OPENMIMICRY_CHATTERBOX_PREFLIGHT -eq "force"
     if ($forcePreflight -or -not (Test-Path $preflightMarker)) {
         Write-Host "Loading and caching Chatterbox Turbo. The first run can take several minutes..." -ForegroundColor Yellow
@@ -120,9 +123,9 @@ if ($useChatterbox) {
         }
         Write-Host $preflight.Output -ForegroundColor Green
         New-Item -ItemType Directory -Path (Split-Path $preflightMarker) -Force | Out-Null
-        Set-Content -Path $preflightMarker -Value "OpenMimicry v1.6.4 Chatterbox preflight passed" -Encoding UTF8
+        Set-Content -Path $preflightMarker -Value "OpenMimicry voice runtime v1.8.0 Chatterbox preflight passed" -Encoding UTF8
     } else {
-        Write-Host "Chatterbox preflight already passed for v1.6.4." -ForegroundColor Green
+        Write-Host "Chatterbox voice-runtime preflight already passed." -ForegroundColor Green
     }
 
     $env:OPENMIMICRY__VOICE__TTS__READINESS_TIMEOUT_S = "180"

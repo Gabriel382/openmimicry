@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from openmimicry.core import EventBus
 from openmimicry_backend.conversation import ConversationCoordinator, ConversationMemory
 from openmimicry_backend.supervisor import RuntimeSupervisor
@@ -90,3 +91,28 @@ async def test_background_submission_returns_before_a_slow_turn_finishes() -> No
     release.set()
     await first.task
     await coordinator.close()
+
+
+async def test_failed_turn_releases_lease_for_the_next_submission() -> None:
+    calls = 0
+
+    async def run_turn(text, _history):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("provider stream timed out")
+        return f"reply:{text}"
+
+    supervisor = RuntimeSupervisor(bus=EventBus(), initial_state="ready")
+    coordinator = ConversationCoordinator(run_turn=run_turn, supervisor=supervisor)
+
+    failed = await coordinator.submit_background("first")
+    assert failed.task is not None
+    with pytest.raises(RuntimeError, match="timed out"):
+        await failed.task
+    assert supervisor.active_turn_id is None
+
+    recovered = await coordinator.submit_background("second")
+    assert recovered.accepted is True
+    assert recovered.task is not None
+    assert await recovered.task == "reply:second"

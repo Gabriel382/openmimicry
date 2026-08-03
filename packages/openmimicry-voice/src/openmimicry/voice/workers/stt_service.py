@@ -50,7 +50,7 @@ class Service:
         self.silence_seconds = args.silence_seconds
         if self.runtime.fallback_reason:
             _emit(
-                "runtime",
+                "warning",
                 message=self.runtime.fallback_reason,
                 device=self.device,
                 compute_type=self.compute_type,
@@ -199,7 +199,7 @@ class Service:
         self.compute_type = runtime.compute_type
         if runtime.fallback_reason:
             _emit(
-                "runtime",
+                "warning",
                 message=runtime.fallback_reason,
                 device=runtime.device,
                 compute_type=runtime.compute_type,

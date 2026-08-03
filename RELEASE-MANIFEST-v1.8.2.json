@@ -1,0 +1,39 @@
+{
+  "name": "OpenMimicry",
+  "version": "1.8.2",
+  "configuration_schema": 2,
+  "artifact": "OpenMimicry-v1.8.2-thinking-timeout-source.zip",
+  "documentation_artifact": "OpenMimicry-v1.8.2-thinking-timeout-docs.zip",
+  "license": "MIT",
+  "inherits": "1.8.1",
+  "fixes": [
+    "restore the white thinking balloon above the avatar",
+    "reserve the red toolbar banner for actual errors",
+    "enforce the configured timeout over the complete LiteLLM stream",
+    "propagate provider failure to a terminal turn state",
+    "release the turn lease after timeout so the next prompt is accepted"
+  ],
+  "excluded_private_data": [
+    "credentials",
+    "config/user.yaml",
+    "raw_audio",
+    "voice_references",
+    "memory_databases",
+    "task_journals",
+    "logs",
+    "model_caches",
+    "local_characters",
+    "local_personalities",
+    "companion_exports"
+  ],
+  "verification": {
+    "python_tests_passed": 638,
+    "python_tests_skipped": 1,
+    "frontend_test_files_passed": 18,
+    "frontend_tests_passed": 96,
+    "ruff": "passed",
+    "pyright": "passed",
+    "typescript": "passed",
+    "windows_runtime": "target_machine_required"
+  }
+}

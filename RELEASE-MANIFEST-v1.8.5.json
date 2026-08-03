@@ -1,0 +1,19 @@
+{
+  "version": "1.8.5",
+  "release": "claude-task-runtime-hotfix",
+  "artifacts": [
+    "OpenMimicry-v1.8.5-claude-task-runtime-hotfix-source.zip",
+    "OpenMimicry-v1.8.5-claude-task-runtime-hotfix-docs.zip",
+    "OpenMimicry-v1.8.5-SHA256SUMS.txt"
+  ],
+  "compatibility": {
+    "config_schema_changed": false,
+    "task_database_migration_required": false,
+    "v1.8.4_user_yaml_compatible": true
+  },
+  "privacy": {
+    "claude_child_environment_is_curated": true,
+    "unrelated_secrets_forwarded": false,
+    "diagnostic_probe_submits_model_request": false
+  }
+}

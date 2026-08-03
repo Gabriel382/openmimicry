@@ -48,7 +48,8 @@ def test_plain_text_is_preserved_when_model_ignores_json_contract() -> None:
 
 
 def test_local_personality_overlays_the_tracked_default(
-    tmp_path: Path, monkeypatch,
+    tmp_path: Path,
+    monkeypatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))

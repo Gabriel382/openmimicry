@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import ctypes
-import platform
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
-__all__ = [
-    "WhisperRuntime",
-    "cuda_runtime_probe",
-    "load_whisper_runtime",
-    "run_with_auto_cpu_fallback",
-]
+__all__ = ["WhisperRuntime", "load_whisper_runtime", "run_with_auto_cpu_fallback"]
 
 
 @dataclass(frozen=True)
@@ -26,43 +19,6 @@ class WhisperRuntime:
     fallback_reason: str | None = None
 
 
-def cuda_runtime_probe(
-    *,
-    system: str | None = None,
-    dll_loader: Callable[[str], object] | None = None,
-) -> tuple[bool, str | None]:
-    """Prove the native CUDA libraries CTranslate2 needs on Windows.
-
-    ``get_cuda_device_count`` only proves that an NVIDIA driver can enumerate
-    the GPU.  CTranslate2 4.x Windows wheels additionally require CUDA 12
-    cuBLAS and, for Whisper, cuDNN 8.  Model construction is lazy enough that
-    those DLL failures otherwise appear on the first real utterance.  In auto
-    mode we select the guaranteed CPU lane before recording instead.
-
-    Explicit ``device=cuda`` remains strict and is not downgraded by this
-    probe, so an operator can diagnose or require a GPU installation.
-    """
-
-    current_system = system or platform.system()
-    if current_system != "Windows":
-        return True, None
-    loader = dll_loader or ctypes.WinDLL  # type: ignore[attr-defined]
-    missing: list[str] = []
-    for library in ("cublas64_12.dll", "cudnn64_8.dll"):
-        try:
-            loader(library)
-        except (OSError, AttributeError):
-            missing.append(library)
-    if not missing:
-        return True, None
-    return (
-        False,
-        "CUDA 12 speech libraries are unavailable ("
-        + ", ".join(missing)
-        + "); selected the compatible CPU/INT8 runtime",
-    )
-
-
 def load_whisper_runtime(
     model_name: str,
     *,
@@ -70,7 +26,6 @@ def load_whisper_runtime(
     requested_compute_type: str = "auto",
     model_class: Any | None = None,
     cuda_count: Callable[[], int] | None = None,
-    cuda_probe: Callable[[], tuple[bool, str | None]] | None = None,
 ) -> WhisperRuntime:
     """Load Faster-Whisper, falling back only when ``device`` is ``auto``.
 
@@ -95,11 +50,6 @@ def load_whisper_runtime(
         except Exception as exc:
             device = "cpu"
             detection_error = _failure_text(exc)
-        if device == "cuda":
-            usable, reason = (cuda_probe or cuda_runtime_probe)()
-            if not usable:
-                device = "cpu"
-                detection_error = reason or "CUDA speech runtime is unavailable"
     compute_type = requested_compute_type
     if compute_type == "auto":
         compute_type = "float16" if device == "cuda" else "int8"
@@ -122,7 +72,9 @@ def load_whisper_runtime(
         model=model,
         device=device,
         compute_type=compute_type,
-        fallback_reason=(detection_error),
+        fallback_reason=(
+            f"CUDA detection failed; using CPU/INT8: {detection_error}" if detection_error else None
+        ),
     )
 
 

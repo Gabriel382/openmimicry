@@ -30,6 +30,7 @@ export interface TauriCommands {
   setPositionLocked(locked: boolean): Promise<void>;
   overlayInfo(): Promise<{ interactive: boolean; position_locked: boolean } | undefined>;
   openBackendDashboard(): Promise<void>;
+  openBackendDashboardSection(section: string): Promise<void>;
   quitApp(): Promise<void>;
 }
 
@@ -90,8 +91,22 @@ export function useTauriCommand(): TauriCommands {
     return tryInvoke<{ interactive: boolean; position_locked: boolean }>("overlay_info");
   }, []);
   const openBackendDashboard = useCallback(async (): Promise<void> => {
-    await tryInvoke("open_backend_dashboard");
+    if ("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window) {
+      await tryInvoke("open_backend_dashboard");
+    } else {
+      window.open("/dashboard", "_blank", "noopener,noreferrer");
+    }
   }, []);
+  const openBackendDashboardSection = useCallback(
+    async (section: string): Promise<void> => {
+      if ("__TAURI_INTERNALS__" in window || "__TAURI_IPC__" in window) {
+        await tryInvoke("open_backend_dashboard_section", { section });
+      } else {
+        window.open(`/dashboard#${encodeURIComponent(section)}`, "_blank", "noopener,noreferrer");
+      }
+    },
+    [],
+  );
   const quitApp = useCallback(async (): Promise<void> => {
     await tryInvoke("quit_app");
   }, []);
@@ -102,6 +117,7 @@ export function useTauriCommand(): TauriCommands {
     setPositionLocked,
     overlayInfo,
     openBackendDashboard,
+    openBackendDashboardSection,
     quitApp,
   };
 }

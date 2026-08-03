@@ -62,6 +62,41 @@ def test_projection_shape_for_idle_neutral() -> None:
     assert msg["intensity"] == 1.0
     assert msg["gazeTarget"] == "towards_user"
     assert msg["fadeMs"] == DEFAULT_FADE_MS
+    assert msg["transform"] == {
+        "position": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0],
+        "scale": 1.0,
+        "autoFit": True,
+        "targetHeight": 0.72,
+        "targetY": 1.3,
+    }
+
+
+def test_projection_uses_saved_transform_for_only_the_selected_pack() -> None:
+    pack = _vrm_pack()
+    directive = AvatarDirective(state="idle")
+    msg = build_threejs_projection(
+        directive,
+        pack,
+        runtime_cfg={
+            "transforms": {
+                "other": {"scale": 9},
+                "octomimic_vrm": {
+                    "position": [0.1, -0.2, 0.3],
+                    "rotation": [0, 15, 0],
+                    "scale": 1.25,
+                    "auto_fit": False,
+                    "target_height": 0.8,
+                    "target_y": 1.2,
+                },
+            }
+        },
+    )
+
+    assert msg["transform"]["position"] == [0.1, -0.2, 0.3]
+    assert msg["transform"]["rotation"] == [0.0, 15.0, 0.0]
+    assert msg["transform"]["scale"] == 1.25
+    assert msg["transform"]["autoFit"] is False
 
 
 def test_speaking_happy_emits_blend_and_expression_weights() -> None:

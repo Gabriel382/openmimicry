@@ -206,3 +206,47 @@ class AvatarOrchestrator:
             if self._current is not None:
                 with suppress(Exception):
                     await new_runtime.apply_directive(self._current)
+
+    async def select_character(
+        self,
+        *,
+        character_id: str,
+        runtime: AvatarRuntimeAdapter,
+        runtime_name: str,
+        character_config: dict[str, Any],
+    ) -> None:
+        """Atomically select a character and its compatible runtime.
+
+        The candidate runtime is fully loaded before it replaces the live
+        runtime.  A broken pack therefore cannot leave the desktop with a
+        half-swapped or incompatible renderer.  Selecting another character
+        on the same modality reuses the live adapter, while still updating
+        the orchestrator's persisted configuration for future swaps.
+        """
+
+        async with self._lock:
+            self._cancel_return_timer()
+            old = self._runtime
+            same_runtime = runtime is old
+
+            await runtime.load_character(character_id, character_config)
+            if self._current is not None:
+                with suppress(Exception):
+                    await runtime.apply_directive(self._current)
+
+            self._runtime = runtime
+            runtimes = dict(self._cfg.runtimes)
+            runtime_values = character_config.get("runtime")
+            if isinstance(runtime_values, dict):
+                runtimes[runtime_name] = dict(runtime_values)
+            self._cfg = self._cfg.model_copy(
+                update={
+                    "pack": character_id,
+                    "runtime": runtime_name,
+                    "runtimes": runtimes,
+                }
+            )
+
+            if not same_runtime:
+                with suppress(Exception):
+                    await old.shutdown()

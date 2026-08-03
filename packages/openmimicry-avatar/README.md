@@ -32,12 +32,16 @@ from openmimicry.avatar import (
 )
 from datetime import datetime, timezone
 
+
 async def main():
     bus = EventBus()
     runtime = MockAvatarRuntimeAdapter()
     director = AvatarDirector(config=AvatarConfig(pack="octomimic"))
     orch = AvatarOrchestrator(
-        director=director, runtime=runtime, bus=bus, config=director.config,
+        director=director,
+        runtime=runtime,
+        bus=bus,
+        config=director.config,
     )
     await orch.start()
 
@@ -48,6 +52,7 @@ async def main():
 
     assert any(d.state == "listening" for d in runtime.directives_received)
     await orch.stop()
+
 
 asyncio.run(main())
 ```
@@ -71,10 +76,13 @@ from openmimicry.avatar import (
 )
 from openmimicry.core import EventBus
 
+
 class PrintBridge:
     """Toy WS bridge: prints every projection. M6 supplies the real one."""
+
     async def publish(self, message):
         print(message["type"], message.get("directive", {}).get("state"))
+
 
 async def main():
     pack = load_pack("characters/octomimic")
@@ -82,12 +90,16 @@ async def main():
     runtime = Sprite2DAvatarAdapter(pack=pack, ws_bridge=PrintBridge())
     director = AvatarDirector()
     orch = AvatarOrchestrator(
-        director=director, runtime=runtime, bus=bus, config=director.config,
+        director=director,
+        runtime=runtime,
+        bus=bus,
+        config=director.config,
     )
     await orch.start()
     # ... publish RuntimeEvents on the bus; the runtime emits avatar.directive
     #     messages via the bridge ...
     await orch.stop()
+
 
 asyncio.run(main())
 ```

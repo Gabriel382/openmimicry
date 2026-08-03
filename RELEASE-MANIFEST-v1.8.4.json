@@ -1,0 +1,39 @@
+{
+  "name": "OpenMimicry",
+  "version": "1.8.4",
+  "release_date": "2026-07-31",
+  "configuration_schema": 2,
+  "artifacts": [
+    "OpenMimicry-v1.8.4-persistent-avatar-3d-tasks-source.zip",
+    "OpenMimicry-v1.8.4-persistent-avatar-3d-tasks-docs.zip",
+    "OpenMimicry-v1.8.4-SHA256SUMS.txt"
+  ],
+  "verification": {
+    "python_collected": 647,
+    "python_passed": 646,
+    "python_skipped_optional": 1,
+    "frontend_test_files": 20,
+    "frontend_tests_passed": 100,
+    "frontend_build": "passed",
+    "typecheck": "passed",
+    "ruff": "passed",
+    "dependency_audit": "no known vulnerabilities",
+    "rust": "not run: toolchain unavailable in release workspace"
+  },
+  "bundled_characters": [
+    "mimic_blue",
+    "octomimic",
+    "octomimic_vrm"
+  ],
+  "privacy_exclusions": [
+    ".env",
+    "config/user.yaml",
+    "local characters",
+    "local personality prompts",
+    "voice profiles and references",
+    "companion exports",
+    "memory stores",
+    "task journals",
+    "logs and diagnostics"
+  ]
+}

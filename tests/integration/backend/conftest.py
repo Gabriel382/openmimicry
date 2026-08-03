@@ -27,11 +27,11 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from openmimicry.core.config import load as load_config
 from openmimicry.core import UserTextSubmitted
+from openmimicry.core.config import load as load_config
 from openmimicry.core.schemas.app import AppConfig
-from openmimicry_backend.main import create_app
 from openmimicry_backend.conversation import ConversationCoordinator
+from openmimicry_backend.main import create_app
 from openmimicry_backend.routes.chat import run_chat_turn
 from openmimicry_backend.supervisor import RuntimeSupervisor
 from openmimicry_backend.wiring import Wiring, build_runtime

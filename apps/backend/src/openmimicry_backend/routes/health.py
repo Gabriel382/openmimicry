@@ -114,7 +114,9 @@ async def _probe_components(
                 "component": f"{family}:{name}",
                 "family": family,
                 "adapter": name,
-                "state": "healthy" if healthy else ("unavailable" if family == "llm" else "degraded"),
+                "state": "healthy"
+                if healthy
+                else ("unavailable" if family == "llm" else "degraded"),
                 "required": family == "llm",
                 "actual_device": actual_device,
                 "last_error": None if healthy else "healthcheck failed",

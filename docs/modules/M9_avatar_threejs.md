@@ -12,7 +12,7 @@ Add a lightweight 3D modality — VRM and glTF/GLB rendered with Three.js inside
 - Frontend: `apps/desktop/frontend/src/runtimes/threejs/ThreeJSRuntime.tsx` — a Three.js scene mounted inside the existing overlay window, loading the configured VRM/glTF/GLB asset, running idle/listening/thinking/speaking animation clips, mapping `directive.state + directive.emotion + directive.intensity` to clip selection and blend weights.
 - A small VRM expression mapper (uses `three-vrm` if VRM is loaded; falls back to morph targets for plain glTF).
 - Camera + lighting presets configurable via `avatar.runtimes.threejs`.
-- One bundled glTF demo asset for the README screenshot ("OctomimicVRM").
+- One bundled, redistributable VRM 1.0 demo asset ("OctomimicVRM").
 
 **Non-scope.**
 
@@ -107,18 +107,21 @@ None new; reuses `MockAvatarRuntimeAdapter` from M3 for backend tests. Frontend 
 10. Implement `clips.ts`: dictionary `(state, gesture | null) -> clipName` with documented fallback (`<state>_speaking` → `<state>` → `idle`).
 11. Implement `ThreeJSRuntime.tsx`: mounts the renderer in the `<div>` provided by `<AvatarHost>`. RAF loop pausing on `tauri.event.listen("window-hidden")`. Subscribes to `avatar.directive` via `useAvatarDirective`. On change: fade to the new clip, apply expression, set gaze.
 12. Add `apps/desktop/frontend/src/runtimes/registry.ts` entry for `"threejs"`.
-13. Vitest tests with `vi.mock("three", ...)` for the unit tests; full GL is not exercised in CI.
-14. Build the bundled demo asset `characters/octomimic_vrm/`. Document its license in `pack.yaml`.
+13. Vitest tests cover pure selection logic and parse the bundled fixture with
+    the production `GLTFLoader` and `VRMLoaderPlugin`; WebGL rendering remains
+    outside headless CI.
+14. Build the deterministic, CC0 demo asset in
+    `characters/octomimic_vrm/` from project-owned geometry.
 15. Update `docs/avatar_modalities.md` §1.3 with a footnote that M9 is done.
 16. Update `CHANGELOG.md` under v0.3.0 (or whichever post-v0.2 minor we tag).
 17. `make ci`. Open PR `feat(avatar): M9 — ThreeJSAvatarAdapter + frontend Three.js runtime`.
 
 ## Definition of done (checklist)
 
-- [ ] `avatar.runtime: threejs` in YAML config makes the overlay render a VRM model.
+- [x] `avatar.runtime: threejs` in YAML config makes the overlay render a VRM model.
 - [ ] Switching pack between `octomimic` (sprite2d) and `octomimic_vrm` (threejs) via `/runtime/swap` works without restart.
-- [ ] `ThreeJSAvatarAdapter` passes the contract test.
-- [ ] Frontend unit tests pass with mocked Three.js.
+- [x] `ThreeJSAvatarAdapter` passes the contract test.
+- [x] Frontend tests load the real bundled VRM through the production parser.
 - [ ] One README screenshot exists showing the same character in Sprite2D and Three.js side by side.
 - [ ] Bundle size delta documented in PR description (Three.js + three-vrm).
 - [ ] `CHANGELOG.md` entry under v0.3.0.

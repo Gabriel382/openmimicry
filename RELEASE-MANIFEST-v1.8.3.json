@@ -1,0 +1,61 @@
+{
+  "name": "OpenMimicry",
+  "version": "1.8.3",
+  "configuration_schema": 2,
+  "artifact": "OpenMimicry-v1.8.3-bundled-vrm-source.zip",
+  "documentation_artifact": "OpenMimicry-v1.8.3-bundled-vrm-docs.zip",
+  "license": "MIT",
+  "inherits": "1.8.2",
+  "changes": [
+    "bundle a real VRM 1.0 Octomimic test character",
+    "embed lifecycle, emotion, and gesture animation clips",
+    "generate the CC0 model deterministically from project-owned geometry",
+    "parse the bundled asset with the production Three.js VRM loader in CI",
+    "reset prior VRM expressions before applying new expression weights"
+  ],
+  "bundled_vrm": {
+    "path": "characters/octomimic_vrm/octomimic.vrm",
+    "format": "VRM 1.0",
+    "size_bytes": 32472,
+    "sha256": "ebafe8f98cacbf65802150a080bde1fee1c473feb7d179cc5a8862f6f48b9b91",
+    "license": "CC0-1.0",
+    "clips": [
+      "idle",
+      "listening",
+      "thinking",
+      "speaking",
+      "happy",
+      "error",
+      "celebrate",
+      "gesture_celebrate",
+      "wave",
+      "gesture_wave"
+    ]
+  },
+  "excluded_private_data": [
+    "credentials",
+    "config/user.yaml",
+    "raw_audio",
+    "voice_references",
+    "memory_databases",
+    "task_journals",
+    "logs",
+    "model_caches",
+    "local_characters",
+    "local_personalities",
+    "companion_exports"
+  ],
+  "verification": {
+    "python_tests_passed": 641,
+    "python_tests_skipped": 1,
+    "frontend_test_files_passed": 19,
+    "frontend_tests_passed": 98,
+    "ruff": "passed",
+    "pyright": "passed",
+    "typescript": "passed",
+    "frontend_build": "passed",
+    "production_vrm_parser": "passed",
+    "pnpm_audit": "passed",
+    "windows_runtime": "target_machine_required"
+  }
+}

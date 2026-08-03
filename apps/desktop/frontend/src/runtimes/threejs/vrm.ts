@@ -8,7 +8,12 @@
  * generic glTF loader.
  */
 
-import type { AnimationClip, Object3D } from "three";
+import {
+  AnimationMixer,
+  type AnimationAction,
+  type AnimationClip,
+  type Object3D,
+} from "three";
 
 import type { CharacterController, CharacterLoadOptions, ExpressionWeights } from "./types";
 
@@ -23,6 +28,7 @@ interface VRMLoaderLike {
 interface VRMHandle {
   scene: Object3D;
   expressionManager?: {
+    resetValues?(): void;
     setValue(name: string, value: number): void;
     update(): void;
   };
@@ -35,8 +41,12 @@ export type VRMLoaderFactory = () => Promise<VRMLoaderLike>;
 async function defaultLoaderFactory(): Promise<VRMLoaderLike> {
   const gltfMod: any = await import("three/examples/jsm/loaders/GLTFLoader.js");
   const vrmMod: any = await import("@pixiv/three-vrm");
+  const animationMod: any = await import("@pixiv/three-vrm-animation");
   const loader = new gltfMod.GLTFLoader();
   loader.register((parser: unknown) => new vrmMod.VRMLoaderPlugin(parser));
+  loader.register(
+    (parser: unknown) => new animationMod.VRMAnimationLoaderPlugin(parser),
+  );
   return loader;
 }
 
@@ -56,21 +66,31 @@ export async function loadVrmCharacter(
   }
 
   let activeClip: string | null = null;
+  let activeAction: AnimationAction | null = null;
+  const mixer = new AnimationMixer(root);
+  const clipNames = Array.from(clips.keys());
 
   return {
     kind: "vrm",
     root,
-    clipNames: Array.from(clips.keys()),
+    clipNames,
     setExpression(weights: ExpressionWeights): void {
       const manager = vrm?.expressionManager;
       if (!manager) return;
+      manager.resetValues?.();
       for (const [name, value] of Object.entries(weights)) {
         manager.setValue(name, value);
       }
       manager.update();
     },
-    playClip(name: string, _fadeMs = 0): void {
-      activeClip = clips.has(name) ? name : activeClip;
+    playClip(name: string, fadeMs = 0): void {
+      const clip = clips.get(name);
+      if (!clip || name === activeClip) return;
+      const next = mixer.clipAction(clip);
+      next.reset().play();
+      if (activeAction) next.crossFadeFrom(activeAction, fadeMs / 1000, true);
+      activeAction = next;
+      activeClip = name;
     },
     currentClip(): string | null {
       return activeClip;
@@ -79,7 +99,25 @@ export async function loadVrmCharacter(
       // Gaze targets are a `THREE.Object3D`; for now we just expose the
       // hook. A future M9 follow-up wires it to a HEAD_FOLLOW dummy.
     },
+    async loadAnimation(url: string, name?: string): Promise<void> {
+      if (!vrm) return;
+      const animationMod: any = await import("@pixiv/three-vrm-animation");
+      const animationResult: any = await loader.loadAsync(url);
+      const source = animationResult.userData?.vrmAnimations?.[0];
+      if (!source) throw new Error(`VRMA contains no animation: ${url}`);
+      const clip: AnimationClip = animationMod.createVRMAnimationClip(source, vrm);
+      const selected = name || clip.name || `animation-${clips.size + 1}`;
+      clip.name = selected;
+      clips.set(selected, clip);
+      if (!clipNames.includes(selected)) clipNames.push(selected);
+    },
+    update(deltaSec: number): void {
+      mixer.update(deltaSec);
+      vrm?.update(deltaSec);
+    },
     dispose(): void {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(root);
       if (opts.scene) opts.scene.remove(root);
     },
   };

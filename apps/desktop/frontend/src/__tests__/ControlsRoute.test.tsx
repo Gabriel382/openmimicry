@@ -26,6 +26,7 @@ describe("avatar toolbar", () => {
     expect(screen.getByLabelText("Hold to talk")).toBeTruthy();
     expect(screen.getByLabelText("Wake listen off")).toBeTruthy();
     expect(screen.getByLabelText("Agent voice on")).toBeTruthy();
+    expect(screen.getByLabelText("Open task notifications")).toBeTruthy();
     expect(screen.getByLabelText("Open settings and tasks")).toBeTruthy();
     expect(screen.getByLabelText("Exit OpenMimicry")).toBeTruthy();
     expect(screen.queryByLabelText("message")).toBeNull();
@@ -116,7 +117,7 @@ describe("avatar toolbar", () => {
       }),
     );
     expect((screen.getByLabelText("Hold to talk") as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/OpenMimicry is thinking/i)).toBeNull();
   });
 });

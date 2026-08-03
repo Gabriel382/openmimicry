@@ -24,11 +24,14 @@ Ships two defaults: `system_default.txt` and `system_personality.j2`.
 class LLMError(Exception):
     retryable: bool = False
 
+
 class LLMTransportError(LLMError):
-    retryable = True   # router retries; falls back if available and no chunks emitted
+    retryable = True  # router retries; falls back if available and no chunks emitted
+
 
 class LLMAuthError(LLMError):
     retryable = False  # router never retries / never falls back
+
 
 class LLMToolCallError(LLMError):
     retryable = False  # tool spec mismatch; surface to caller

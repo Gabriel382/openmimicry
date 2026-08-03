@@ -35,38 +35,6 @@
   user-select: none;
 }
 
-.avatar-status-bubble {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  z-index: 3;
-  min-width: 112px;
-  max-width: calc(100% - 32px);
-  transform: translateX(-50%);
-  overflow: hidden;
-  padding: 7px 14px;
-  border: 2px solid var(--om-accent, #ff8a3d);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
-  color: #2b2b2f;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.035em;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.avatar-status-bubble[data-state="listening"] {
-  border-color: #36b86b;
-}
-
-.avatar-status-bubble[data-state="backend"] {
-  border-color: #8a8d96;
-  color: #555861;
-}
-
 .speech-bubble {
   position: absolute;
   right: 12px;
@@ -95,6 +63,34 @@
   display: inline-block;
   margin-left: 4px;
   animation: openmimicry-caret 1s steps(2) infinite;
+}
+
+.thinking-bubble {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 3;
+  box-sizing: border-box;
+  min-width: min(200px, calc(100% - 24px));
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  border: 2px solid var(--om-accent, #ff8a3d);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24);
+  color: color-mix(in srgb, var(--om-accent, #ff8a3d) 72%, #48200f);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+}
+
+.thinking-bubble__dots {
+  display: inline-block;
+  width: 1.2em;
+  margin-left: 3px;
+  animation: openmimicry-thinking-pulse 1s ease-in-out infinite;
 }
 
 .controls-route {
@@ -145,9 +141,9 @@
   box-sizing: border-box;
   display: inline-flex;
   position: relative;
-  width: 38px;
+  width: 34px;
   height: 34px;
-  flex: 0 0 38px;
+  flex: 0 0 34px;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -218,6 +214,23 @@
   background: rgba(181, 38, 48, 0.78);
 }
 
+.avatar-toolbar__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  background: #d93645;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
 .toolbar-icon {
   width: 19px;
   height: 19px;
@@ -263,8 +276,29 @@
   white-space: nowrap;
 }
 
+.avatar-toolbar__status {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  z-index: 3;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(31, 37, 47, 0.96);
+  color: #f4f4f6;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes openmimicry-caret {
   to { opacity: 0; }
+}
+
+@keyframes openmimicry-thinking-pulse {
+  50% { opacity: 0.25; }
 }
 
 @keyframes openmimicry-listening-pulse {

@@ -1,27 +1,20 @@
-# OctomimicVRM (M9 demo pack)
+# OctomimicVRM
 
-A minimal VRM pack used to exercise the Three.js avatar runtime end-to-end.
+A compact, animated VRM 1.0 pack used to exercise the Three.js avatar
+runtime end-to-end. It is bundled and ready to select; no model download is
+required.
 
 ## What ships here
 
 - `pack.yaml` — the pack manifest. Declares `kind: vrm` and points at
   `octomimic.vrm` via `metadata.asset`.
+- `octomimic.vrm` — a real VRM 1.0 binary with project-owned geometry.
 - `preview.png` — pack preview image used by the panel UI dropdown.
 
-## Drop in a real `octomimic.vrm`
+## Test it
 
-The binary `.vrm` is **not** checked in; this pack exists so the rest
-of the M9 surface (`avatar.runtimes.threejs`, the wire schema, the
-frontend runtime) is exercised in CI without dragging a VRM model into
-git.
-
-To enable the demo locally:
-
-1. Place a VRM file at `characters/octomimic_vrm/octomimic.vrm`. Any
-   public-domain or CC0-licensed VRM works — try the official
-   [VRoid Hub](https://hub.vroid.com/) or the
-   [Pixiv three-vrm samples](https://github.com/pixiv/three-vrm/tree/dev/packages/three-vrm/examples).
-2. Add to your `app.yaml`:
+1. Select the `threejs` runtime and `octomimic_vrm` character pack in
+   Settings, or configure:
    ```yaml
    avatar:
      runtime: threejs
@@ -31,11 +24,27 @@ To enable the demo locally:
          camera: { position: [0, 1.4, 1.6] }
          lighting: studio
    ```
-3. Start the backend and the frontend. The overlay loads the VRM and
-   plays the `idle` clip; emotions drive `expressionWeights`.
+2. Start the backend and desktop. The overlay loads the bundled model.
+3. Send prompts or use voice to exercise `listening`, `thinking`,
+   `speaking`, emotion, and gesture transitions.
 
-## Licensing reminder
+Embedded clips: `idle`, `listening`, `thinking`, `speaking`, `happy`,
+`error`, `wave`, `gesture_wave`, `celebrate`, and `gesture_celebrate`.
 
-If you ship a real VRM, declare its license in `pack.yaml` (replace
-the placeholder `CC0-1.0`). VRM files often carry CC BY / personal-use
-constraints — read the model's redistribution clause before committing.
+## Regenerate it
+
+The checked-in binary is deterministic:
+
+```bash
+python scripts/assets/generate_octomimic_vrm.py
+```
+
+The generator uses only the Python standard library and does not download
+assets.
+
+## License
+
+The model, geometry, animation data, and pack metadata are dedicated to the
+public domain under CC0-1.0. The VRM metadata permits commercial use,
+redistribution, and modification. This permissive fixture does not change
+the licensing requirements for VRM files users import themselves.
