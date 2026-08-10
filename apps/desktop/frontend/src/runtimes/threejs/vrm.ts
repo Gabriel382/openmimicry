@@ -10,6 +10,7 @@
 
 import {
   AnimationMixer,
+  Group,
   type AnimationAction,
   type AnimationClip,
   type Object3D,
@@ -29,6 +30,8 @@ interface VRMHandle {
   scene: Object3D;
   expressionManager?: {
     resetValues?(): void;
+    expressions?: Array<{ expressionName: string }>;
+    getExpression?(name: string): unknown | null;
     setValue(name: string, value: number): void;
     update(): void;
   };
@@ -56,7 +59,12 @@ export async function loadVrmCharacter(
   const loader = await (opts.loaderFactory ?? defaultLoaderFactory)();
   const result = await loader.loadAsync(opts.url);
   const vrm = result.userData?.vrm;
-  const root: Object3D = vrm?.scene ?? result.scene;
+  const modelRoot: Object3D = vrm?.scene ?? result.scene;
+  // Keep user positioning on a stable outer root.  Procedural motion is
+  // applied to the model child from an immutable basis, so changing lifecycle
+  // states can never accumulate position/rotation drift between messages.
+  const root = new Group();
+  root.add(modelRoot);
   const clips = new Map<string, AnimationClip>();
   for (const clip of result.animations) {
     clips.set(clip.name, clip);
@@ -67,8 +75,17 @@ export async function loadVrmCharacter(
 
   let activeClip: string | null = null;
   let activeAction: AnimationAction | null = null;
-  const mixer = new AnimationMixer(root);
+  const mixer = new AnimationMixer(modelRoot);
   const clipNames = Array.from(clips.keys());
+  const restPosition = modelRoot.position.clone();
+  const restRotation = modelRoot.rotation.clone();
+  let proceduralState = "idle";
+  let proceduralTime = 0;
+
+  const resetProceduralTransform = (): void => {
+    modelRoot.position.copy(restPosition);
+    modelRoot.rotation.copy(restRotation);
+  };
 
   return {
     kind: "vrm",
@@ -79,13 +96,32 @@ export async function loadVrmCharacter(
       if (!manager) return;
       manager.resetValues?.();
       for (const [name, value] of Object.entries(weights)) {
-        manager.setValue(name, value);
+        // Custom expressions can be registered after the character finishes
+        // loading, so resolve the live manager collection for every update.
+        const expressionNames = new Map(
+          (manager.expressions ?? []).map((item) => [
+            item.expressionName.toLowerCase(),
+            item.expressionName,
+          ]),
+        );
+        const selected = expressionNames.get(name.toLowerCase()) ?? name;
+        manager.setValue(selected, value);
       }
       manager.update();
     },
     playClip(name: string, fadeMs = 0): void {
       const clip = clips.get(name);
-      if (!clip || name === activeClip) return;
+      proceduralState = name || "idle";
+      if (!clip) {
+        if (activeAction) {
+          activeAction.fadeOut(Math.max(0, fadeMs) / 1000);
+          activeAction = null;
+          activeClip = null;
+        }
+        return;
+      }
+      resetProceduralTransform();
+      if (name === activeClip) return;
       const next = mixer.clipAction(clip);
       next.reset().play();
       if (activeAction) next.crossFadeFrom(activeAction, fadeMs / 1000, true);
@@ -113,11 +149,33 @@ export async function loadVrmCharacter(
     },
     update(deltaSec: number): void {
       mixer.update(deltaSec);
+      if (!activeAction) {
+        proceduralTime += deltaSec;
+        resetProceduralTransform();
+        const state = proceduralState.toLowerCase();
+        const speaking = state.includes("speak");
+        const listening = state.includes("listen");
+        const thinking = state.includes("think") || state.includes("ponder");
+        const happy = state.includes("happy") || state.includes("celebr");
+        const error = state.includes("error") || state.includes("sad");
+        const pace = speaking ? 7.0 : happy ? 4.2 : thinking ? 1.8 : 1.25;
+        const phase = proceduralTime * pace;
+        const bob = Math.sin(phase) * (speaking ? 0.012 : happy ? 0.018 : 0.006);
+        modelRoot.position.y = restPosition.y + bob;
+        modelRoot.rotation.x =
+          restRotation.x + (listening ? -0.045 : speaking ? Math.sin(phase * 0.7) * 0.025 : 0);
+        modelRoot.rotation.y =
+          restRotation.y + (thinking ? Math.sin(phase * 0.55) * 0.055 : 0);
+        modelRoot.rotation.z =
+          restRotation.z +
+          (listening ? 0.055 : error ? -0.035 : happy ? Math.sin(phase) * 0.025 : 0);
+      }
       vrm?.update(deltaSec);
     },
     dispose(): void {
+      resetProceduralTransform();
       mixer.stopAllAction();
-      mixer.uncacheRoot(root);
+      mixer.uncacheRoot(modelRoot);
       if (opts.scene) opts.scene.remove(root);
     },
   };

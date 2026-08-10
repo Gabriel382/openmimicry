@@ -212,10 +212,15 @@ Some changes are safe to apply without restarting:
 | `voice.modes.*` toggles | yes |
 | `voice.stt.post_speech_silence_duration` | yes (dashboard restarts active listener) |
 | `voice.stt.model` | yes (dashboard warms and swaps the model) |
+| `interaction.language.*` | yes (candidate STT model is warmed before commit) |
 | `llm.active_backend` | yes (next accepted turn) |
+| `llm.backends.*.web_search_mode` | yes (next accepted turn) |
 | `avatar.pack`, `avatar.transition_ms` | yes |
 | `avatar.runtime` swap | yes (handled by `AvatarOrchestrator.swap_runtime`) |
 | `avatar.runtimes.<modality>.*` | yes |
+| saved companion or voice-profile activation | yes (warm-before-commit) |
+| existing Claude runtime settings/model | yes (future tasks) |
+| `tools.*` policy | yes |
 | `ui.*` toggles | yes (via Tauri commands) |
 | `llm.adapter`, `voice.*.adapter`, `tasks.runtimes.*.adapter` | **no** (restart required) |
 | `tasks.runtimes.*` add/remove | **no** |

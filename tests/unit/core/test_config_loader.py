@@ -166,7 +166,7 @@ def test_integrated_profile_accepts_claude_user_overlay(tmp_path: Path) -> None:
     finally:
         os.chdir(cwd_before)
 
-    assert cfg.llm.backends["openrouter"].web_search_mode == "off"
+    assert cfg.llm.backends["openrouter"].web_search_mode == "auto"
     assert cfg.tasks.default_runtime == "claude_code"
     assert cfg.tasks.runtimes["claude_code"].working_dir == "C:/projects/openmimicry"
 

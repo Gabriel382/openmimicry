@@ -67,6 +67,7 @@ class ClaudeCodeSettings:
     auth_mode: str = "subscription"
     output_format: str = "stream-json"
     permission_mode: str = "acceptEdits"
+    model: str | None = None
     max_turns: int | None = None
     resume_sessions: bool = True
     cancel_grace_s: float = 3.0
@@ -223,6 +224,7 @@ class ClaudeCodeAdapter:
             "working_dir_exists": cwd.is_dir(),
             "auth_mode": self._settings.auth_mode,
             "permission_mode": self._settings.permission_mode,
+            "model": self._settings.model,
             "available": False,
             "authenticated": False,
         }
@@ -435,6 +437,8 @@ class ClaudeCodeAdapter:
             "--permission-mode",
             self._settings.permission_mode,
         ]
+        if self._settings.model:
+            args.extend(["--model", self._settings.model])
         if self._settings.max_turns is not None:
             args.extend(["--max-turns", str(self._settings.max_turns)])
         requested_session = t.request.metadata.get("provider_session_id")
@@ -707,6 +711,11 @@ class ClaudeCodeAdapter:
                 queue.put_nowait(item)
             except asyncio.QueueFull:
                 _log.warning("ClaudeCodeAdapter: update queue full; dropping update")
+
+    def reconfigure(self, settings: ClaudeCodeSettings) -> None:
+        """Apply settings to future tasks without interrupting active ones."""
+
+        self._settings = settings
 
 
 def make_claude_code_adapter(*_args: Any, **_kwargs: Any) -> ClaudeCodeAdapter:

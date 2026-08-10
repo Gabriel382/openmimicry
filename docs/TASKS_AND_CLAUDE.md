@@ -1,6 +1,6 @@
 # Tasks and local Claude Code
 
-This guide describes the behavior implemented in OpenMimicry v1.8.5. It
+This guide describes the behavior implemented in OpenMimicry v1.9.1. It
 distinguishes conversational replies from delegated tasks and shows how to use
 an existing Claude subscription through the locally installed `claude` CLI.
 An Anthropic API key is optional.
@@ -11,6 +11,8 @@ A normal prompt is sent to the selected conversation LLM. A task is created
 only for an explicit delegation phrase:
 
 - `Ask Claude to add tests for the parser`
+- `Claude, add tests for the parser`
+- `Launch Claude to review the current project`
 - `Tell Claude Code to review the current project`
 - `Run the local shell to ...`
 - `Ask the MCP agent to ...`
@@ -27,11 +29,10 @@ The avatar toolbar's bell opens the notification/history section. Notifications
 are deliberately separate from the conversation, so task completion does not
 overwrite an unrelated assistant reply.
 
-Current scheduling boundary: the adapter process runs asynchronously, but the
-accepted task owns the single conversation turn lease until it reaches a
-terminal state. A second chat submission is rejected during that lease instead
-of being hidden in a queue. Restart-safe history survives, but an interrupted
-external process is not silently resumed after OpenMimicry exits.
+OpenMimicry confirms delegation immediately and releases the conversation turn.
+The adapter continues in the background, so ordinary chat and other tasks can
+proceed. Restart-safe history and terminal notifications survive; an external
+process interrupted by closing OpenMimicry is not silently restarted.
 
 ## Connect a Claude subscription (no API key)
 
@@ -50,8 +51,10 @@ are the authentication paths documented by Anthropic:
 - <https://docs.anthropic.com/en/docs/claude-code/quickstart>
 - <https://docs.anthropic.com/en/docs/claude-code/iam>
 
-Add the task runtime to `config/user.yaml`. This overlay works even when the
-backend is launched with `start-openrouter-voice.ps1`:
+The integrated profile already registers the runtime. You can edit its CLI,
+authentication, permission mode, working directory, model, and maximum turns
+from the dashboard without restarting. The equivalent `config/user.yaml`
+overlay is:
 
 ```yaml
 tasks:
@@ -63,12 +66,12 @@ tasks:
       cli: claude
       auth_mode: subscription
       permission_mode: acceptEdits
+      model: null
       working_dir: C:/Users/henri/Documents/git/personal
 ```
 
-Restart the backend once after registering a new task adapter. Existing avatar,
-voice, memory, and 3D-transform dashboard changes do not require this task
-registration restart.
+Restart the backend only when registering or removing an adapter. Changes to an
+already registered Claude adapter apply to future tasks immediately.
 
 Before delegating to a repository for the first time, open Claude interactively
 from that exact repository and accept its workspace-trust prompt:
@@ -134,8 +137,14 @@ Invoke-RestMethod `
 ```
 
 Project roots are resolved server-side and become the child process working
-directory. A conversational `Ask Claude to ...` phrase uses the runtime's
-default `working_dir`; it does not guess a project from casual conversation.
+directory. A conversational delegation selects a registered project when its
+name is present, or the sole registered project when the request says “the
+project.” Otherwise it uses the runtime's default `working_dir`.
+
+After a successful task, OpenMimicry records Claude's provider session and a
+cheap Git fingerprint. A later task may resume that session only while the
+repository fingerprint is unchanged. A branch/ref/index change invalidates
+stale context without scanning the entire project on every request.
 
 ## Diagnose Claude task availability
 

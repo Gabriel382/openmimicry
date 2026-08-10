@@ -168,9 +168,31 @@ class LiteLLMAdapter:
 
         litellm = _import_litellm()
 
+        use_web = _should_use_web(self._settings.web_search_mode, messages)
+        provider_messages = list(messages)
+        if use_web:
+            latest = next(
+                (message.content for message in reversed(messages) if message.role == "user"),
+                "",
+            )
+            source_requested = bool(_SOURCE_REQUEST_RE.search(latest))
+            web_contract = (
+                "Web research is enabled for this request. Use it to answer current or "
+                "explicitly online questions; do not claim that internet access is unavailable. "
+                "Separate researched facts from uncertainty. "
+            )
+            web_contract += (
+                "The user requested sources, so include a short Sources section with readable "
+                "links."
+                if source_requested
+                else "Do not include URLs, citations, or a Sources section unless the user asks."
+            )
+            insert_at = max(0, len(provider_messages) - 1)
+            provider_messages.insert(insert_at, LLMMessage(role="system", content=web_contract))
+
         kwargs: dict[str, Any] = {
             "model": self._settings.model,
-            "messages": [_to_litellm_message(m) for m in messages],
+            "messages": [_to_litellm_message(m) for m in provider_messages],
             "stream": stream,
             "timeout": self._settings.request_timeout_s,
         }
@@ -194,7 +216,7 @@ class LiteLLMAdapter:
             kwargs["tools"] = [_to_litellm_tool(t) for t in tools]
         if self._settings.extra:
             kwargs.update(self._settings.extra)
-        if _should_use_web(self._settings.web_search_mode, messages):
+        if use_web:
             extra_body = dict(kwargs.get("extra_body") or {})
             plugins = list(extra_body.get("plugins") or [])
             if not any(plugin.get("id") == "web" for plugin in plugins if isinstance(plugin, dict)):
@@ -266,8 +288,14 @@ _RESEARCH_RE = re.compile(
     r"\b("
     r"latest|current|today|tonight|tomorrow|weather|temperature|forecast|"
     r"news|price|stock|score|schedule|search|research|look\s+up|find\s+online|"
+    r"internet|online|on\s+the\s+web|from\s+the\s+(?:net|internet|web)|browse|"
+    r"website|url|source|citation|"
     r"who\s+is\s+(?:the\s+)?(?:current|president|ceo)|what\s+time"
     r")\b",
+    re.IGNORECASE,
+)
+_SOURCE_REQUEST_RE = re.compile(
+    r"\b(?:sources?|citations?|references?|links?|urls?|where\s+did\s+you\s+find)\b",
     re.IGNORECASE,
 )
 _CASUAL_RE = re.compile(

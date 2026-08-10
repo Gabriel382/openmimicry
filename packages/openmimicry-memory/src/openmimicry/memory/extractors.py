@@ -20,7 +20,7 @@ class DeterministicExtractor:
     """Extract only explicit first-person facts; never infer sensitive data."""
 
     _patterns: Sequence[tuple[str, re.Pattern[str]]] = (
-        ("name", re.compile(r"\bmy name is\s+([^.!?]{1,80})", re.IGNORECASE)),
+        ("user_name", re.compile(r"\bmy name is\s+([^.!?]{1,80})", re.IGNORECASE)),
         ("location", re.compile(r"\bi (?:live|reside) in\s+([^.!?]{1,120})", re.IGNORECASE)),
         (
             "likes",
@@ -51,8 +51,11 @@ class LLMExtractor:
     async def extract(self, user_text: str, assistant_text: str) -> list[MemoryCandidate]:
         prompt = (
             "Extract only durable, explicitly stated user preferences or facts. "
+            "Every memory describes the user, never the assistant. Use predicate "
+            "user_name for the user's name; never use the ambiguous predicate name. "
             "Do not infer sensitive attributes. Return JSON only as "
-            '{"memories":[{"predicate":"...","value":"...","confidence":0.0}]}. '
+            '{"memories":[{"subject":"user","predicate":"...",'
+            '"value":"...","confidence":0.0}]}. '
             f"User: {user_text}\nAssistant: {assistant_text}"
         )
         raw = await self._llm.complete(prompt)
@@ -64,7 +67,12 @@ class LLMExtractor:
         results: list[MemoryCandidate] = []
         for item in items[:12] if isinstance(items, list) else []:
             try:
-                results.append(MemoryCandidate.model_validate(item))
+                candidate = MemoryCandidate.model_validate(item)
+                if candidate.subject != "user":
+                    continue
+                if candidate.predicate == "name":
+                    candidate = candidate.model_copy(update={"predicate": "user_name"})
+                results.append(candidate)
             except Exception:
                 continue
         return results

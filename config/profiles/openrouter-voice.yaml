@@ -12,6 +12,7 @@ llm:
       model: openrouter/openai/gpt-oss-20b
       api_key_env: OPENROUTER_API_KEY
       temperature: 0.6
+      web_search_mode: auto
       request_timeout_s: 90
     ollama:
       adapter: litellm
@@ -20,6 +21,7 @@ llm:
       api_base: http://127.0.0.1:11434
       api_key_env: null
       temperature: 0.6
+      web_search_mode: "off"
       request_timeout_s: 180
 
 voice:

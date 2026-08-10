@@ -51,6 +51,9 @@ h2 { margin: 0; font-size: 18px; }
 .wake-name-form input, .wake-name-form select { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; outline: none; background: #111319; color: var(--text); }
 .wake-name-form input:focus { border-color: var(--accent); }
 .wake-name-form button { min-height: 38px; padding: 8px 12px; }
+.animation-alias-panel { grid-column: 1 / -1; display: grid; gap: 10px; }
+.animation-alias-row { display: grid; grid-template-columns: minmax(90px, .45fr) minmax(180px, 1fr); gap: 10px; align-items: center; }
+.animation-alias-row label { color: var(--muted); text-transform: capitalize; }
 .field-hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .muted, .explanation { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .voice-result { min-height: 20px; margin: 8px 0 0; color: #dfe2e8; font-size: 13px; }

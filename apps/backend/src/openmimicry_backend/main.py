@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from openmimicry.core import (
     AppConfig,
     LLMMessage,
+    TaskConstraints,
     TaskHandle,
     UserSpeechFinal,
     UserTextSubmitted,
@@ -35,8 +36,10 @@ from openmimicry.core.config import load as load_config
 from .appearance import load_appearance
 from .avatar_selection import runtime_for_pack_kind
 from .character_import import CharacterRegistry
+from .companion_state import rehydrate_active_companion
 from .conversation import ConversationCoordinator, TurnSubmission
 from .diagnostics import install_diagnostics
+from .local_tools import LocalToolService
 from .routes import (
     admin_router,
     appearance_router,
@@ -52,6 +55,7 @@ from .routes import (
     pack_router,
     personality_router,
     tasks_router,
+    tools_router,
     voice_clone_router,
     voice_profiles_router,
 )
@@ -127,6 +131,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ),
     )
 
+    # Rehydrate the last successfully activated private companion before any
+    # voice or avatar adapter is constructed. The checked-in default remains
+    # the first-run fallback only.
+    config = rehydrate_active_companion(config, character_registry)
+
     # Repair stale pack/runtime combinations from earlier builds before an
     # adapter is constructed.  This makes a persisted VRM+sprite2d pairing
     # self-healing on the next launch.
@@ -164,6 +173,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     wiring: Wiring = await build_runtime(config, ws_bridge=bridge, config_path=config_path)
     supervisor = RuntimeSupervisor(bus=wiring.bus)
     diagnostics = install_diagnostics(config.app.data_dir)
+    task_journal = getattr(wiring.tasks, "journal", None)
+    notifier = getattr(task_journal, "create_notification", None)
+    tool_service = LocalToolService(
+        config.tools,
+        data_dir=config.app.data_dir,
+        notify=notifier if callable(notifier) else None,
+    )
+    await tool_service.start()
 
     mode_state = {
         "continuous_listening": config.voice.modes.continuous_listening,
@@ -175,6 +192,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "post_speech_silence_duration": wiring.speech.post_speech_silence_duration,
     }
     presentation_state = {"value": config.interaction.response_presentation}
+    language_state = {"value": config.interaction.language}
+
+    def _project_aware_intent(text: str):
+        request_obj = wiring.intent(text)
+        if request_obj is None or request_obj.preferred_runtime != "claude_code":
+            return request_obj
+        journal = getattr(wiring.tasks, "journal", None)
+        if journal is None:
+            return request_obj
+        projects = journal.list_projects()
+        lowered = text.casefold()
+        selected = next(
+            (
+                project
+                for project in sorted(
+                    projects, key=lambda item: len(str(item.get("name", ""))), reverse=True
+                )
+                if str(project.get("name") or "").casefold() in lowered
+            ),
+            None,
+        )
+        if (
+            selected is None
+            and len(projects) == 1
+            and any(
+                phrase in lowered for phrase in ("the project", "this project", "the repository")
+            )
+        ):
+            selected = projects[0]
+        if selected is None:
+            return request_obj
+        context = journal.project_context(str(selected["id"]))
+        metadata = {
+            **request_obj.metadata,
+            "project_id": str(selected["id"]),
+            "repository_fingerprint": str(context["current_fingerprint"]),
+        }
+        if isinstance(context.get("resume_session_id"), str):
+            metadata["provider_session_id"] = context["resume_session_id"]
+        return request_obj.model_copy(
+            update={
+                "constraints": TaskConstraints(working_dir=str(selected["root_path"])),
+                "metadata": metadata,
+            }
+        )
 
     async def _run_ordered_turn(text: str, history) -> str | None:
         memory_context = await wiring.memory.context(text)
@@ -187,10 +249,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             llm=wiring.llm,
             tasks=wiring.tasks,
             speech=wiring.speech if mode_state["agent_voice"] else None,
-            intent_fn=wiring.intent,
+            intent_fn=_project_aware_intent,
             history=augmented_history,
             presentation=presentation_state["value"],
             voice_enabled=bool(mode_state["agent_voice"]),
+            output_language=language_state["value"].output,
+            tool_fn=tool_service.try_execute,
         )
         if reply:
             wiring.memory.observe(
@@ -226,6 +290,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     async def _apply_mode_toggle(key: str, value: bool) -> None:
+        # Publish an OFF decision before awaiting microphone shutdown.  A
+        # recorder may deliver one final transcript while its worker is being
+        # cancelled; the speech consumer below treats that event as stale.
+        if key in {"continuous_listening", "live_wake"} and not value:
+            mode_state[key] = False
         if key == "continuous_listening":
             if value:
                 await wiring.speech.enable_continuous_listening()
@@ -312,6 +381,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.wiring = wiring
     app.state.config = config
     app.state.presentation_state = presentation_state
+    app.state.language_state = language_state
     app.state.bridge = bridge
     app.state.handle_user_text = _handle_user_text
     app.state.apply_mode_toggle = _apply_mode_toggle
@@ -326,6 +396,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.active_voice_profile = config.voice.active_profile
     app.state.memory = wiring.memory
     app.state.diagnostics = diagnostics
+    app.state.tool_service = tool_service
 
     speech_subscription = wiring.bus.subscribe()
 
@@ -335,6 +406,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 continue
             spoken = event.text.strip()
             if not event.accepted or not spoken or event.reason == "interrupted":
+                continue
+            if event.input_mode == "wake" and not mode_state["live_wake"]:
+                _log.info("Ignoring stale wake transcript after wake listening was disabled")
+                continue
+            if event.input_mode == "continuous" and not mode_state["continuous_listening"]:
+                _log.info("Ignoring stale continuous transcript after listening was disabled")
                 continue
             await _handle_user_text(spoken, source=event.input_mode)
 
@@ -360,7 +437,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         speech_turn_task.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await speech_turn_task
+        language_task = language_state.get("task")
+        if isinstance(language_task, asyncio.Task) and not language_task.done():
+            language_task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await language_task
         await conversation.close()
+        await tool_service.close()
         try:
             await asyncio.wait_for(_graceful_shutdown(wiring), timeout=2.0)
         except TimeoutError:
@@ -390,7 +473,7 @@ async def _close_tasks(tasks: object) -> None:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="OpenMimicry Backend",
-        version="1.8.5",
+        version="1.9.2",
         lifespan=lifespan,
     )
 
@@ -405,6 +488,7 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(personality_router)
     app.include_router(tasks_router)
+    app.include_router(tools_router)
     app.include_router(voice_clone_router)
     app.include_router(voice_profiles_router)
     app.include_router(pack_router)

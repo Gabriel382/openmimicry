@@ -200,6 +200,17 @@
   cursor: not-allowed;
 }
 
+.avatar-toolbar__button--notification {
+  border-color: var(--om-accent, #ff8534);
+  color: #fff3e8;
+  box-shadow: 0 0 0 2px rgba(255, 133, 52, 0.22), 0 0 14px rgba(255, 133, 52, 0.7);
+  animation: notification-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes notification-pulse {
+  50% { box-shadow: 0 0 0 3px rgba(255, 133, 52, 0.12), 0 0 20px rgba(255, 133, 52, 0.9); }
+}
+
 .avatar-toolbar__drag {
   cursor: grab;
   user-select: none;

@@ -1,4 +1,4 @@
-# OpenMimicry v1.8 integrated desktop profile.
+# OpenMimicry v1.9 integrated desktop profile.
 #
 # External CLIs are optional and discovered on PATH.  Claude defaults to the
 # user's locally authenticated Claude subscription; Anthropic API mode remains
@@ -14,7 +14,7 @@ llm:
       provider: openrouter
       model: openrouter/openai/gpt-oss-20b
       api_key_env: OPENROUTER_API_KEY
-      web_search_mode: "off"
+      web_search_mode: auto
       request_timeout_s: 90
     ollama:
       adapter: litellm
@@ -54,13 +54,18 @@ memory:
   enabled: false
   provider: none
 
+interaction:
+  language:
+    input: en
+    output: en
+
 avatar:
   runtime: sprite2d
   pack: octomimic
   animation_speed: 1.0
   pack_roots:
-    - ./characters
     - ~/.openmimicry/characters
+    - ./characters
   runtimes:
     sprite2d:
       pack_path: ./characters/octomimic
@@ -84,6 +89,20 @@ tasks:
       working_dir: .
     mcp_agent:
       adapter: mcp_agent
+
+# Deterministic OS tools are opt-in. Enable only the individual capabilities
+# and filesystem roots you intend the companion to use.
+tools:
+  enabled: false
+  provider: local
+  allowed_roots:
+    - ~/Documents
+  allow_browser: true
+  allow_files: false
+  allow_folders: false
+  allow_applications: false
+  allow_alarms: true
+  allow_music: true
 
 ui:
   locale: en

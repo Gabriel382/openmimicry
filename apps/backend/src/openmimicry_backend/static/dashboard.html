@@ -35,14 +35,6 @@
           <button id="wake-listen" class="mode-button" type="button" aria-pressed="false">Wake listen: off</button>
           <button id="agent-voice" class="mode-button" type="button" aria-pressed="true">Agent voice: on</button>
         </div>
-        <form id="wake-name-form" class="wake-name-form">
-          <label for="wake-name">Wake name</label>
-          <input id="wake-name" maxlength="40" value="Mimi" autocomplete="off" aria-label="Wake name" />
-          <button type="submit">Save name</button>
-          <label for="wake-aliases">Recognition aliases</label>
-          <input id="wake-aliases" maxlength="160" value="Me me" autocomplete="off" aria-label="Wake-name recognition aliases" placeholder="Me me, Mee mee" />
-          <span></span>
-        </form>
         <form id="stt-quality-form" class="wake-name-form">
           <label for="stt-model">Recognition quality</label>
           <select id="stt-model" aria-label="Speech recognition quality">
@@ -64,7 +56,7 @@
         <p class="field-hint">Seconds of silence required before a phrase is submitted. Increase it if normal pauses cut you off; decrease it for faster replies.</p>
         <p id="voice-adapters" class="muted">Input: unknown · Output: unknown</p>
         <p id="voice-result" class="voice-result" aria-live="polite">PTT is idle.</p>
-        <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the configured name, for example “Mimi, what time is it?”. <strong>Push-to-talk</strong> starts recording while the toolbar microphone or Ctrl+Space is held, then transcribes after release; it does not require the name.</p>
+        <p class="explanation"><strong>Wake listen</strong> stays ready but submits only an utterance that begins with the assistant name or one of its aliases configured under <strong>Personality</strong>. <strong>Push-to-talk</strong> starts recording while the toolbar microphone or Ctrl+Space is held, then transcribes after release; it does not require the name.</p>
         <div class="settings-form">
           <label><span>Saved voice</span><select id="voice-profile-select"><option value="">No saved voice profiles</option></select></label>
           <button id="voice-profile-activate" type="button">Use selected voice</button>
@@ -117,6 +109,8 @@
         <div class="settings-form">
           <label><span>Installed companion</span><select id="companion-select"><option value="">No imported companions</option></select></label>
           <button id="companion-activate" type="button">Activate companion</button>
+          <button id="companion-download" type="button" class="secondary">Download selected</button>
+          <button id="companion-delete" type="button" class="secondary">Remove selected</button>
         </div>
         <p id="companion-error" class="error" role="alert"></p>
       </section>
@@ -128,6 +122,8 @@
           <button id="swap-pack" type="button">Apply character</button>
           <label><span>Required runtime</span><select id="runtime" disabled><option>sprite2d</option><option>threejs</option><option>unity</option><option>external</option></select></label>
           <span class="field-hint">Runtime follows the pack automatically and is saved with it.</span>
+          <button id="pack-download" type="button" class="secondary">Download selected character</button>
+          <button id="pack-delete" type="button" class="secondary">Remove selected character</button>
         </form>
         <details id="threejs-settings">
           <summary>3D framing and animation</summary>
@@ -143,6 +139,15 @@
             <label><span>Fitted height</span><input id="threejs-target-height" type="number" min="0.1" max="3" step="0.01" /></label>
             <label><span>Vertical center</span><input id="threejs-target-y" type="number" min="-3" max="5" step="0.01" /></label>
             <label><span>Animation speed</span><input id="threejs-animation-speed" type="number" min="0.1" max="4" step="0.1" /></label>
+            <div class="animation-alias-panel">
+              <span>Lifecycle animation mapping</span>
+              <div id="threejs-animation-alias-editor"></div>
+              <div class="voice-actions">
+                <button id="threejs-animation-refresh" type="button" class="secondary">Discover motion</button>
+                <button id="threejs-animation-auto" type="button" class="secondary">Auto-map clips</button>
+              </div>
+              <p id="threejs-animation-status" class="field-hint">Select a 3D character to inspect skeletal clips and VRM facial expressions.</p>
+            </div>
             <button type="submit">Save and preview 3D settings</button>
           </form>
           <p class="field-hint">Values are saved per character. Changes preview immediately without restarting the backend or accumulating offsets between messages.</p>
@@ -153,6 +158,19 @@
           <button type="submit">Validate &amp; import</button>
         </form>
         <p class="field-hint">The ZIP must contain exactly one <code>pack.yaml</code> plus its sprite folders. Imported packs appear in the selector above.</p>
+        <details>
+          <summary>Import a custom VRM character locally</summary>
+          <form id="vrm-archive-form" class="settings-form">
+            <label><span>Private pack id</span><input id="vrm-pack-id" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]*" placeholder="my_vrm" /></label>
+            <label><span>Character ZIP (exactly one VRM)</span><input id="vrm-source-zip" type="file" required accept=".zip,application/zip" /></label>
+            <label><span>Display name</span><input id="vrm-custom-name" required maxlength="128" /></label>
+            <label><span>Author / owner</span><input id="vrm-custom-author" required maxlength="128" /></label>
+            <label><span>License / original terms</span><input id="vrm-custom-license" required maxlength="256" /></label>
+            <label><span>Credits / source URL (optional)</span><input id="vrm-custom-source" type="url" maxlength="2048" /></label>
+            <button type="submit">Import custom VRM privately</button>
+          </form>
+          <p class="field-hint">OpenMimicry extracts only the sole VRM into your private data folder, records the supplied credits, and defaults Y rotation to 180°. No creator-specific model or preset is bundled.</p>
+        </details>
         <details>
           <summary>Create a simple 2D character</summary>
           <form id="pack-create-form" class="settings-form">
@@ -197,6 +215,11 @@
 
       <section class="card">
         <div class="card-heading"><h2>Reply presentation</h2><span class="badge">v1.6</span></div>
+        <form id="language-form" class="settings-form">
+          <label><span>Input / speech language</span><select id="input-language"><option value="auto">Automatic detection</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="pt-BR">Português (Brasil)</option></select></label>
+          <label><span>Assistant output language</span><select id="output-language"><option value="auto">Follow the user</option><option value="en">English</option><option value="fr">Français</option><option value="es">Español</option><option value="pt-BR">Português (Brasil)</option></select></label>
+          <button type="submit">Apply languages</button>
+        </form>
         <form id="interaction-form" class="settings-form">
           <label><span>Text and voice</span><select id="presentation-mode"><option value="parallel">Show text and voice in parallel</option><option value="voice_ready">Show text when voice is ready</option><option value="text_only">Text only</option><option value="voice_only">Voice only</option></select></label>
           <label><span>Minimum display (ms)</span><input id="bubble-min" type="number" min="0" max="60000" step="100" /></label>
@@ -205,13 +228,17 @@
           <label><span>Maximum display (ms)</span><input id="bubble-max" type="number" min="1000" max="300000" step="100" /></label>
           <button type="submit">Save presentation</button>
         </form>
-        <p class="field-hint">With parallel voice, a reply remains visible until both playback has ended and the reading timer has elapsed. A TTS failure releases the audio hold and keeps text available.</p>
+        <p class="field-hint">With parallel voice, a reply remains visible until both playback has ended and the reading timer has elapsed. Language preparation runs in the background; the standard local voice switches with the output language, including a pt-BR Piper voice. Custom/cloned voices remain selected and depend on their provider for multilingual quality.</p>
         <p id="interaction-error" class="error" role="alert"></p>
       </section>
 
       <section class="card">
         <div class="card-heading"><h2>Personality</h2><span class="badge">prompt</span></div>
         <form id="personality-form">
+          <label for="personality-name">Assistant name</label>
+          <input id="personality-name" maxlength="128" value="OpenMimicry" />
+          <label for="personality-aliases">Assistant aliases (comma-separated)</label>
+          <input id="personality-aliases" maxlength="512" placeholder="Mimi" />
           <label for="personality-prompt">System prompt</label>
           <textarea id="personality-prompt" rows="7" maxlength="20000" aria-label="Assistant personality system prompt"></textarea>
           <button type="submit">Save personality</button>
@@ -254,10 +281,55 @@
         </div>
         <pre id="task-runtime-status">Loading task runtime diagnostics…</pre>
         <p class="field-hint">This checks the CLI version, authentication, configured project directory, and persistent journal without sending a model request or consuming Claude usage.</p>
+        <details open>
+          <summary>Claude Code and project folders</summary>
+          <form id="claude-settings-form" class="settings-form">
+            <label><span>Claude executable</span><input id="claude-cli" maxlength="4096" value="claude" /></label>
+            <label><span>Default project directory</span><input id="claude-working-dir" maxlength="4096" value="." /></label>
+            <label><span>Authentication</span><select id="claude-auth-mode"><option value="subscription">Local Claude subscription/login</option><option value="api">Anthropic API key</option></select></label>
+            <label><span>Model (optional)</span><input id="claude-model" maxlength="128" placeholder="Use Claude CLI default" /></label>
+            <label><span>Permission mode</span><select id="claude-permission-mode"><option value="acceptEdits">Accept edits</option><option value="default">Default / ask</option><option value="plan">Plan only</option></select></label>
+            <label><span>Maximum turns</span><input id="claude-max-turns" type="number" min="1" max="1000" placeholder="CLI default" /></label>
+            <button type="submit">Save Claude settings</button>
+          </form>
+          <form id="project-form" class="settings-form">
+            <label><span>Project name</span><input id="project-name" required maxlength="128" /></label>
+            <label><span>Repository folder</span><input id="project-root" required maxlength="4096" /></label>
+            <label><span>Description</span><input id="project-description" maxlength="4000" /></label>
+            <button type="submit">Register project</button>
+          </form>
+          <form id="project-task-form" class="settings-form">
+            <label><span>Project</span><select id="project-select"><option value="">No registered project</option></select></label>
+            <label><span>Task</span><textarea id="project-task" required rows="4" maxlength="100000" placeholder="Implement…"></textarea></label>
+            <button type="submit">Run with Claude in background</button>
+          </form>
+          <p id="claude-settings-error" class="error" role="alert"></p>
+          <p class="field-hint">Successful Claude sessions are reused only while the selected repository fingerprint is unchanged. Tasks run independently of conversation and create an unread toolbar notification when they finish.</p>
+        </details>
         <h3>Restart-safe history</h3>
         <div id="task-archive" class="tasks" role="list"><p class="empty">Loading task journal…</p></div>
         <h3>Notifications <span id="notification-count" class="badge">0 unread</span></h3>
         <div id="notifications" class="tasks" role="list"><p class="empty">No task notifications.</p></div>
+      </section>
+
+      <section class="card">
+        <div class="card-heading"><h2>Local tools</h2><span class="badge">optional</span></div>
+        <form id="tools-form" class="settings-form">
+          <label><span>Enabled</span><select id="tools-enabled"><option value="false">Off</option><option value="true">On</option></select></label>
+          <label><span>Provider</span><select id="tools-provider"><option value="local">Built-in desktop tools</option><option value="endpoint">Custom/Android endpoint</option></select></label>
+          <label><span>Custom endpoint</span><input id="tools-endpoint" maxlength="2048" placeholder="http://127.0.0.1:9000/tools/execute" /></label>
+          <label><span>Allowed roots (one per line)</span><textarea id="tools-roots" rows="3" maxlength="8192">~/Documents</textarea></label>
+          <label><span>Application aliases (JSON)</span><textarea id="tools-apps" rows="3" maxlength="8192" placeholder='{"calculator":"calc.exe"}'></textarea></label>
+          <label><span>Browser links</span><select id="tools-browser"><option value="true">Allow</option><option value="false">Block</option></select></label>
+          <label><span>Write new text files</span><select id="tools-files"><option value="false">Block</option><option value="true">Allow inside roots</option></select></label>
+          <label><span>Open folders</span><select id="tools-folders"><option value="false">Block</option><option value="true">Allow inside roots</option></select></label>
+          <label><span>Launch configured apps</span><select id="tools-applications"><option value="false">Block</option><option value="true">Allow aliases only</option></select></label>
+          <label><span>Alarms</span><select id="tools-alarms"><option value="true">Allow</option><option value="false">Block</option></select></label>
+          <label><span>Spotify search</span><select id="tools-music"><option value="true">Allow</option><option value="false">Block</option></select></label>
+          <button type="submit">Save tool policy</button>
+        </form>
+        <p class="field-hint">Tools are deterministic and separate from memory and LLM providers. File writes never overwrite existing files; paths are restricted to configured roots; applications are exact aliases, never shell strings. Endpoint mode lets another device/backend implement the same handled/spoken_reply contract.</p>
+        <p id="tools-error" class="error" role="alert"></p>
       </section>
 
       <section class="card diagnostics-card">

@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 from openmimicry.core import (
-    LLMTokenStreamed,
     RuntimeEvent,
     TaskCompleted,
     TaskSubmitted,
@@ -48,7 +47,7 @@ async def test_task_intent_routes_to_task_runtime_not_llm(wiring: Any) -> None:
     collector = asyncio.create_task(_collect(bus, n_max=30))
     await asyncio.sleep(0)
 
-    await run_chat_turn(
+    reply = await run_chat_turn(
         "Ask Claude to summarise readme",
         bus=bus,
         llm=wiring.llm,
@@ -61,9 +60,8 @@ async def test_task_intent_routes_to_task_runtime_not_llm(wiring: Any) -> None:
 
     assert any(isinstance(e, TaskSubmitted) for e in events)
     assert any(isinstance(e, TaskCompleted) for e in events)
-    assert not any(isinstance(e, LLMTokenStreamed) for e in events), (
-        f"unexpected llm_token in {kinds!r}"
-    )
+    assert reply is not None and "background" in reply
+    assert "task_submitted" in kinds
 
 
 async def test_task_updates_carry_submitted_handle(wiring: Any) -> None:

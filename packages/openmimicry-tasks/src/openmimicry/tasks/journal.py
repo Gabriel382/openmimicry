@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import sqlite3
@@ -74,6 +75,8 @@ class TaskJournal:
                     root_path TEXT NOT NULL,
                     description TEXT NOT NULL DEFAULT '',
                     provider_runtime TEXT,
+                    provider_session_id TEXT,
+                    repository_fingerprint TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -113,6 +116,8 @@ class TaskJournal:
                     ON notifications(created_at DESC);
                 """
             )
+            self._ensure_column("projects", "provider_session_id", "TEXT")
+            self._ensure_column("projects", "repository_fingerprint", "TEXT")
             # A process restart cannot leave a task looking live forever.
             self._db.execute(
                 """
@@ -126,6 +131,13 @@ class TaskJournal:
             )
             self._db.commit()
         _log.info("Task journal ready: path=%s", self.path)
+
+    def _ensure_column(self, table: str, column: str, declaration: str) -> None:
+        columns = {
+            str(row["name"]) for row in self._db.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if column not in columns:
+            self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
     def close(self) -> None:
         with self._lock:
@@ -174,6 +186,43 @@ class TaskJournal:
             raise KeyError(project_id)
         return dict(row)
 
+    def project_context(self, project_id: str) -> dict[str, Any]:
+        """Return project metadata plus a cheap repository-change fingerprint."""
+
+        project = self.get_project(project_id)
+        fingerprint = self.repository_fingerprint(str(project["root_path"]))
+        unchanged = fingerprint == project.get("repository_fingerprint")
+        return {
+            **project,
+            "current_fingerprint": fingerprint,
+            "resume_session_id": project.get("provider_session_id") if unchanged else None,
+            "repository_changed": not unchanged,
+        }
+
+    @staticmethod
+    def repository_fingerprint(root_path: str) -> str:
+        """Fingerprint Git metadata without reading the entire repository."""
+
+        root = Path(root_path).expanduser().resolve()
+        digest = hashlib.sha256(str(root).encode())
+        git = root / ".git"
+        candidates = [git / "HEAD", git / "index"]
+        head = git / "HEAD"
+        try:
+            if head.is_file():
+                value = head.read_text(encoding="utf-8", errors="replace").strip()
+                digest.update(value.encode())
+                if value.startswith("ref: "):
+                    candidates.append(git / value[5:].strip())
+            for candidate in candidates:
+                if candidate.is_file():
+                    stats = candidate.stat()
+                    digest.update(str(candidate.relative_to(root)).encode())
+                    digest.update(f"{stats.st_mtime_ns}:{stats.st_size}".encode())
+        except OSError:
+            pass
+        return digest.hexdigest()
+
     def record_submission(self, handle: TaskHandle, request: TaskRequest) -> None:
         now = _utc_now()
         project_id = request.metadata.get("project_id")
@@ -196,6 +245,12 @@ class TaskJournal:
                     now,
                 ),
             )
+            fingerprint = request.metadata.get("repository_fingerprint")
+            if isinstance(project_id, str) and isinstance(fingerprint, str):
+                self._db.execute(
+                    "UPDATE projects SET repository_fingerprint=?, updated_at=? WHERE id=?",
+                    (fingerprint, now, project_id),
+                )
             self._db.commit()
         _log.info(
             "Task %s persisted: runtime=%s summary=%s",
@@ -257,6 +312,40 @@ class TaskJournal:
                     result.handle.id,
                 ),
             )
+            task_row = self._db.execute(
+                "SELECT project_id, provider_session_id FROM tasks WHERE id=?",
+                (result.handle.id,),
+            ).fetchone()
+            provider_session = result.metadata.get("session_id")
+            if (
+                result.status == "succeeded"
+                and task_row is not None
+                and isinstance(task_row["project_id"], str)
+            ):
+                session = (
+                    provider_session
+                    if isinstance(provider_session, str)
+                    else task_row["provider_session_id"]
+                )
+                project_row = self._db.execute(
+                    "SELECT root_path FROM projects WHERE id=?",
+                    (task_row["project_id"],),
+                ).fetchone()
+                fingerprint = (
+                    self.repository_fingerprint(str(project_row["root_path"]))
+                    if project_row is not None
+                    else None
+                )
+                if isinstance(session, str) and session:
+                    self._db.execute(
+                        """
+                        UPDATE projects
+                        SET provider_session_id=?, repository_fingerprint=COALESCE(?, repository_fingerprint),
+                            updated_at=?
+                        WHERE id=?
+                        """,
+                        (session, fingerprint, now, task_row["project_id"]),
+                    )
             if result.status in {"succeeded", "failed", "cancelled", "interrupted"}:
                 title = (
                     "Task completed" if result.status == "succeeded" else f"Task {result.status}"
@@ -336,6 +425,25 @@ class TaskJournal:
             self._db.commit()
         if cursor.rowcount == 0:
             raise KeyError(notification_id)
+
+    def create_notification(
+        self,
+        title: str,
+        message: str,
+        *,
+        level: str = "info",
+    ) -> str:
+        identifier = str(uuid.uuid4())
+        with self._lock:
+            self._db.execute(
+                """
+                INSERT INTO notifications (id, task_id, level, title, message, created_at)
+                VALUES (?, NULL, ?, ?, ?, ?)
+                """,
+                (identifier, level, title, message, _utc_now()),
+            )
+            self._db.commit()
+        return identifier
 
 
 class JournaledTaskRuntime:
@@ -435,12 +543,22 @@ class JournaledTaskRuntime:
 
     async def diagnostics(self) -> dict[str, Any]:
         probe = getattr(self._inner, "diagnostics", None)
-        runtimes = await probe() if callable(probe) else {}
+        if callable(probe):
+            diagnostics = cast(Callable[[], Awaitable[dict[str, Any]]], probe)
+            runtimes = await diagnostics()
+        else:
+            runtimes = {}
         return {
             "journal_path": str(self.journal.path),
             "persistent": self.journal.path != Path(":memory:"),
             "runtimes": runtimes,
         }
+
+    def adapter(self, name: str) -> Any | None:
+        """Return a named underlying adapter for local configuration routes."""
+
+        adapters = getattr(self._inner, "adapters", {})
+        return adapters.get(name) if isinstance(adapters, dict) else None
 
     async def close(self) -> None:
         for monitor in self._monitors.values():

@@ -592,7 +592,7 @@ def build_vrm() -> bytes:
     gltf: dict[str, object] = {
         "asset": {
             "version": "2.0",
-            "generator": "OpenMimicry deterministic Octomimic VRM generator v1.8.5",
+            "generator": "OpenMimicry deterministic Octomimic VRM generator v1.9.2",
             "copyright": "CC0-1.0 OpenMimicry contributors",
         },
         "scene": 0,

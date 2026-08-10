@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 # Concrete imports — the rest of the backend may NOT do this.
@@ -494,9 +495,10 @@ def _build_task_adapter(name: str, entry: Any) -> Any:
         return ClaudeCodeAdapter(
             settings=ClaudeCodeSettings(
                 cli=str(options.get("cli", "claude")),
-                working_dir=str(options.get("working_dir", ".")),
+                working_dir=_resolved_task_directory(str(options.get("working_dir", "."))),
                 auth_mode=str(options.get("auth_mode", "subscription")),
                 permission_mode=str(options.get("permission_mode", "acceptEdits")),
+                model=(str(options["model"]) if options.get("model") else None),
                 max_turns=(
                     int(options["max_turns"]) if options.get("max_turns") is not None else None
                 ),
@@ -508,12 +510,29 @@ def _build_task_adapter(name: str, entry: Any) -> Any:
         return PicoClawAdapter(
             settings=PicoClawSettings(
                 cli=str(options.get("cli", "picoclaw")),
-                working_dir=str(options.get("working_dir", ".")),
+                working_dir=_resolved_task_directory(str(options.get("working_dir", "."))),
             )
         )
     if adapter_kind == "mcp_agent":
         return MCPAgentAdapter()
     raise WiringError(f"unknown adapter kind for tasks.runtimes.{name!r}: {adapter_kind!r}")
+
+
+def _resolved_task_directory(configured: str) -> str:
+    """Resolve the repository root for an untouched first-run ``.`` value."""
+
+    value = configured.strip() or "."
+    if value not in {".", "./"}:
+        return str(Path(value).expanduser().resolve())
+    current = Path.cwd().resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return str(candidate)
+        if (candidate / "pyproject.toml").is_file() and (
+            (candidate / "pnpm-workspace.yaml").is_file() or (candidate / "packages").is_dir()
+        ):
+            return str(candidate)
+    return str(current)
 
 
 def _describe_task_adapters(router: TaskRouter) -> Mapping[str, Any]:

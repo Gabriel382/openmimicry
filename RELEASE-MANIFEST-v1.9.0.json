@@ -1,0 +1,47 @@
+{
+  "project": "OpenMimicry",
+  "version": "1.9.0",
+  "release_date": "2026-08-02",
+  "configuration_schema": 2,
+  "artifacts": [
+    "OpenMimicry-v1.9.0-integrated-source.zip",
+    "OpenMimicry-v1.9.0-docs.zip",
+    "OpenMimicry-v1.9.0-ISSUE.md",
+    "OpenMimicry-v1.9.0-SHA256SUMS.txt"
+  ],
+  "verification": {
+    "python_tests": 659,
+    "frontend_tests": 100,
+    "frontend_test_files": 20,
+    "ruff": "passed",
+    "typescript": "passed",
+    "vite_build": "passed",
+    "version_declarations": 27,
+    "rust": "not_run_cargo_unavailable_metadata_only_change"
+  },
+  "private_creator_import_presets": [
+    {
+      "id": "torikinoko",
+      "creator": "SyakudoNyoron",
+      "source": "https://wakuaru.com/",
+      "model_bytes_bundled": false
+    },
+    {
+      "id": "minius",
+      "creator": "brochiManac",
+      "source": "https://brochimanac.booth.pm/items/6014250",
+      "model_bytes_bundled": false
+    }
+  ],
+  "excludes": [
+    "credentials",
+    "config/user.yaml",
+    "local characters",
+    "creator archives and models",
+    "voice references",
+    "private companion profiles",
+    "memory and task databases",
+    "logs and caches",
+    "dependencies and build outputs"
+  ]
+}

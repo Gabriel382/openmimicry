@@ -35,8 +35,10 @@ def test_dashboard_exposes_configurable_name_gated_wake_listening() -> None:
     )
     text = html_path.read_text(encoding="utf-8")
     assert "Wake listen" in text
-    assert 'id="wake-name"' in text
-    assert "begins with the configured name" in text
+    assert 'id="wake-name"' not in text
+    assert 'id="personality-name"' in text
+    assert 'id="personality-aliases"' in text
+    assert "assistant name or one of its aliases" in text
     assert 'id="conversation-history"' in text
     assert 'id="voice-result"' in text
     assert 'id="speech-pause"' in text
@@ -63,11 +65,32 @@ def test_dashboard_exposes_v16_configuration_surfaces() -> None:
         "pack-create-form",
         "threejs-transform-form",
         "threejs-animation-speed",
+        "threejs-animation-alias-editor",
+        "companion-download",
+        "companion-delete",
+        "pack-download",
+        "pack-delete",
         "notifications-section",
         "task-runtime-status",
         "refresh-task-runtime",
     ):
         assert f'id="{element_id}"' in text
+
+
+def test_dashboard_uses_only_the_generic_private_vrm_importer() -> None:
+    root = Path(__file__).resolve().parents[3]
+    html = (root / "apps/backend/src/openmimicry_backend/static/dashboard.html").read_text(
+        encoding="utf-8"
+    )
+    javascript = (root / "apps/backend/src/openmimicry_backend/static/dashboard.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="vrm-preset"' not in html
+    assert "Torikinoko" not in html
+    assert "MINIUS" not in html
+    assert 'id="vrm-custom-source"' in html
+    assert 'source_url: byId("vrm-custom-source")' in javascript
 
 
 def test_dashboard_prevents_invalid_enabled_memory_provider_pair() -> None:

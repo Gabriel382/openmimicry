@@ -4,6 +4,15 @@ import { describe, expect, it } from "vitest";
 import { applyModelTransform, captureModelBasis } from "../transform";
 
 describe("3D model transform", () => {
+  it("defaults every unsaved model to a front-facing 180 degree Y rotation", () => {
+    const root = new Object3D();
+    root.add(new Mesh(new BoxGeometry(1, 2, 1)));
+
+    applyModelTransform(root, captureModelBasis(root), undefined);
+
+    expect(root.rotation.y).toBeCloseTo(Math.PI);
+  });
+
   it("is absolute and does not drift when applied repeatedly", () => {
     const root = new Object3D();
     root.add(new Mesh(new BoxGeometry(1, 2, 1)));

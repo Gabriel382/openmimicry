@@ -81,6 +81,7 @@ def build_threejs_projection(
     asset = resolve_asset(pack, runtime_cfg=runtime_cfg, static_url_prefix=static_url_prefix)
 
     chain = clip_fallback_chain(directive.state, directive.emotion, directive.speaking)
+    chain = _aliased_chain(chain, directive=directive, pack=pack, runtime_cfg=runtime_cfg)
     clip = pick_clip(chain, available=runtime_cfg.get("clips"))
 
     intensity = _clamp01(directive.intensity if directive.intensity is not None else 1.0)
@@ -107,7 +108,7 @@ def build_threejs_projection(
     }
 
     if directive.gesture:
-        gesture_clip = _gesture_clip(directive.gesture, runtime_cfg=runtime_cfg)
+        gesture_clip = _gesture_clip(directive.gesture, pack=pack, runtime_cfg=runtime_cfg)
         if gesture_clip is not None:
             message["gestureClip"] = gesture_clip
         else:
@@ -247,7 +248,7 @@ def _model_transform(
 
     defaults: dict[str, Any] = {
         "position": [0.0, 0.0, 0.0],
-        "rotation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 180.0, 0.0],
         "scale": 1.0,
         "autoFit": True,
         "targetHeight": 0.72,
@@ -260,7 +261,7 @@ def _model_transform(
     if not isinstance(selected, dict):
         return defaults
 
-    def vector(name: str) -> list[float]:
+    def vector(name: str, low: float, high: float) -> list[float]:
         raw = selected.get(name, defaults[name])
         if not isinstance(raw, (list, tuple)) or len(raw) != 3:
             return list(defaults[name])
@@ -268,7 +269,7 @@ def _model_transform(
             values = [float(item) for item in raw]
         except (TypeError, ValueError):
             return list(defaults[name])
-        return [max(-20.0, min(20.0, item)) for item in values]
+        return [max(low, min(high, item)) for item in values]
 
     def number(name: str, low: float, high: float) -> float:
         raw = selected.get(name, selected.get(_camel(name), defaults[_camel(name)]))
@@ -278,8 +279,8 @@ def _model_transform(
             return float(defaults[_camel(name)])
 
     return {
-        "position": vector("position"),
-        "rotation": vector("rotation"),
+        "position": vector("position", -20.0, 20.0),
+        "rotation": vector("rotation", -360.0, 360.0),
         "scale": number("scale", 0.05, 10.0),
         "autoFit": bool(selected.get("auto_fit", selected.get("autoFit", True))),
         "targetHeight": number("target_height", 0.1, 3.0),
@@ -326,7 +327,48 @@ def _blend_weights(*, directive: AvatarDirective, intensity: float) -> dict[str,
     return weights
 
 
-def _gesture_clip(gesture: str, *, runtime_cfg: dict[str, Any]) -> str | None:
+def _pack_animation_aliases(pack: CharacterPack, runtime_cfg: dict[str, Any]) -> dict[str, str]:
+    values = runtime_cfg.get("animation_aliases", {})
+    selected = values.get(pack.id, {}) if isinstance(values, dict) else {}
+    if not isinstance(selected, dict):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in selected.items()
+        if isinstance(value, str) and value.strip()
+    }
+
+
+def _aliased_chain(
+    chain: list[str],
+    *,
+    directive: AvatarDirective,
+    pack: CharacterPack,
+    runtime_cfg: dict[str, Any],
+) -> list[str]:
+    """Prepend per-pack custom clips without losing procedural fallbacks."""
+
+    aliases = _pack_animation_aliases(pack, runtime_cfg)
+    preferred: list[str] = []
+    if directive.speaking and "speaking" in aliases:
+        preferred.append(aliases["speaking"])
+    if directive.state in aliases:
+        preferred.append(aliases[directive.state])
+    if directive.emotion == "happy" and "happy" in aliases:
+        preferred.append(aliases["happy"])
+    output: list[str] = []
+    for name in [*preferred, *(aliases.get(item, item) for item in chain)]:
+        if name and name not in output:
+            output.append(name)
+    return output or ["idle"]
+
+
+def _gesture_clip(
+    gesture: str,
+    *,
+    pack: CharacterPack,
+    runtime_cfg: dict[str, Any],
+) -> str | None:
     """Map ``directive.gesture`` to a clip name.
 
     Resolution order: ``runtime_cfg.gestures[gesture]`` (per-pack map) →
@@ -334,6 +376,9 @@ def _gesture_clip(gesture: str, *, runtime_cfg: dict[str, Any]) -> str | None:
     free-form). Unknown gestures return ``None`` and the projection
     omits the field.
     """
+    aliases = _pack_animation_aliases(pack, runtime_cfg)
+    if gesture in aliases:
+        return aliases[gesture]
     gestures = runtime_cfg.get("gestures")
     if isinstance(gestures, dict):
         mapped = gestures.get(gesture)

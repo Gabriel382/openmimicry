@@ -48,6 +48,44 @@ async def test_interaction_settings_hot_apply_and_persist(monkeypatch, tmp_path:
     assert persisted[0]["maximum_ms"] == 40000
 
 
+async def test_language_warmup_is_backgrounded_and_committed_atomically(monkeypatch) -> None:
+    class Speech:
+        stt_model = "medium.en"
+
+        async def set_stt_model(self, value: str) -> None:
+            self.stt_model = value
+
+        async def set_stt_language(self, value: str) -> None:
+            self.language = value
+
+    persisted: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        interaction,
+        "persist_language_settings",
+        lambda **values: persisted.append(values),
+    )
+    config = load_config(ROOT / "config/profiles/basic.yaml", env={})
+    speech = Speech()
+    state = SimpleNamespace(
+        config=config,
+        wiring=SimpleNamespace(speech=speech),
+        language_state={"value": config.interaction.language},
+    )
+    request = FakeRequest(state=state)
+
+    response = await interaction.update_language_settings(
+        interaction.LanguageConfig(input="fr", output="en"),
+        request,  # type: ignore[arg-type]
+    )
+    await state.language_state["task"]
+
+    assert response["status"] == "preparing"
+    assert state.language_state["status"] == "ready"
+    assert state.config.interaction.language.input == "fr"
+    assert speech.stt_model == "distil-large-v3"
+    assert persisted[0]["input_language"] == "fr"
+
+
 async def test_memory_settings_never_enable_raw_audio(monkeypatch) -> None:
     persisted: list[dict[str, object]] = []
     monkeypatch.setattr(memory, "persist_memory_settings", persisted.append)
@@ -106,19 +144,43 @@ async def test_invalid_enabled_memory_settings_return_422_without_persisting(
 async def test_personality_update_is_atomic_and_preserves_guardrails(
     monkeypatch, tmp_path: Path
 ) -> None:
+    class Speech:
+        def __init__(self) -> None:
+            self.wake_names = ["Mimi", "Hey Mimi"]
+            self.wake_aliases = ["Me me"]
+
+        async def set_wake_names(self, names, aliases) -> None:
+            self.wake_names = list(names)
+            self.wake_aliases = list(aliases)
+
     target = tmp_path / "personality.yml"
     target.write_text(
         "system_prompt: old\nbehavior:\n  structured_avatar_output: true\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("OPENMIMICRY_PERSONALITY_PATH", str(target))
+    monkeypatch.setattr(personality, "persist_voice_settings", lambda **_values: None)
+    config = load_config(ROOT / "config/profiles/basic.yaml", env={})
+    speech = Speech()
+    request = FakeRequest(
+        state=SimpleNamespace(
+            wiring=SimpleNamespace(speech=speech),
+            config=config,
+            mode_state={},
+        )
+    )
 
     response = await personality.update_personality(
-        personality.PersonalityRequest(system_prompt="Be precise and kind.")
+        personality.PersonalityRequest(
+            system_prompt="Be precise and kind.", name="Bruno", aliases=["Mimi"]
+        ),
+        request,  # type: ignore[arg-type]
     )
 
     assert response["system_prompt"] == "Be precise and kind."
     assert response["structured_avatar_output"] is True
+    assert speech.wake_names == ["Bruno", "Hey Bruno"]
+    assert speech.wake_aliases == ["Mimi"]
     assert not target.with_suffix(".yml.tmp").exists()
 
 

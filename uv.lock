@@ -295,7 +295,7 @@ wheels = [
 
 [[package]]
 name = "openmimicry"
-version = "1.8.5"
+version = "1.9.2"
 source = { editable = "." }
 
 [package.optional-dependencies]

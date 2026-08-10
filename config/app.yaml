@@ -48,6 +48,7 @@ avatar:
   runtime: sprite2d
   pack: octomimic
   pack_roots:
+    - ~/.openmimicry/characters
     - ./characters
   runtimes:
     sprite2d:

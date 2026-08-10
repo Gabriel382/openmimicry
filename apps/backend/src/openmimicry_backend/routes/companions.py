@@ -1,4 +1,4 @@
-"""Bounded whole-companion profile import and export."""
+"""Bounded whole-companion profile import, export, and activation."""
 
 from __future__ import annotations
 
@@ -11,15 +11,22 @@ import stat
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from openmimicry.core.schemas.app import TTSConfigSection
 
 from ..appearance import AppearanceConfig
 from ..avatar_selection import runtime_for_pack_kind
-from ..user_settings import persist_avatar_selection, persist_tts_clone
+from ..companion_state import tts_for_voice_profile
+from ..user_settings import (
+    persist_active_companion,
+    persist_avatar_selection,
+    persist_avatar_transform,
+    persist_tts_clone,
+    persist_voice_settings,
+)
 from ..voice_profiles import VoiceProfileError, VoiceProfileStore
 from ..wiring import refresh_tts
 
@@ -65,7 +72,7 @@ def _archive_files(archive: zipfile.ZipFile) -> dict[PurePosixPath, bytes]:
     return files
 
 
-def _yaml(content: bytes, label: str) -> dict[str, object]:
+def _yaml(content: bytes, label: str) -> dict[str, Any]:
     try:
         value = yaml.safe_load(content.decode("utf-8")) or {}
     except Exception as exc:
@@ -73,6 +80,31 @@ def _yaml(content: bytes, label: str) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a YAML mapping")
     return value
+
+
+def _personality_path() -> Path:
+    configured = Path(
+        os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "~/.openmimicry/personality.yml")
+    ).expanduser()
+    return configured if configured.is_file() else Path("config/personality.yml")
+
+
+def _threejs_pack_settings(config: Any, pack_id: str) -> tuple[dict[str, Any], dict[str, str]]:
+    avatar = getattr(config, "avatar", None)
+    runtimes = getattr(avatar, "runtimes", {}) if avatar is not None else {}
+    runtime = dict(runtimes.get("threejs", {})) if isinstance(runtimes, dict) else {}
+    transforms = runtime.get("transforms", {})
+    aliases = runtime.get("animation_aliases", {})
+    transform = dict(transforms.get(pack_id, {})) if isinstance(transforms, dict) else {}
+    mapping = dict(aliases.get(pack_id, {})) if isinstance(aliases, dict) else {}
+    return transform, {str(key): str(value) for key, value in mapping.items()}
+
+
+def _write_atomic(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(content)
+    os.replace(temporary, path)
 
 
 @router.get("/companions")
@@ -85,7 +117,51 @@ async def companions(request: Request) -> dict[str, object]:
                 values.append(_yaml(manifest.read_bytes(), "companion.yaml"))
             except ValueError:
                 continue
-    return {"companions": values}
+    active = getattr(getattr(request.app.state.config, "companion", None), "active_id", None)
+    return {"companions": values, "active_companion": active}
+
+
+def _stored_companion_root(request: Request, companion_id: str) -> Path:
+    if not _ID.fullmatch(companion_id):
+        raise HTTPException(status_code=422, detail="invalid companion id")
+    base = (Path(request.app.state.config.app.data_dir).expanduser() / "companions").resolve()
+    root = (base / companion_id).resolve()
+    if root.parent != base or not (root / "companion.yaml").is_file():
+        raise HTTPException(status_code=404, detail="companion is not installed")
+    return root
+
+
+@router.get("/companions/stored/{companion_id}/export")
+async def export_stored_companion(companion_id: str, request: Request) -> Response:
+    root = _stored_companion_root(request, companion_id)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for candidate in sorted(root.rglob("*")):
+            if candidate.is_file():
+                archive.write(candidate, candidate.relative_to(root).as_posix())
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{companion_id}.omprofile.zip"'},
+    )
+
+
+@router.delete("/companions/stored/{companion_id}")
+async def delete_companion(companion_id: str, request: Request) -> dict[str, object]:
+    """Delete a private profile without unloading its currently active components."""
+
+    import shutil
+
+    root = _stored_companion_root(request, companion_id)
+    active = request.app.state.config.companion.active_id == companion_id
+    shutil.rmtree(root)
+    if active:
+        persist_active_companion(None)
+        current = request.app.state.config
+        request.app.state.config = current.model_copy(
+            update={"companion": current.companion.model_copy(update={"active_id": None})}
+        )
+    return {"ok": True, "deleted": companion_id, "was_active": active}
 
 
 @router.get("/companions/current/export")
@@ -95,44 +171,71 @@ async def export_current_companion(
     name: str = Query(min_length=1, max_length=128),
     include_voice_reference: bool = Query(default=False),
 ) -> Response:
+    companion_id = companion_id.strip().casefold()
     if not _ID.fullmatch(companion_id):
         raise HTTPException(status_code=422, detail="invalid companion id")
     try:
         pack_id = str(request.app.state.active_pack)
         pack_root = request.app.state.character_registry.resolve(pack_id)
-        personality_path = Path(
-            os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "~/.openmimicry/personality.yml")
-        ).expanduser()
-        if not personality_path.is_file():
-            personality_path = Path("config/personality.yml")
+        personality_path = _personality_path()
         personality = personality_path.read_bytes()
+        personality_values = _yaml(personality, "personality.yaml")
         appearance = yaml.safe_dump(
             request.app.state.appearance.model_dump(mode="json"),
             sort_keys=False,
             allow_unicode=True,
         ).encode()
-        voice_id = getattr(request.app.state, "active_voice_profile", None)
-        manifest = {
-            "schema_version": 1,
+        config = request.app.state.config
+        configured_voice = getattr(getattr(config, "voice", None), "active_profile", None)
+        voice_id = getattr(request.app.state, "active_voice_profile", None) or configured_voice
+        pack_summary = next(
+            item for item in request.app.state.character_registry.list() if item["id"] == pack_id
+        )
+        runtime_name = runtime_for_pack_kind(str(pack_summary["kind"]))
+        transform, aliases = _threejs_pack_settings(config, pack_id)
+        animation_speed = float(getattr(getattr(config, "avatar", None), "animation_speed", 1.0))
+        manifest: dict[str, Any] = {
+            "schema_version": 2,
             "id": companion_id,
             "name": name.strip(),
+            "assistant_name": str(personality_values.get("assistant_name") or name).strip(),
+            "aliases": [str(item) for item in personality_values.get("aliases", [])],
             "avatar_pack": pack_id,
+            "avatar_runtime": runtime_name,
             "voice_profile": voice_id,
             "contains_voice_reference": False,
         }
         payloads: dict[str, bytes] = {
             "personality/personality.yaml": personality,
             "appearance/appearance.yaml": appearance,
+            "avatar/settings.yaml": yaml.safe_dump(
+                {
+                    "runtime": runtime_name,
+                    "transform": transform,
+                    "animation_speed": animation_speed,
+                    "animation_aliases": aliases,
+                },
+                sort_keys=False,
+                allow_unicode=True,
+            ).encode(),
         }
         for candidate in sorted(pack_root.rglob("*")):
             if candidate.is_file():
-                payloads[f"avatar/{pack_id}/{candidate.relative_to(pack_root).as_posix()}"] = (
-                    candidate.read_bytes()
-                )
+                relative = candidate.relative_to(pack_root).as_posix()
+                payloads[f"avatar/{pack_id}/{relative}"] = candidate.read_bytes()
         if voice_id:
-            profile, directory = VoiceProfileStore(request.app.state.config.app.data_dir).resolve(
-                voice_id
+            store = VoiceProfileStore(config.app.data_dir)
+            active_companion = config.companion.active_id
+            bundled_voice = (
+                Path(config.app.data_dir).expanduser()
+                / "companions"
+                / str(active_companion)
+                / "voice"
             )
+            if active_companion and (bundled_voice / "profile.yaml").is_file():
+                profile, directory = store.resolve_directory(bundled_voice)
+            else:
+                profile, directory = store.resolve(str(voice_id))
             exported = dict(profile)
             reference = profile.get("reference")
             if not include_voice_reference:
@@ -165,7 +268,7 @@ async def export_current_companion(
             )
             for path, content in payloads.items():
                 archive.writestr(path, content)
-    except (OSError, ValueError, VoiceProfileError) as exc:
+    except (OSError, StopIteration, ValueError, VoiceProfileError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(
         content=buffer.getvalue(),
@@ -187,7 +290,9 @@ async def import_companion(
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             files = _archive_files(archive)
         manifest = _yaml(files[PurePosixPath("companion.yaml")], "companion.yaml")
-        if manifest.get("schema_version") != 1 or not _ID.fullmatch(str(manifest.get("id") or "")):
+        if manifest.get("schema_version") not in {1, 2} or not _ID.fullmatch(
+            str(manifest.get("id") or "")
+        ):
             raise ValueError("invalid companion schema or id")
         companion_id = str(manifest["id"])
         checksums = json.loads(files[PurePosixPath("checksums.json")].decode("utf-8"))
@@ -219,142 +324,183 @@ async def import_companion(
 
 @router.post("/companions/{companion_id}/activate")
 async def activate_companion(companion_id: str, request: Request) -> dict[str, object]:
+    """Activate every companion component, then persist the selector last.
+
+    The TTS adapter is refreshed before ``companion.active_id`` is committed,
+    so a failed voice load cannot leave the next launch pointing at a partially
+    activated profile.
+    """
+
     root = Path(request.app.state.config.app.data_dir).expanduser() / "companions" / companion_id
     try:
         manifest = _yaml((root / "companion.yaml").read_bytes(), "companion.yaml")
         pack_id = str(manifest["avatar_pack"])
+        registry = request.app.state.character_registry
         try:
-            pack_path = request.app.state.character_registry.resolve(pack_id)
+            pack_path = registry.resolve(pack_id)
         except ValueError:
             pack_root = root / "avatar" / pack_id
+            if not pack_root.is_dir():
+                raise ValueError(f"companion avatar pack {pack_id!r} is missing") from None
             buffer = io.BytesIO()
             with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
                 for candidate in pack_root.rglob("*"):
                     if candidate.is_file():
-                        archive.write(candidate, f"{pack_id}/{candidate.relative_to(pack_root)}")
-            request.app.state.character_registry.install_zip(buffer.getvalue())
-            pack_path = request.app.state.character_registry.resolve(pack_id)
-        pack_summary = next(
-            item for item in request.app.state.character_registry.list() if item["id"] == pack_id
-        )
-        runtime_name = runtime_for_pack_kind(pack_summary["kind"])
+                        relative = candidate.relative_to(pack_root).as_posix()
+                        archive.write(candidate, f"{pack_id}/{relative}")
+            registry.install_zip(buffer.getvalue())
+            pack_path = registry.resolve(pack_id)
+        pack_summary = next(item for item in registry.list() if item["id"] == pack_id)
+        runtime_name = runtime_for_pack_kind(str(pack_summary["kind"]))
         if runtime_name is None:
-            raise ValueError(
-                f"companion pack kind {pack_summary['kind']!r} has no built-in runtime"
-            )
-        wiring = request.app.state.wiring
-        orchestrator = wiring.orchestrator
-        factory = getattr(wiring, "runtime_factories", {}).get(runtime_name)
-        if factory is None:
-            raise ValueError(f"avatar runtime {runtime_name!r} is unavailable")
-        runtime = orchestrator.runtime if orchestrator.runtime.name == runtime_name else factory()
-        runtime_cfg = dict(request.app.state.config.avatar.runtimes.get(runtime_name, {}))
-        if runtime_name == "threejs":
-            runtime_cfg["animation_speed"] = request.app.state.config.avatar.animation_speed
-        await orchestrator.select_character(
-            character_id=pack_id,
-            runtime=runtime,
-            runtime_name=runtime_name,
-            character_config={
-                "pack_path": str(pack_path),
-                "runtime": runtime_cfg,
-            },
+            raise ValueError(f"companion pack kind {pack_summary['kind']!r} is unsupported")
+
+        current = request.app.state.config
+        runtime_cfg = dict(current.avatar.runtimes.get(runtime_name, {}))
+        avatar_settings_path = root / "avatar" / "settings.yaml"
+        avatar_settings = (
+            _yaml(avatar_settings_path.read_bytes(), "avatar settings")
+            if avatar_settings_path.is_file()
+            else {}
         )
-        wiring.avatar_runtime = runtime
-        request.app.state.active_pack = pack_id
-        persist_avatar_selection(pack=pack_id, runtime=runtime_name)
-        current_config = request.app.state.config
-        request.app.state.config = current_config.model_copy(
+        transform = avatar_settings.get("transform", {})
+        aliases = avatar_settings.get("animation_aliases", {})
+        if not isinstance(transform, dict) or not isinstance(aliases, dict):
+            raise ValueError("avatar transform and animation_aliases must be mappings")
+        animation_speed = float(
+            avatar_settings.get("animation_speed", current.avatar.animation_speed)
+        )
+        if runtime_name == "threejs":
+            transforms = dict(runtime_cfg.get("transforms", {}))
+            transforms[pack_id] = dict(transform)
+            alias_sets = dict(runtime_cfg.get("animation_aliases", {}))
+            alias_sets[pack_id] = {str(key): str(value) for key, value in aliases.items()}
+            runtime_cfg.update(
+                {
+                    "transforms": transforms,
+                    "animation_aliases": alias_sets,
+                    "animation_speed": animation_speed,
+                }
+            )
+        runtimes = dict(current.avatar.runtimes)
+        runtimes[runtime_name] = runtime_cfg
+        avatar_config = current.avatar.model_copy(
             update={
-                "avatar": current_config.avatar.model_copy(
-                    update={"pack": pack_id, "runtime": runtime_name}
-                )
+                "pack": pack_id,
+                "runtime": runtime_name,
+                "animation_speed": animation_speed,
+                "runtimes": runtimes,
             }
         )
+
+        voice_id = manifest.get("voice_profile")
+        voice_config = current.voice
+        voice_profile: dict[str, Any] | None = None
+        voice_directory: Path | None = None
+        if isinstance(voice_id, str) and voice_id:
+            store = VoiceProfileStore(current.app.data_dir)
+            voice_manifest = root / "voice" / "profile.yaml"
+            if voice_manifest.is_file():
+                # A bundled companion voice is authoritative even when an
+                # older global profile happens to reuse the same id.
+                voice_profile, voice_directory = store.resolve_directory(voice_manifest.parent)
+            else:
+                voice_profile, voice_directory = store.resolve(voice_id)
+            voice_config = current.voice.model_copy(
+                update={
+                    "tts": tts_for_voice_profile(current.voice.tts, voice_profile, voice_directory),
+                    "active_profile": voice_id,
+                }
+            )
+
         personality = root / "personality" / "personality.yaml"
+        personality_values = _yaml(personality.read_bytes(), "personality.yaml")
+        assistant_name = str(
+            personality_values.get("assistant_name") or manifest.get("name") or "OpenMimicry"
+        ).strip()
+        assistant_aliases = [
+            str(value).strip()
+            for value in personality_values.get("aliases", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        wake_names = [assistant_name]
+        if not assistant_name.casefold().startswith("hey "):
+            wake_names.append(f"Hey {assistant_name}")
+        wake = voice_config.stt.wake.model_copy(
+            update={"names": wake_names, "aliases": assistant_aliases}
+        )
+        voice_config = voice_config.model_copy(
+            update={"stt": voice_config.stt.model_copy(update={"wake": wake})}
+        )
+        candidate = current.model_copy(update={"avatar": avatar_config, "voice": voice_config})
+        wiring = request.app.state.wiring
+        supervisor = request.app.state.supervisor
+        await supervisor.set_runtime_state("refreshing", reason="companion_profile")
+        try:
+            if voice_profile is not None:
+                await refresh_tts(wiring, candidate)
+            await wiring.speech.set_wake_names(wake_names, assistant_aliases)
+            factory = getattr(wiring, "runtime_factories", {}).get(runtime_name)
+            if factory is None:
+                raise ValueError(f"avatar runtime {runtime_name!r} is unavailable")
+            orchestrator = wiring.orchestrator
+            runtime = (
+                orchestrator.runtime if orchestrator.runtime.name == runtime_name else factory()
+            )
+            await orchestrator.select_character(
+                character_id=pack_id,
+                runtime=runtime,
+                runtime_name=runtime_name,
+                character_config={"pack_path": str(pack_path), "runtime": runtime_cfg},
+            )
+            wiring.avatar_runtime = runtime
+        finally:
+            await supervisor.set_runtime_state("ready")
+
         personality_target = Path(
             os.environ.get("OPENMIMICRY_PERSONALITY_PATH", "~/.openmimicry/personality.yml")
         ).expanduser()
-        personality_target.parent.mkdir(parents=True, exist_ok=True)
-        personality_temporary = personality_target.with_suffix(personality_target.suffix + ".tmp")
-        personality_temporary.write_bytes(personality.read_bytes())
-        os.replace(personality_temporary, personality_target)
+        _write_atomic(personality_target, personality.read_bytes())
         appearance_data = _yaml(
             (root / "appearance" / "appearance.yaml").read_bytes(), "appearance.yaml"
         )
-        request.app.state.appearance = AppearanceConfig.model_validate(appearance_data)
+        appearance = AppearanceConfig.model_validate(appearance_data)
         appearance_target = Path(
             os.environ.get("OPENMIMICRY_APPEARANCE_PATH", "~/.openmimicry/appearance.yml")
         ).expanduser()
-        appearance_target.parent.mkdir(parents=True, exist_ok=True)
-        appearance_temporary = appearance_target.with_suffix(appearance_target.suffix + ".tmp")
-        appearance_temporary.write_text(
-            yaml.safe_dump(appearance_data, sort_keys=False, allow_unicode=True),
-            encoding="utf-8",
+        _write_atomic(
+            appearance_target,
+            yaml.safe_dump(appearance_data, sort_keys=False, allow_unicode=True).encode(),
         )
-        os.replace(appearance_temporary, appearance_target)
-        voice_manifest = root / "voice" / "profile.yaml"
-        restart_required = False
-        if voice_manifest.is_file():
-            profile = _yaml(voice_manifest.read_bytes(), "voice profile")
-            profile_id = str(profile["id"])
-            store = VoiceProfileStore(request.app.state.config.app.data_dir)
-            try:
-                stored, directory = store.resolve(profile_id)
-            except VoiceProfileError:
-                buffer = io.BytesIO()
-                with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-                    archive.write(voice_manifest, "profile.yaml")
-                    reference = profile.get("reference")
-                    if isinstance(reference, str):
-                        archive.write(root / "voice" / reference, f"voice/{reference}")
-                store.import_zip(buffer.getvalue(), confirm_reference=True)
-                stored, directory = store.resolve(profile_id)
-            reference = stored.get("reference")
-            if stored["provider"] != "chatterbox-local" or isinstance(reference, str):
-                persist_tts_clone(
-                    provider=str(stored["provider"]),
-                    voice_id=str(stored["voice_id"]),
-                    consent_record=str(stored["consent_record"]),
-                    reference_path=(
-                        str(directory / reference) if isinstance(reference, str) else None
-                    ),
-                    profile_id=profile_id,
-                )
-                request.app.state.active_voice_profile = profile_id
-                current = request.app.state.config
-                tts = TTSConfigSection.model_validate(
-                    {
-                        **current.voice.tts.model_dump(mode="json"),
-                        "adapter": str(stored["provider"]),
-                        "engine": str(stored["provider"]),
-                        "voice": str(stored["voice_id"]),
-                        "clone": {
-                            "provider": str(stored["provider"]),
-                            "voice_id": str(stored["voice_id"]),
-                            "consent_record": str(stored["consent_record"]),
-                            "reference_path": (
-                                str(directory / reference) if isinstance(reference, str) else None
-                            ),
-                            "store_reference_locally": True,
-                        },
-                    }
-                )
-                candidate = current.model_copy(
-                    update={
-                        "voice": current.voice.model_copy(update={"tts": tts}),
-                        "avatar": current.avatar.model_copy(
-                            update={"pack": pack_id, "runtime": runtime_name}
-                        ),
-                    }
-                )
-                supervisor = request.app.state.supervisor
-                await supervisor.set_runtime_state("refreshing", reason="companion_profile")
-                try:
-                    await refresh_tts(request.app.state.wiring, candidate)
-                finally:
-                    await supervisor.set_runtime_state("ready")
-                request.app.state.config = candidate
+
+        # Persist only after all fallible adapter/runtime operations succeeded.
+        persist_avatar_selection(pack=pack_id, runtime=runtime_name)
+        persist_voice_settings(wake_names=wake_names, wake_aliases=assistant_aliases)
+        if runtime_name == "threejs":
+            persist_avatar_transform(
+                pack_id,
+                dict(transform),
+                animation_speed=animation_speed,
+                animation_aliases={str(key): str(value) for key, value in aliases.items()},
+            )
+        if voice_profile is not None and voice_directory is not None and isinstance(voice_id, str):
+            reference = voice_profile.get("reference")
+            persist_tts_clone(
+                provider=str(voice_profile["provider"]),
+                voice_id=str(voice_profile["voice_id"]),
+                consent_record=str(voice_profile["consent_record"]),
+                reference_path=(
+                    str(voice_directory / reference) if isinstance(reference, str) else None
+                ),
+                profile_id=voice_id,
+            )
+        persist_active_companion(companion_id)
+
+        companion_config = candidate.companion.model_copy(update={"active_id": companion_id})
+        request.app.state.config = candidate.model_copy(update={"companion": companion_config})
+        request.app.state.appearance = appearance
+        request.app.state.active_pack = pack_id
+        request.app.state.active_voice_profile = voice_id
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {
@@ -362,5 +508,6 @@ async def activate_companion(companion_id: str, request: Request) -> dict[str, o
         "active_companion": companion_id,
         "active_pack": pack_id,
         "active_runtime": runtime_name,
-        "restart_required": restart_required,
+        "active_voice_profile": voice_id,
+        "restart_required": False,
     }

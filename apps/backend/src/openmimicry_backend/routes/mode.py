@@ -180,6 +180,15 @@ async def mode_toggle(req: ModeToggleRequest, request: Request) -> dict[str, obj
     wiring = request.app.state.wiring
     bus: EventBus = wiring.bus
     speech: SpeechController = wiring.speech
+    mode_state = getattr(request.app.state, "mode_state", None)
+    previous_value = mode_state.get(req.key) if isinstance(mode_state, dict) else None
+    if (
+        isinstance(mode_state, dict)
+        and req.key in {"continuous_listening", "live_wake"}
+        and not req.value
+    ):
+        # Close the admission gate before the recorder finishes shutting down.
+        mode_state[req.key] = False
 
     try:
         if req.key == "continuous_listening":
@@ -200,10 +209,11 @@ async def mode_toggle(req: ModeToggleRequest, request: Request) -> dict[str, obj
     except HTTPException:
         raise
     except Exception as exc:
+        if isinstance(mode_state, dict) and previous_value is not None:
+            mode_state[req.key] = previous_value
         _log.warning("mode_toggle apply failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    mode_state = getattr(request.app.state, "mode_state", None)
     if isinstance(mode_state, dict):
         mode_state[req.key] = req.value
         if req.value and req.key == "continuous_listening":

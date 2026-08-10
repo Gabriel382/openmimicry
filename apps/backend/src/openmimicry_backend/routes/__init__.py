@@ -21,6 +21,7 @@ from .mode import router as mode_router
 from .pack import router as pack_router
 from .personality import router as personality_router
 from .tasks import router as tasks_router
+from .tools import router as tools_router
 from .voice_clone import router as voice_clone_router
 from .voice_profiles import router as voice_profiles_router
 
@@ -39,6 +40,7 @@ __all__ = [
     "pack_router",
     "personality_router",
     "tasks_router",
+    "tools_router",
     "voice_clone_router",
     "voice_profiles_router",
 ]

@@ -7,6 +7,7 @@ import functools
 import json
 import sys
 import traceback
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,59 @@ def _install_numpy2_reference_compat(model_type: type[Any]) -> bool:
 
     norm_loudness_float32.__openmimicry_float32_compat__ = True  # type: ignore[attr-defined]
     model_type.norm_loudness = norm_loudness_float32  # type: ignore[attr-defined]
+    return True
+
+
+def _normalize_synthesis_text(value: str) -> str:
+    """Return deterministic, tokenizer-safe text for a synthesis request.
+
+    Tool results can contain invisible control/format characters copied from
+    operating-system APIs.  They are valid JSON strings but are not useful to
+    a speech tokenizer.  Preserve ordinary newlines/tabs as spaces and remove
+    the remaining Unicode control characters before Chatterbox sees them.
+    """
+
+    normalized = unicodedata.normalize("NFKC", value)
+    cleaned = "".join(
+        " " if character in "\r\n\t" else character
+        for character in normalized
+        if character in "\r\n\t" or not unicodedata.category(character).startswith("C")
+    )
+    return " ".join(cleaned.split()).strip()
+
+
+class _ScalarTokenizerCompat:
+    """Retry the narrow Transformers scalar-tokenizer failure as a batch.
+
+    Chatterbox Turbo calls a Hugging Face tokenizer with one string.  Some
+    compatible ``tokenizers``/``transformers`` combinations intermittently
+    reject that scalar at the Rust boundary with ``TextEncodeInput`` while
+    accepting the semantically equivalent one-item batch.  Keep the workaround
+    local to this disposable worker and only retry that exact TypeError.
+    """
+
+    __openmimicry_scalar_compat__ = True
+
+    def __init__(self, tokenizer: Any) -> None:
+        self._tokenizer = tokenizer
+
+    def __call__(self, text: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return self._tokenizer(text, *args, **kwargs)
+        except TypeError as exc:
+            if not isinstance(text, str) or "TextEncodeInput" not in str(exc):
+                raise
+            return self._tokenizer([text], *args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._tokenizer, name)
+
+
+def _install_scalar_tokenizer_compat(model: Any) -> bool:
+    tokenizer = getattr(model, "tokenizer", None)
+    if tokenizer is None or bool(getattr(tokenizer, "__openmimicry_scalar_compat__", False)):
+        return False
+    model.tokenizer = _ScalarTokenizerCompat(tokenizer)
     return True
 
 
@@ -96,7 +150,9 @@ def _require_perth_watermarker(
     return constructor
 
 
-def _runtime_details(*, torch: Any, device: str, compat_applied: bool) -> dict[str, object]:
+def _runtime_details(
+    *, torch: Any, device: str, compat_applied: bool, tokenizer_compat: bool
+) -> dict[str, object]:
     import numpy as np  # type: ignore[import-not-found]
 
     cuda_name: str | None = None
@@ -109,6 +165,7 @@ def _runtime_details(*, torch: Any, device: str, compat_applied: bool) -> dict[s
         "cuda_device": cuda_name,
         "numpy_version": str(np.__version__),
         "numpy2_compat": compat_applied,
+        "tokenizer_scalar_compat": tokenizer_compat,
     }
 
 
@@ -142,6 +199,7 @@ def _run_server(device_name: str, *, preflight_only: bool = False) -> int:
         device = _select_device(torch, device_name)
         compat_applied = _install_numpy2_reference_compat(ChatterboxTurboTTS)
         model = ChatterboxTurboTTS.from_pretrained(device=device)
+        tokenizer_compat = _install_scalar_tokenizer_compat(model)
         _send(
             {
                 "type": "ready",
@@ -150,6 +208,7 @@ def _run_server(device_name: str, *, preflight_only: bool = False) -> int:
                     torch=torch,
                     device=device,
                     compat_applied=compat_applied,
+                    tokenizer_compat=tokenizer_compat,
                 ),
             }
         )
@@ -177,6 +236,9 @@ def _run_server(device_name: str, *, preflight_only: bool = False) -> int:
             output = request.get("output")
             if not all(isinstance(item, str) and item for item in (text, reference, output)):
                 raise ValueError("text, reference, and output must be non-empty strings")
+            text = _normalize_synthesis_text(text)
+            if not text:
+                raise ValueError("text contains no speakable characters")
             reference_path = Path(reference).resolve()
             output_path = Path(output).resolve()
             if not reference_path.is_file():

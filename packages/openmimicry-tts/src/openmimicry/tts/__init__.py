@@ -52,4 +52,4 @@ __all__ = [
     "source_package_version",
 ]
 
-__version__ = "1.8.5"
+__version__ = "1.9.2"

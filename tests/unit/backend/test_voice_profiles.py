@@ -100,11 +100,21 @@ def test_dashboard_exposes_voice_and_companion_profile_controls() -> None:
         "companion-export-form",
         "companion-import-form",
         "companion-select",
+        "companion-download",
+        "companion-delete",
     ):
         assert f'id="{element_id}"' in html
     assert 'fetch("/voice/profiles")' in script
     assert 'fetch("/companions")' in script
     assert "include_voice_reference" in script
+    for element_id in (
+        "input-language",
+        "output-language",
+        "vrm-archive-form",
+        "claude-settings-form",
+        "tools-form",
+    ):
+        assert f'id="{element_id}"' in html
 
 
 class _Request:

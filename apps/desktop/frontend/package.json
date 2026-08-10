@@ -1,7 +1,7 @@
 {
   "name": "@openmimicry/desktop-frontend",
   "private": true,
-  "version": "1.8.5",
+  "version": "1.9.2",
   "type": "module",
   "description": "OpenMimicry desktop frontend: transparent avatar, compact toolbar, WS client, and runtime registry.",
   "scripts": {

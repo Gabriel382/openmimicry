@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openmimicry-memory"
-version = "1.8.5"
+version = "1.9.2"
 description = "Optional, provider-neutral long-term memory for OpenMimicry."
 readme = "README.md"
 requires-python = ">=3.11"

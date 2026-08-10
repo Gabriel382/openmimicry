@@ -26,6 +26,7 @@ __all__ = [
     "AppConfig",
     "AppRuntimeConfig",
     "AvatarConfig",
+    "CompanionConfig",
     "DistributionConfig",
     "HotkeysConfig",
     "InteractionConfig",
@@ -34,6 +35,7 @@ __all__ = [
     "LLMFallbackConfig",
     "LLMRetryConfig",
     "LLMRoleAssignments",
+    "LanguageConfig",
     "MemoryConfig",
     "OverlayConfig",
     "PanelConfig",
@@ -45,6 +47,7 @@ __all__ = [
     "TTSConfigSection",
     "TaskRuntimeConfigEntry",
     "TasksConfig",
+    "ToolsConfig",
     "TrayConfig",
     "UIConfig",
     "VisionConfig",
@@ -295,12 +298,41 @@ class ResponsePresentationConfig(BaseModel):
         return self
 
 
+class LanguageConfig(BaseModel):
+    """Independent input/output language choices.
+
+    Input controls speech recognition. ``auto`` asks Faster-Whisper to
+    identify the language per utterance. Output is an explicit LLM contract
+    and therefore remains deterministic even when the user's input language
+    changes during one conversation.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input: Literal["auto", "en", "fr", "es", "pt-BR"] = "en"
+    output: Literal["auto", "en", "fr", "es", "pt-BR"] = "en"
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_portuguese(cls, value: Any) -> Any:
+        """Treat the old ambiguous ``pt`` value as Brazilian Portuguese."""
+
+        if not isinstance(value, dict):
+            return value
+        migrated = dict(value)
+        for key in ("input", "output"):
+            if str(migrated.get(key, "")).casefold() in {"pt", "pt-br", "pt_br"}:
+                migrated[key] = "pt-BR"
+        return migrated
+
+
 class InteractionConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     response_presentation: ResponsePresentationConfig = Field(
         default_factory=ResponsePresentationConfig
     )
+    language: LanguageConfig = Field(default_factory=LanguageConfig)
     show_rejected_wake_transcripts: bool = True
     restore_geometry: bool = True
 
@@ -360,7 +392,7 @@ class AvatarConfig(BaseModel):
 
     runtime: str = "sprite2d"
     pack: str = "octomimic"
-    pack_roots: list[str] = ["./characters", "~/.openmimicry/characters"]
+    pack_roots: list[str] = ["~/.openmimicry/characters", "./characters"]
     default_state: State = "idle"
     default_emotion: Emotion = "neutral"
     transition_ms: int = 120
@@ -368,6 +400,18 @@ class AvatarConfig(BaseModel):
     error_ms: int = 1000
     animation_speed: float = Field(default=1.0, ge=0.1, le=4.0)
     runtimes: dict[str, dict[str, Any]] = {}
+
+
+class CompanionConfig(BaseModel):
+    """Private active-companion selector.
+
+    Only the identifier is stored in the YAML overlay. Profile bytes stay
+    under ``app.data_dir`` and therefore remain outside source control.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    active_id: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
 # ---------------------------------------------------------------------------
@@ -395,6 +439,30 @@ class TasksConfig(BaseModel):
     runtimes: dict[str, TaskRuntimeConfigEntry] = {}
     database_path: str = "~/.openmimicry/tasks/tasks.sqlite3"
     notification_retention_days: int = Field(default=90, ge=1, le=3650)
+
+
+class ToolsConfig(BaseModel):
+    """Optional provider-neutral local tool policy."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    enabled: bool = False
+    provider: Literal["local", "endpoint"] = "local"
+    endpoint: str | None = None
+    allowed_roots: list[str] = ["~/Documents"]
+    allow_browser: bool = True
+    allow_files: bool = False
+    allow_folders: bool = False
+    allow_applications: bool = False
+    allow_alarms: bool = True
+    allow_music: bool = True
+    application_aliases: dict[str, str] = {}
+
+    @model_validator(mode="after")
+    def endpoint_provider_is_configured(self) -> ToolsConfig:
+        if self.enabled and self.provider == "endpoint" and not self.endpoint:
+            raise ValueError("tools.provider=endpoint requires tools.endpoint")
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +530,9 @@ class AppConfig(BaseModel):
     interaction: InteractionConfig = Field(default_factory=InteractionConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     avatar: AvatarConfig = Field(default_factory=AvatarConfig)
+    companion: CompanionConfig = Field(default_factory=CompanionConfig)
     tasks: TasksConfig = Field(default_factory=TasksConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
     distribution: DistributionConfig = Field(default_factory=DistributionConfig)
     # Optional and **off by default**. Absent or ``enabled=False``

@@ -5,6 +5,7 @@ import { useAppearance } from "../hooks/useAppearance";
 import { useTauriCommand } from "../hooks/useTauriCommand";
 import { useRuntimeState } from "../hooks/useRuntimeState";
 import { useVoiceMode } from "../hooks/useVoiceMode";
+import { useWS } from "../hooks/useWS";
 
 type CustomStyle = CSSProperties & Record<`--om-${string}`, string>;
 
@@ -20,6 +21,7 @@ export function ControlsRoute(): JSX.Element {
     setPositionLocked,
   } = useTauriCommand();
   const voice = useVoiceMode();
+  const ws = useWS();
   const runtime = useRuntimeState();
   const controls = appearance.behaviour.controls;
   const [locked, setLocked] = useState(false);
@@ -66,11 +68,17 @@ export function ControlsRoute(): JSX.Element {
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
+    const unsubscribe = ws.subscribe("task.card", (message) => {
+      if (["succeeded", "failed", "cancelled", "interrupted"].includes(message.update.status)) {
+        window.setTimeout(() => void refresh(), 50);
+      }
+    });
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      unsubscribe();
     };
-  }, []);
+  }, [ws]);
 
   useEffect(() => {
     return () => {
@@ -158,7 +166,7 @@ export function ControlsRoute(): JSX.Element {
         )}
         <button
           type="button"
-          className="avatar-toolbar__button"
+          className={`avatar-toolbar__button${unreadNotifications ? " avatar-toolbar__button--notification" : ""}`}
           aria-label={
             unreadNotifications
               ? `Open task notifications (${unreadNotifications} unread)`

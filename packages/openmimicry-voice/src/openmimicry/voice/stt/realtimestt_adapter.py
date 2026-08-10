@@ -206,7 +206,11 @@ class RealtimeSTTAdapter:
                 config.realtime_model_type or self._settings.realtime_model_type
             ),
             "use_main_model_for_realtime": config.use_main_model_for_realtime,
-            "language": config.language or self._settings.language,
+            "language": (
+                ""
+                if (config.language or self._settings.language) == "auto"
+                else (config.language or self._settings.language)
+            ),
             "device": self._settings.device,
             "compute_type": self._settings.compute_type,
             "sample_rate": config.sample_rate or self._settings.sample_rate,

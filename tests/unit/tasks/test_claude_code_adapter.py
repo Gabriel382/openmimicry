@@ -164,6 +164,15 @@ async def test_settings_extra_args_forwarded(fake_proc_factory) -> None:
     assert "--print" in captured["argv"]
 
 
+async def test_configured_model_is_forwarded(fake_proc_factory) -> None:
+    captured = fake_proc_factory(stdout_lines=[], exit_code=0)
+    adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(model="sonnet"))
+    handle = await adapter.submit(TaskRequest(summary="s", instructions="hi"))
+    [_ async for _ in adapter.updates(handle)]
+    index = captured["argv"].index("--model")
+    assert captured["argv"][index + 1] == "sonnet"
+
+
 def test_resolve_cli_with_absolute_path_validates_existence(tmp_path) -> None:
     bogus = tmp_path / "claude"
     adapter = ClaudeCodeAdapter(settings=ClaudeCodeSettings(cli=str(bogus)))

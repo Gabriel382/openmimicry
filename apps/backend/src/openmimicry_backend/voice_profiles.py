@@ -58,6 +58,23 @@ class VoiceProfileStore:
             raise VoiceProfileError(f"voice profile {profile_id!r} is not installed")
         return self._read_manifest(directory), directory
 
+    def resolve_directory(self, directory: str | Path) -> tuple[dict[str, Any], Path]:
+        """Validate a profile stored inside a companion without installing it globally."""
+
+        selected = Path(directory).expanduser().resolve()
+        if not selected.is_dir():
+            raise VoiceProfileError("bundled companion voice directory is missing")
+        profile = self._read_manifest(selected)
+        reference = profile.get("reference")
+        if isinstance(reference, str):
+            audio = selected / reference
+            if not audio.is_file():
+                raise VoiceProfileError("bundled companion voice reference is missing")
+            if audio.stat().st_size > _MAX_AUDIO:
+                raise VoiceProfileError("bundled companion voice reference exceeds 20 MiB")
+            audio_extension(audio.read_bytes(), reference)
+        return profile, selected
+
     def create_reference(
         self,
         *,

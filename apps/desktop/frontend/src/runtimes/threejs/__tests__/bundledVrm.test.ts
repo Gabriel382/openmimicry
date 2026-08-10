@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { VRMLoaderPlugin } from "@pixiv/three-vrm";
+import { VRMExpression, VRMLoaderPlugin } from "@pixiv/three-vrm";
 import { Box3, Vector3 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { describe, expect, it } from "vitest";
@@ -75,6 +75,31 @@ describe("bundled Octomimic VRM", () => {
     expect(manager.getValue("happy")).toBe(0);
     expect(manager.getValue("sad")).toBe(1);
 
+    manager.registerExpression(new VRMExpression("Surprised"));
+    controller.setExpression({ surprised: 0.8 });
+    expect(manager.getValue("Surprised")).toBeCloseTo(0.8);
+
+    controller.dispose();
+  });
+
+  it("uses non-accumulating procedural motion when a VRM has no matching clip", async () => {
+    const gltf = await parseBundledVrm();
+    gltf.animations = [];
+    const controller = await loadVrmCharacter({
+      url: ASSET_URL.href,
+      loaderFactory: async () => ({ loadAsync: async () => gltf }),
+    });
+    const modelRoot = controller.root.children[0]!;
+    const restY = modelRoot.position.y;
+
+    controller.playClip("thinking");
+    controller.update?.(0.25);
+    const firstY = modelRoot.position.y;
+    controller.update?.(0.25);
+
+    expect(firstY).not.toBe(restY);
+    expect(Math.abs(modelRoot.position.y - restY)).toBeLessThanOrEqual(0.0061);
+    expect(Math.abs(modelRoot.rotation.y)).toBeLessThanOrEqual(0.0551);
     controller.dispose();
   });
 });

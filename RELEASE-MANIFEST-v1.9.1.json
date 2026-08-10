@@ -1,0 +1,34 @@
+{
+  "project": "OpenMimicry",
+  "version": "1.9.1",
+  "release_date": "2026-08-03",
+  "configuration_schema": 2,
+  "artifacts": [
+    "OpenMimicry-v1.9.1-stabilization-source-FRESH.zip",
+    "OpenMimicry-v1.9.1-stabilization-docs-FRESH.zip",
+    "OpenMimicry-v1.9.1-SHA256SUMS-FRESH.txt"
+  ],
+  "verification": {
+    "python_tests": 666,
+    "frontend_tests": 100,
+    "frontend_test_files": 20,
+    "pyright": "passed",
+    "ruff": "passed",
+    "typescript": "passed",
+    "vite_build": "passed",
+    "version_declarations": 27,
+    "rust": "not_run_cargo_unavailable_metadata_only_change"
+  },
+  "private_creator_model_bytes_bundled": false,
+  "excludes": [
+    "credentials",
+    "config/user.yaml",
+    "local characters",
+    "creator archives and restricted models",
+    "voice references",
+    "private companion profiles",
+    "memory and task databases",
+    "logs and caches",
+    "dependencies and build outputs"
+  ]
+}

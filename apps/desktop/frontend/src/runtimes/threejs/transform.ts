@@ -18,7 +18,7 @@ export interface ModelBasis {
 
 export const DEFAULT_MODEL_TRANSFORM: ModelTransform = {
   position: [0, 0, 0],
-  rotation: [0, 0, 0],
+  rotation: [0, 180, 0],
   scale: 1,
   autoFit: true,
   targetHeight: 0.72,

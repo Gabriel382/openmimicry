@@ -9,12 +9,17 @@ from typing import Any
 import yaml
 
 __all__ = [
+    "persist_active_companion",
     "persist_avatar_selection",
     "persist_avatar_transform",
     "persist_interaction_settings",
+    "persist_language_settings",
     "persist_llm_backend",
     "persist_llm_model",
+    "persist_llm_web_search",
     "persist_memory_settings",
+    "persist_task_runtime_settings",
+    "persist_tools_settings",
     "persist_tts_clone",
     "persist_voice_settings",
     "persist_wake_names",
@@ -139,6 +144,26 @@ def persist_llm_model(backend: str, model: str, path: Path | None = None) -> Pat
     return _write_user_mapping(target, data)
 
 
+def persist_llm_web_search(backend: str, mode: str, path: Path | None = None) -> Path:
+    """Persist the deterministic per-backend web-research policy."""
+
+    if mode not in {"off", "auto", "always"}:
+        raise ValueError("web search mode must be off, auto, or always")
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    llm = data.setdefault("llm", {})
+    if not isinstance(llm, dict):
+        raise ValueError("user settings llm section must be a mapping")
+    backends = llm.setdefault("backends", {})
+    if not isinstance(backends, dict):
+        raise ValueError("user settings llm.backends section must be a mapping")
+    entry = backends.setdefault(backend, {})
+    if not isinstance(entry, dict):
+        raise ValueError(f"user settings llm.backends.{backend} must be a mapping")
+    entry["web_search_mode"] = mode
+    return _write_user_mapping(target, data)
+
+
 def persist_interaction_settings(values: dict[str, Any], path: Path | None = None) -> Path:
     """Persist validated response-presentation values only."""
 
@@ -148,6 +173,44 @@ def persist_interaction_settings(values: dict[str, Any], path: Path | None = Non
     if not isinstance(interaction, dict):
         raise ValueError("user settings interaction section must be a mapping")
     interaction["response_presentation"] = dict(values)
+    return _write_user_mapping(target, data)
+
+
+def persist_language_settings(
+    *,
+    input_language: str,
+    output_language: str,
+    tts_voice: str | None = None,
+    path: Path | None = None,
+) -> Path:
+    """Persist language choices and mirror input into ``voice.stt``."""
+
+    input_language = "pt-BR" if input_language in {"pt", "pt-br", "pt_BR"} else input_language
+    output_language = "pt-BR" if output_language in {"pt", "pt-br", "pt_BR"} else output_language
+    supported = {"auto", "en", "fr", "es", "pt-BR"}
+    if input_language not in supported or output_language not in supported:
+        raise ValueError("language must be auto, en, fr, es, or pt-BR")
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    interaction = data.setdefault("interaction", {})
+    if not isinstance(interaction, dict):
+        raise ValueError("user settings interaction section must be a mapping")
+    interaction["language"] = {
+        "input": input_language,
+        "output": output_language,
+    }
+    voice = data.setdefault("voice", {})
+    if not isinstance(voice, dict):
+        raise ValueError("user settings voice section must be a mapping")
+    stt = voice.setdefault("stt", {})
+    if not isinstance(stt, dict):
+        raise ValueError("user settings voice.stt section must be a mapping")
+    stt["language"] = "pt" if input_language == "pt-BR" else input_language
+    if tts_voice is not None:
+        tts = voice.setdefault("tts", {})
+        if not isinstance(tts, dict):
+            raise ValueError("user settings voice.tts section must be a mapping")
+        tts["voice"] = tts_voice
     return _write_user_mapping(target, data)
 
 
@@ -224,11 +287,24 @@ def persist_avatar_selection(
     return _write_user_mapping(target, data)
 
 
+def persist_active_companion(companion_id: str | None, path: Path | None = None) -> Path:
+    """Persist the selected private companion after successful activation."""
+
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    companion = data.setdefault("companion", {})
+    if not isinstance(companion, dict):
+        raise ValueError("user settings companion section must be a mapping")
+    companion["active_id"] = companion_id
+    return _write_user_mapping(target, data)
+
+
 def persist_avatar_transform(
     pack: str,
     values: dict[str, Any],
     *,
     animation_speed: float | None = None,
+    animation_aliases: dict[str, str] | None = None,
     path: Path | None = None,
 ) -> Path:
     """Persist a validated per-pack Three.js transform.
@@ -255,6 +331,45 @@ def persist_avatar_transform(
     if not isinstance(transforms, dict):
         raise ValueError("user settings avatar.runtimes.threejs.transforms must be a mapping")
     transforms[pack] = dict(values)
+    if animation_aliases is not None:
+        aliases = threejs.setdefault("animation_aliases", {})
+        if not isinstance(aliases, dict):
+            raise ValueError(
+                "user settings avatar.runtimes.threejs.animation_aliases must be a mapping"
+            )
+        aliases[pack] = dict(animation_aliases)
+    return _write_user_mapping(target, data)
+
+
+def persist_task_runtime_settings(
+    runtime: str,
+    values: dict[str, Any],
+    *,
+    path: Path | None = None,
+) -> Path:
+    """Persist an allow-listed task runtime overlay without credentials."""
+
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    tasks = data.setdefault("tasks", {})
+    if not isinstance(tasks, dict):
+        raise ValueError("user settings tasks section must be a mapping")
+    runtimes = tasks.setdefault("runtimes", {})
+    if not isinstance(runtimes, dict):
+        raise ValueError("user settings tasks.runtimes section must be a mapping")
+    entry = runtimes.setdefault(runtime, {})
+    if not isinstance(entry, dict):
+        raise ValueError(f"user settings tasks.runtimes.{runtime} must be a mapping")
+    entry.update(values)
+    return _write_user_mapping(target, data)
+
+
+def persist_tools_settings(values: dict[str, Any], path: Path | None = None) -> Path:
+    """Persist the validated non-secret tool policy."""
+
+    target = path or user_config_path()
+    data = _read_user_mapping(target)
+    data["tools"] = dict(values)
     return _write_user_mapping(target, data)
 
 

@@ -135,7 +135,8 @@ class TaskRouter:
             probe = getattr(adapter, "diagnostics", None)
             if callable(probe):
                 try:
-                    result[name] = await probe()
+                    diagnostics = cast(Callable[[], Awaitable[dict[str, Any]]], probe)
+                    result[name] = await diagnostics()
                 except Exception as exc:
                     _log.exception("TaskRouter: diagnostics failed for %s", name)
                     result[name] = {

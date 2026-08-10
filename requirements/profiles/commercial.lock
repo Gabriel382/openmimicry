@@ -427,7 +427,7 @@ ctranslate2==4.8.1 \
     --hash=sha256:e42ce3affb03ffc661e8f35d6e7845f16e6463884b9ba7857396d649520da819 \
     --hash=sha256:f3172c29470c1280ebb9f4a53aa4a913650e091f95740c732cd13b4b910c734d
     # via faster-whisper
-distro==1.9.0 \
+distro==1.9.1 \
     --hash=sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed \
     --hash=sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2
     # via openai

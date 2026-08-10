@@ -25,7 +25,7 @@ def test_deterministic_extractor_only_uses_explicit_first_person_facts() -> None
         "Thanks!",
     )
     assert [(record.predicate, record.value) for record in records] == [
-        ("name", "Henri"),
+        ("user_name", "Henri"),
         ("preference", "dark themes"),
     ]
 
@@ -53,7 +53,7 @@ async def test_memory_service_observe_is_non_blocking_and_never_accepts_audio() 
 
         async def retain(self, candidates, *, source: str) -> None:
             await asyncio.sleep(0.02)
-            assert candidates[0].predicate == "name"
+            assert candidates[0].predicate == "user_name"
             self.saved.set()
 
     provider = SlowProvider()

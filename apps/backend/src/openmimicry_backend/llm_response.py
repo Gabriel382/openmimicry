@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ __all__ = [
     "PersonalitySettings",
     "load_personality",
     "parse_assistant_reply",
+    "speech_safe_text",
 ]
 
 
@@ -39,6 +41,8 @@ class PersonalitySettings:
     allowed_emotions: tuple[str, ...]
     allowed_actions: tuple[str, ...]
     cue_duration_ms: int
+    assistant_name: str = "OpenMimicry"
+    assistant_aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,7 +55,11 @@ class ParsedAssistantReply:
     structured: bool = False
 
 
-def load_personality(path: str | os.PathLike[str] | None = None) -> PersonalitySettings:
+def load_personality(
+    path: str | os.PathLike[str] | None = None,
+    *,
+    output_language: str = "en",
+) -> PersonalitySettings:
     configured = path or os.environ.get("OPENMIMICRY_PERSONALITY_PATH")
     if configured is not None:
         candidate = Path(configured).expanduser()
@@ -75,6 +83,29 @@ def load_personality(path: str | os.PathLike[str] | None = None) -> PersonalityS
     duration = _bounded_int(behaviour.get("cue_duration_ms"), 1800, 250, 15000)
     structured = bool(behaviour.get("structured_avatar_output", True))
     base_prompt = str(data.get("system_prompt") or "You are OpenMimicry, a helpful companion.")
+    assistant_name = str(data.get("assistant_name") or "OpenMimicry").strip() or "OpenMimicry"
+    assistant_aliases = _string_tuple(data.get("aliases"), ())
+
+    language_names = {
+        "en": "English",
+        "fr": "French",
+        "es": "Spanish",
+        "pt": "Brazilian Portuguese",
+        "pt-BR": "Brazilian Portuguese",
+    }
+    identity_contract = (
+        f"\n\nYour assistant name is {assistant_name}. "
+        "Facts named user_name or legacy name in memory describe the USER, never you. "
+        "Never introduce yourself using a user's remembered name."
+    )
+    if assistant_aliases:
+        identity_contract += " Your accepted aliases are: " + ", ".join(assistant_aliases) + "."
+    language_name = language_names.get(output_language)
+    if language_name:
+        identity_contract += f" Reply in {language_name} unless the user explicitly asks otherwise."
+    elif output_language == "auto":
+        identity_contract += " Reply in the language used by the user's latest message."
+    base_prompt += identity_contract
 
     if structured:
         contract = (
@@ -89,6 +120,8 @@ def load_personality(path: str | os.PathLike[str] | None = None) -> PersonalityS
 
     return PersonalitySettings(
         system_prompt=base_prompt,
+        assistant_name=assistant_name,
+        assistant_aliases=assistant_aliases,
         structured_avatar_output=structured,
         allowed_emotions=emotions,
         allowed_actions=actions,
@@ -106,6 +139,11 @@ def parse_assistant_reply(raw: str, settings: PersonalitySettings) -> ParsedAssi
         return ParsedAssistantReply(text=cleaned, duration_ms=settings.cue_duration_ms)
 
     candidate = _strip_code_fence(cleaned)
+    embedded_prefix = ""
+    if not candidate.startswith("{"):
+        embedded = _last_reply_object(candidate)
+        if embedded is not None:
+            embedded_prefix, candidate = embedded
     try:
         payload = json.loads(candidate)
     except (json.JSONDecodeError, TypeError):
@@ -128,6 +166,11 @@ def parse_assistant_reply(raw: str, settings: PersonalitySettings) -> ParsedAssi
     except (TypeError, ValueError):
         intensity = 0.6
 
+    # Models occasionally emit the answer and then repeat it inside the JSON
+    # envelope. The structured reply is authoritative; do not expose or speak
+    # the duplicate prefix. If the prefix contains different prose, it is also
+    # omitted because the frozen envelope is the only validated output.
+    _ = embedded_prefix
     return ParsedAssistantReply(
         text=reply.strip(),
         emotion=emotion,
@@ -136,6 +179,27 @@ def parse_assistant_reply(raw: str, settings: PersonalitySettings) -> ParsedAssi
         duration_ms=settings.cue_duration_ms,
         structured=True,
     )
+
+
+_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\(https?://[^)]+\)")
+_SOURCE_LINE_RE = re.compile(r"(?im)^\s*(?:sources?|references?|citations?)\s*:\s*.*(?:\n|$)")
+_INLINE_CITATION_RE = re.compile(r"\s*\[(?:\d+(?:\s*,\s*\d+)*)\]")
+
+
+def speech_safe_text(text: str) -> str:
+    """Return a natural TTS rendering without reading URLs/citation syntax.
+
+    The full answer remains available in text history. Only the spoken copy is
+    simplified, which keeps optional web attribution accessible without making
+    the companion recite links aloud.
+    """
+
+    value = _MARKDOWN_LINK_RE.sub(r"\1", text)
+    value = _SOURCE_LINE_RE.sub("", value)
+    value = _URL_RE.sub("", value)
+    value = _INLINE_CITATION_RE.sub("", value)
+    return " ".join(value.split()).strip()
 
 
 def _strip_code_fence(text: str) -> str:
@@ -147,6 +211,27 @@ def _strip_code_fence(text: str) -> str:
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     return "\n".join(lines).strip()
+
+
+def _last_reply_object(text: str) -> tuple[str, str] | None:
+    """Find a trailing JSON reply object after accidental plain text."""
+
+    decoder = json.JSONDecoder()
+    for index in range(len(text) - 1, -1, -1):
+        if text[index] != "{":
+            continue
+        try:
+            payload, consumed = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or not any(
+            key in payload for key in ("reply", "text", "message")
+        ):
+            continue
+        if text[index + consumed :].strip():
+            continue
+        return text[:index].strip(), text[index : index + consumed]
+    return None
 
 
 def _string_tuple(value: Any, fallback: tuple[str, ...]) -> tuple[str, ...]:

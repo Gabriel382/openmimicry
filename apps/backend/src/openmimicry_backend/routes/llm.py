@@ -10,7 +10,7 @@ from openmimicry.core import ConfigUpdated
 from pydantic import BaseModel, Field, SecretStr
 
 from ..provider_catalog import CatalogError, discover_models
-from ..user_settings import persist_llm_backend, persist_llm_model
+from ..user_settings import persist_llm_backend, persist_llm_model, persist_llm_web_search
 
 __all__ = ["LLMBackendRequest", "LLMCredentialRequest", "LLMModelRequest", "router"]
 
@@ -163,6 +163,7 @@ async def update_web_search(req: LLMWebSearchRequest, request: Request) -> dict[
         raise HTTPException(status_code=409, detail="web search is unavailable")
     try:
         setter(req.backend, req.mode)
+        persist_llm_web_search(req.backend, req.mode)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return await llm_settings(request)

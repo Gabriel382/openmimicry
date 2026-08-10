@@ -95,6 +95,11 @@ class SpeechController:
         self._barge_in_task: asyncio.Task[None] | None = None
         self._ptt_active: bool = False
         self._live_listening: bool = False
+        # This is the user's desired passive-listening state.  It is kept
+        # separate from ``_live_listening`` because TTS and PTT temporarily
+        # stop the microphone.  A stale resume token must never turn the
+        # microphone back on after the user has switched wake listening off.
+        self._passive_listening_requested: bool = False
         self._listening_mode: str | None = None
         self._configured_wake_names: list[str] = _normalise_wake_names(self._cfg.stt.wake.names)
         self._configured_wake_aliases: list[str] = _normalise_wake_names(self._cfg.stt.wake.aliases)
@@ -607,6 +612,7 @@ class SpeechController:
     async def enable_continuous_listening(self) -> None:
         """Continuously wait for normal speech; no wake phrase is required."""
 
+        self._passive_listening_requested = True
         if self._ptt_active:
             self._resume_listening_after_ptt = ("continuous", [])
             return
@@ -614,11 +620,15 @@ class SpeechController:
             return
         if self._live_listening:
             await self._stop_passive_listening()
-        await self._start_passive_listening(
-            mode="continuous",
-            config=self._dictation_config(mode="continuous"),
-            wake_names=[],
-        )
+        try:
+            await self._start_passive_listening(
+                mode="continuous",
+                config=self._dictation_config(mode="continuous"),
+                wake_names=[],
+            )
+        except Exception:
+            self._passive_listening_requested = False
+            raise
 
     async def enable_live_listening(self, *, wake_names: list[str] | None = None) -> None:
         """Continuously listen, accepting only commands prefixed by a wake name."""
@@ -628,6 +638,7 @@ class SpeechController:
         )
         if not names:
             raise ValueError("wake-name listening requires at least one configured name")
+        self._passive_listening_requested = True
         if self._live_listening and self._listening_mode == "wake":
             return
         if self._ptt_active:
@@ -635,22 +646,26 @@ class SpeechController:
             return
         if self._live_listening:
             await self._stop_passive_listening()
-        await self._start_passive_listening(
-            mode="wake",
-            wake_names=self._wake_match_phrases(names),
-            config=STTConfig(
-                language=self._cfg.stt.language,
-                model=self._cfg.stt.model,
-                realtime_model_type=self._cfg.stt.realtime_model_type,
-                use_main_model_for_realtime=self._cfg.stt.use_main_model_for_realtime,
+        try:
+            await self._start_passive_listening(
                 mode="wake",
-                wake_names=list(names),
-                prompt_terms=self._wake_match_phrases(names),
-                sample_rate=self._cfg.stt.sample_rate,
-                vad=self._cfg.stt.vad,
-                post_speech_silence_duration=self._cfg.stt.post_speech_silence_duration,
-            ),
-        )
+                wake_names=self._wake_match_phrases(names),
+                config=STTConfig(
+                    language=self._cfg.stt.language,
+                    model=self._cfg.stt.model,
+                    realtime_model_type=self._cfg.stt.realtime_model_type,
+                    use_main_model_for_realtime=self._cfg.stt.use_main_model_for_realtime,
+                    mode="wake",
+                    wake_names=list(names),
+                    prompt_terms=self._wake_match_phrases(names),
+                    sample_rate=self._cfg.stt.sample_rate,
+                    vad=self._cfg.stt.vad,
+                    post_speech_silence_duration=self._cfg.stt.post_speech_silence_duration,
+                ),
+            )
+        except Exception:
+            self._passive_listening_requested = False
+            raise
 
     async def set_wake_names(self, names: list[str], aliases: list[str] | None = None) -> None:
         """Update wake prefixes and restart an active wake listener safely."""
@@ -693,6 +708,28 @@ class SpeechController:
                 "use_main_model_for_realtime": True,
             }
         )
+        self._cfg = self._cfg.model_copy(update={"stt": stt_config})
+        prepare = getattr(self._stt, "prepare", None)
+        if callable(prepare):
+            await cast(Callable[..., Awaitable[Any]], prepare)(
+                self._dictation_config(mode="push_to_talk")
+            )
+        if passive_state is not None:
+            await self._restore_passive_listening(passive_state)
+
+    async def set_stt_language(self, language: str) -> None:
+        """Apply and warm a supported recognition language transactionally."""
+
+        selected = str(language).strip().lower().replace("_", "-")
+        if selected == "pt-br":
+            selected = "pt"
+        if selected not in {"auto", "en", "fr", "es", "pt"}:
+            raise ValueError("STT language must be auto, en, fr, es, or pt-BR")
+        passive_state: tuple[str, list[str]] | None = None
+        if self._live_listening and self._listening_mode is not None:
+            passive_state = (self._listening_mode, list(self._live_wake_names))
+            await self._stop_passive_listening()
+        stt_config = self._cfg.stt.model_copy(update={"language": selected})
         self._cfg = self._cfg.model_copy(update={"stt": stt_config})
         prepare = getattr(self._stt, "prepare", None)
         if callable(prepare):
@@ -749,6 +786,9 @@ class SpeechController:
         )
 
     async def _restore_passive_listening(self, state: tuple[str, list[str]]) -> None:
+        if not self._passive_listening_requested:
+            _log.info("SpeechController: stale passive-listening resume ignored")
+            return
         mode, names = state
         if mode == "continuous":
             await self.enable_continuous_listening()
@@ -758,8 +798,8 @@ class SpeechController:
     async def disable_live_listening(self) -> None:
         """Disable either passive listening mode and cancel any PTT resume."""
 
+        self._passive_listening_requested = False
         self._resume_listening_after_ptt = None
-        self._resume_listening_after_tts = None
         await self._stop_passive_listening()
 
     async def _stop_passive_listening(self) -> None:

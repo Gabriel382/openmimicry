@@ -18,6 +18,7 @@ from openmimicry.core.schemas import (
     ConfigUpdated,
     EmotionFrames,
     ErrorEvent,
+    LanguageConfig,
     LLMChunk,
     LLMMessage,
     LLMReplyComplete,
@@ -234,3 +235,10 @@ def test_app_config_round_trips_to_dict() -> None:
     cfg = AppConfig()
     again = AppConfig.model_validate(cfg.model_dump())
     assert again == cfg
+
+
+def test_legacy_portuguese_language_migrates_to_brazilian_locale() -> None:
+    language = LanguageConfig.model_validate({"input": "pt", "output": "pt_BR"})
+
+    assert language.input == "pt-BR"
+    assert language.output == "pt-BR"

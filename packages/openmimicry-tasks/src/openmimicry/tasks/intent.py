@@ -23,7 +23,23 @@ __all__ = ["detect_task_intent"]
 _PATTERNS: list[tuple[re.Pattern[str], str, set[str]]] = [
     (
         re.compile(
-            r"\b(?:ask|tell)\s+claude(?:\s+code)?\s+to\s+(?P<instr>.+)$",
+            r"\bask\s+claude(?:\s+code)?\b\s*[:,.-]?\s*(?:to\s+)?(?P<instr>.+)$",
+            re.IGNORECASE | re.DOTALL,
+        ),
+        "claude_code",
+        {"code"},
+    ),
+    (
+        re.compile(
+            r"^(?:hey\s+)?claude(?:\s+code)?\s*[:,.-]?\s*(?P<instr>.+)$",
+            re.IGNORECASE | re.DOTALL,
+        ),
+        "claude_code",
+        {"code"},
+    ),
+    (
+        re.compile(
+            r"\b(?:ask|tell|have|get|let|launch|use)\s+claude(?:\s+code)?(?:\s+to)?\s+(?P<instr>.+)$",
             re.IGNORECASE | re.DOTALL,
         ),
         "claude_code",
@@ -64,7 +80,7 @@ def detect_task_intent(text: str) -> TaskRequest | None:
         m = pattern.search(text)
         if m is None:
             continue
-        instr = m.group("instr").strip().rstrip(".?!")
+        instr = m.group("instr").strip().lstrip(":,.- ").rstrip(".?!")
         if not instr:
             continue
         summary = _summarise(instr)

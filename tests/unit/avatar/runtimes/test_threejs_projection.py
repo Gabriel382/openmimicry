@@ -64,7 +64,7 @@ def test_projection_shape_for_idle_neutral() -> None:
     assert msg["fadeMs"] == DEFAULT_FADE_MS
     assert msg["transform"] == {
         "position": [0.0, 0.0, 0.0],
-        "rotation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 180.0, 0.0],
         "scale": 1.0,
         "autoFit": True,
         "targetHeight": 0.72,
@@ -97,6 +97,24 @@ def test_projection_uses_saved_transform_for_only_the_selected_pack() -> None:
     assert msg["transform"]["rotation"] == [0.0, 15.0, 0.0]
     assert msg["transform"]["scale"] == 1.25
     assert msg["transform"]["autoFit"] is False
+
+
+def test_rotation_uses_full_degree_range_instead_of_position_clamp() -> None:
+    pack = _vrm_pack()
+    msg = build_threejs_projection(
+        AvatarDirective(state="idle"),
+        pack,
+        runtime_cfg={"transforms": {pack.id: {"rotation": [45, 270, -359]}}},
+    )
+
+    assert msg["transform"]["rotation"] == [45.0, 270.0, -359.0]
+
+
+def test_every_3d_model_defaults_to_front_facing() -> None:
+    pack = _vrm_pack(id="custom_model", author="User")
+    msg = build_threejs_projection(AvatarDirective(state="idle"), pack)
+
+    assert msg["transform"]["rotation"] == [0.0, 180.0, 0.0]
 
 
 def test_speaking_happy_emits_blend_and_expression_weights() -> None:
@@ -149,6 +167,23 @@ def test_runtime_cfg_can_remap_gesture_to_arbitrary_clip() -> None:
         directive, pack, runtime_cfg={"gestures": {"special": "custom_clip_42"}}
     )
     assert msg["gestureClip"] == "custom_clip_42"
+
+
+def test_per_pack_animation_aliases_override_state_and_gesture_clips() -> None:
+    pack = _vrm_pack()
+    runtime_cfg = {
+        "animation_aliases": {"octomimic_vrm": {"thinking": "ponder_loop", "wave": "hello_clip"}}
+    }
+    thinking = build_threejs_projection(
+        AvatarDirective(state="thinking"), pack, runtime_cfg=runtime_cfg
+    )
+    waving = build_threejs_projection(
+        AvatarDirective(state="idle", gesture="wave"), pack, runtime_cfg=runtime_cfg
+    )
+
+    assert thinking["clip"] == "ponder_loop"
+    assert thinking["fallbackClips"][0] == "ponder_loop"
+    assert waving["gestureClip"] == "hello_clip"
 
 
 def test_explicit_runtime_cfg_asset_overrides_pack() -> None:

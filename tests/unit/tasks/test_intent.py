@@ -25,6 +25,13 @@ def test_send_this_to_claude_returns_claude_code_intent() -> None:
     assert req.preferred_runtime == "claude_code"
 
 
+def test_direct_claude_and_have_claude_forms_are_recognized() -> None:
+    direct = detect_task_intent("Claude, update the tests")
+    delegated = detect_task_intent("Have Claude review this project")
+    assert direct is not None and direct.instructions == "update the tests"
+    assert delegated is not None and delegated.preferred_runtime == "claude_code"
+
+
 def test_use_mcp_agent_returns_mcp_intent() -> None:
     req = detect_task_intent("Use the MCP agent to inspect the repo")
     assert req is not None

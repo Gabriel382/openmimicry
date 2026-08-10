@@ -113,12 +113,14 @@ class ChatterboxTTSAdapter:
                 self._worker_runtime = dict(message)
                 self._worker_ready = True
                 _log.info(
-                    "Chatterbox worker ready: device=%s torch=%s cuda=%s numpy=%s compat=%s",
+                    "Chatterbox worker ready: device=%s torch=%s cuda=%s "
+                    "numpy=%s numpy_compat=%s tokenizer_compat=%s",
                     message.get("device"),
                     message.get("torch_version"),
                     message.get("torch_cuda"),
                     message.get("numpy_version"),
                     message.get("numpy2_compat"),
+                    message.get("tokenizer_scalar_compat"),
                 )
             except (Exception, asyncio.CancelledError):
                 await self._discard_worker()
@@ -227,11 +229,18 @@ class ChatterboxTTSAdapter:
                 worker.stdin.write(payload)
                 await worker.stdin.drain()
                 response = await self._read_worker_message(worker, timeout_s=300.0)
+            except (Exception, asyncio.CancelledError):
+                await self._discard_worker()
+                raise
             finally:
                 self._synthesizing = False
             if response.get("type") != "complete" or not output.is_file():
                 code = str(response.get("code") or "synthesis_failed")
                 message = str(response.get("message") or "unknown synthesis error")
+                # Do not reuse model/tokenizer state after any failed
+                # generation.  The next turn gets a clean worker instead of
+                # inheriting an upstream partial inference state.
+                await self._discard_worker()
                 raise RuntimeError(f"Chatterbox {code}: {message[:2000]}")
 
     async def wait_until_ready(self, *, timeout_s: float = 30.0) -> bool:

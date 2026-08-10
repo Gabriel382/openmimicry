@@ -1,0 +1,34 @@
+{
+  "project": "OpenMimicry",
+  "version": "1.9.2",
+  "release_date": "2026-08-03",
+  "configuration_schema": 2,
+  "artifacts": [
+    "OpenMimicry-v1.9.2.zip",
+    "OpenMimicry-v1.9.2-SHA256.txt"
+  ],
+  "verification": {
+    "python_tests": 670,
+    "frontend_tests": 102,
+    "frontend_test_files": 20,
+    "pyright": "passed",
+    "ruff": "passed",
+    "typescript": "passed",
+    "vite_build": "passed",
+    "version_declarations": 27,
+    "rust": "not_run_cargo_unavailable_metadata_only_change"
+  },
+  "private_creator_model_bytes_bundled": false,
+  "creator_specific_import_presets": false,
+  "excludes": [
+    "credentials",
+    "config/user.yaml",
+    "local characters",
+    "uploaded creator archives and restricted models",
+    "voice references",
+    "private companion profiles",
+    "memory and task databases",
+    "logs and caches",
+    "dependencies and build outputs"
+  ]
+}

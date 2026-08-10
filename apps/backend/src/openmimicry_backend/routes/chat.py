@@ -37,6 +37,7 @@ from openmimicry.core import (
     LLMTokenStreamed,
     SpeechController,
     TaskCompleted,
+    TaskHandle,
     TaskRequest,
     TaskRuntimeAdapter,
     TaskSubmitted,
@@ -45,13 +46,14 @@ from openmimicry.core import (
 from openmimicry.core.schemas.app import ResponsePresentationConfig
 from pydantic import BaseModel
 
-from ..llm_response import load_personality, parse_assistant_reply
+from ..llm_response import load_personality, parse_assistant_reply, speech_safe_text
 
 __all__ = ["ChatRequest", "router", "run_chat_turn"]
 
 
 _log = logging.getLogger(__name__)
 _MIN_THINKING_SECONDS = 0.65
+_BACKGROUND_TASK_FORWARDERS: set[asyncio.Task[None]] = set()
 
 
 def _now() -> datetime:
@@ -95,6 +97,8 @@ async def run_chat_turn(
     history: Sequence[LLMMessage] = (),
     presentation: ResponsePresentationConfig | None = None,
     voice_enabled: bool = True,
+    output_language: str = "en",
+    tool_fn: Callable[[str], Awaitable[str | None]] | None = None,
 ) -> str | None:
     """The actual chat/task pipeline. Exposed for direct use in tests.
 
@@ -106,8 +110,66 @@ async def run_chat_turn(
     classifier = intent_fn or _lazy_intent_classifier()
     intent = classifier(text)
     if intent is not None:
-        await _run_task_path(intent, bus=bus, tasks=tasks)
-        return None
+        bus.publish(LLMStarted(ts=_now()))
+        handle = await _run_task_path(intent, bus=bus, tasks=tasks)
+        if handle is None:
+            return None
+        acknowledgements = {
+            "fr": "La tâche Claude est lancée en arrière-plan. Je vous préviendrai quand elle sera terminée.",
+            "es": "La tarea de Claude se está ejecutando en segundo plano. Te avisaré cuando termine.",
+            "pt": "A tarefa do Claude está sendo executada em segundo plano. Avisarei quando terminar.",
+            "pt-BR": "A tarefa do Claude está sendo executada em segundo plano. Avisarei quando terminar.",
+            "en": "The Claude task is running in the background. I will notify you when it finishes.",
+        }
+        acknowledgement = acknowledgements.get(output_language, acknowledgements["en"])
+        utterance_id = uuid4().hex if speech is not None and voice_enabled else None
+        speech_ready = False
+        if speech is not None and voice_enabled:
+            try:
+                if "utterance_id" in inspect.signature(speech.say).parameters:
+                    await speech.say(acknowledgement, utterance_id=utterance_id)
+                else:
+                    legacy_say = cast(Callable[[str], Awaitable[object]], speech.say)
+                    await legacy_say(acknowledgement)
+                wait_ready = getattr(speech, "wait_until_speech_ready", None)
+                if callable(wait_ready):
+                    wait_for_audio = cast(Callable[..., Awaitable[object]], wait_ready)
+                    timeout = float(getattr(speech, "speech_readiness_timeout_s", 30.0))
+                    if "utterance_id" in inspect.signature(wait_ready).parameters:
+                        speech_ready = bool(
+                            await wait_for_audio(timeout_s=timeout, utterance_id=utterance_id)
+                        )
+                    else:
+                        speech_ready = bool(await wait_for_audio(timeout_s=timeout))
+            except Exception:
+                _log.warning("could not queue task acknowledgement audio", exc_info=True)
+        # Claude acknowledgements are deliberately voice-gated even when the
+        # ordinary reply mode is parallel.  The avatar remains in thinking
+        # until playback is ready; text and audio then begin together.
+        if not speech_ready and speech is not None and voice_enabled:
+            _log.warning("task acknowledgement audio unavailable; displaying text fallback")
+        bus.publish(LLMTokenStreamed(ts=_now(), delta=acknowledgement))
+        bus.publish(
+            LLMReplyComplete(
+                ts=_now(),
+                full_text=acknowledgement,
+                presentation_mode="voice_ready" if voice_enabled else "text_only",
+                speech_expected=bool(speech_ready),
+                speech_utterance_id=utterance_id,
+            )
+        )
+        return acknowledgement
+    if tool_fn is not None:
+        tool_reply = await tool_fn(text)
+        if tool_reply:
+            bus.publish(LLMTokenStreamed(ts=_now(), delta=tool_reply))
+            bus.publish(LLMReplyComplete(ts=_now(), full_text=tool_reply))
+            if speech is not None and voice_enabled:
+                try:
+                    await speech.say(tool_reply)
+                except Exception:
+                    _log.warning("could not queue tool confirmation audio", exc_info=True)
+            return tool_reply
     return await _run_llm_path(
         text,
         bus=bus,
@@ -116,6 +178,7 @@ async def run_chat_turn(
         history=history,
         presentation=presentation,
         voice_enabled=voice_enabled,
+        output_language=output_language,
     )
 
 
@@ -140,7 +203,7 @@ async def _run_task_path(
     *,
     bus: EventBus,
     tasks: TaskRuntimeAdapter,
-) -> None:
+) -> TaskHandle | None:
     # `detect_task_intent` returns a fully-formed TaskRequest.
     try:
         handle = await tasks.submit(request_obj)  # type: ignore[arg-type]
@@ -149,7 +212,7 @@ async def _run_task_path(
 
         bus.publish(ErrorEvent(ts=_now(), where="backend.chat.task", message=str(exc)))
         _log.exception("Task submission failed")
-        return
+        return None
 
     _log.info(
         "Task %s submitted: runtime=%s summary=%s",
@@ -165,6 +228,23 @@ async def _run_task_path(
             summary=getattr(request_obj, "summary", "") or "",
         )
     )
+
+    forwarder = asyncio.create_task(
+        _forward_task_path(handle, bus=bus, tasks=tasks),
+        name=f"openmimicry.chat.task-forwarder.{handle.id}",
+    )
+    _BACKGROUND_TASK_FORWARDERS.add(forwarder)
+    forwarder.add_done_callback(_BACKGROUND_TASK_FORWARDERS.discard)
+    return handle
+
+
+async def _forward_task_path(
+    handle: TaskHandle,
+    *,
+    bus: EventBus,
+    tasks: TaskRuntimeAdapter,
+) -> None:
+    """Forward progress independently of the conversation turn."""
 
     # Stream updates back onto the bus.
     try:
@@ -228,11 +308,12 @@ async def _run_llm_path(
     history: Sequence[LLMMessage] = (),
     presentation: ResponsePresentationConfig | None = None,
     voice_enabled: bool = True,
+    output_language: str = "en",
 ) -> str | None:
     bus.publish(LLMStarted(ts=_now()))
     thinking_started = asyncio.get_running_loop().time()
 
-    settings = load_personality()
+    settings = load_personality(output_language=output_language)
     messages = [
         LLMMessage(role="system", content=settings.system_prompt),
         *history,
@@ -291,10 +372,11 @@ async def _run_llm_path(
     if wants_speech and speech is not None:
         try:
             if "utterance_id" in inspect.signature(speech.say).parameters:
-                await speech.say(reply.text, utterance_id=utterance_id)
+                spoken_reply = speech_safe_text(reply.text) or reply.text
+                await speech.say(spoken_reply, utterance_id=utterance_id)
             else:
                 # Compatibility for third-party v1 SpeechController plugins.
-                await speech.say(reply.text)
+                await speech.say(speech_safe_text(reply.text) or reply.text)
             if mode == "voice_ready":
                 wait_ready = getattr(speech, "wait_until_speech_ready", None)
                 readiness_timeout_s = float(getattr(speech, "speech_readiness_timeout_s", 30.0))

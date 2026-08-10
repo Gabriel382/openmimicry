@@ -37,6 +37,9 @@ The result is a portfolio-quality reference for the pattern: contracts as the sp
 - **3 task runtimes + router.** Mock · LocalShell (allowlist-or-reject, audit log) · ClaudeCodeAdapter · MCPAgentAdapter, all behind a capability-based `TaskRouter`.
 - **Durable local-agent work.** Claude CLI subscription/API modes, optional PicoClaw, explicit project folders, SQLite task/event history, and a non-disruptive notification center.
 - **Selective web research.** OpenRouter research can be off, automatic, or always-on per backend; automatic mode keeps greetings and ordinary conversation offline.
+- **Persistent companion profiles.** Avatar/runtime, per-pack 3D transform and clip aliases, voice, personality, assistant name, and recognition aliases restore as one atomic startup selection.
+- **Multilingual interaction.** Input and output can be selected independently from automatic detection, English, French, Spanish, and Portuguese.
+- **Guarded local tools.** Optional deterministic browser, Spotify, file, folder, application-alias, and alarm actions sit behind a replaceable provider boundary and are off by default.
 - **Production Three.js path.** Transparent VRM/glTF/GLB rendering, embedded clips, optional VRMA animation, cross-fades, expressions, and configurable animation speed.
 - **Hot configuration.** Saved voice profiles and memory providers can be activated without restarting the backend; readiness blocks incompatible controls during refresh.
 - **Vision (optional, off by default).** MediaPipe Hands / Pose / Face → gesture + movement classifiers → `AvatarDirective` overrides. Consent-gated. Frames never leave the process.
@@ -77,7 +80,7 @@ make install PROFILE=basic
 
 That installs every Python package in editable mode, pnpm-installs the frontend, and verifies the toolchain via `make doctor`.
 
-For the v1.8 integrated profile (OpenRouter/Ollama, local voice, Three.js,
+For the v1.9 integrated profile (OpenRouter/Ollama, local voice, Three.js,
 Claude CLI/PicoClaw task adapters), use:
 
 ```bash
@@ -142,6 +145,15 @@ four completed exchanges are used as conversational context.
 Import Sprite2D characters from **Avatar settings → Import character ZIP**.
 See [`docs/character_packs.md`](docs/character_packs.md#import-from-the-dashboard)
 for the required `pack.yaml` and sprite layout.
+
+Version 1.9 can also import a custom VRM ZIP into the private local data
+directory, save per-model rotation and animation aliases, restore a full
+companion profile, configure multilingual input/output, and run named Claude
+projects in the background. See the
+[v1.9.2 release notes](OpenMimicry-v1.9.2-Release-Notes.md) and
+[tasks/Claude guide](docs/TASKS_AND_CLAUDE.md). Custom model bytes remain
+private and are imported through the generic character importer; OpenMimicry
+does not ship or special-case third-party creator presets.
 
 For the v1.6 interaction, memory, character, provider, and voice additions, see
 the [v1.6 design appendix](docs/design/OpenMimicry-v1.6.0-Appendix.md) and
@@ -348,7 +360,7 @@ make desktop                     # cargo tauri dev
 make test                        # full pytest + vitest
 make ci                          # lint + typecheck + check-imports + test
 make docker-up                   # docker compose up backend
-make release-preview             # show the v1.8.5 publish plan (dry run)
+make release-preview             # show the v1.9.2 publish plan (dry run)
 ```
 
 Windows users: equivalent `.bat` wrappers live in [`scripts/win/`](scripts/win/) (e.g. `scripts\win\install.bat`).
@@ -382,6 +394,10 @@ bash scripts/cleanup-legacy.sh --apply
 - **v1.8.5 Claude task runtime repair**:
   [`OpenMimicry-v1.8.5-Release-Notes.md`](OpenMimicry-v1.8.5-Release-Notes.md),
   [`MIGRATION-v1.8.5.md`](MIGRATION-v1.8.5.md)
+- **v1.9.2 wake, custom VRM, and Chatterbox stabilization**:
+  [`OpenMimicry-v1.9.2-Release-Notes.md`](OpenMimicry-v1.9.2-Release-Notes.md),
+  [`MIGRATION-v1.9.2.md`](MIGRATION-v1.9.2.md),
+  [`OpenMimicry-v1.9.2-Verification.md`](OpenMimicry-v1.9.2-Verification.md)
 - **v1.8 migration and acceptance**: [`MIGRATION-v1.8.0.md`](MIGRATION-v1.8.0.md), [`docs/V1.8.0_ACCEPTANCE.md`](docs/V1.8.0_ACCEPTANCE.md)
 - **v1.6.4 Perth startup repair**: [`OpenMimicry-v1.6.4-Release-Notes.md`](OpenMimicry-v1.6.4-Release-Notes.md)
 - **v1.6.3 unified Chatterbox setup**: [`OpenMimicry-v1.6.3-Release-Notes.md`](OpenMimicry-v1.6.3-Release-Notes.md)

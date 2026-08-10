@@ -13,14 +13,20 @@ import binascii
 import io
 import logging
 import zipfile
+from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from openmimicry.core import AppConfig
 from pydantic import BaseModel, Field, model_validator
 
 from ..avatar_selection import runtime_for_pack_kind
-from ..user_settings import persist_avatar_selection, persist_avatar_transform
+from ..user_settings import (
+    persist_active_companion,
+    persist_avatar_selection,
+    persist_avatar_transform,
+)
 
 __all__ = ["PackCreateRequest", "PackSwapRequest", "RuntimeSwapRequest", "router"]
 
@@ -38,7 +44,7 @@ class RuntimeSwapRequest(BaseModel):
 
 class ModelTransform(BaseModel):
     position: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rotation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation: tuple[float, float, float] = (0.0, 180.0, 0.0)
     scale: float = Field(default=1.0, ge=0.05, le=10.0)
     auto_fit: bool = True
     target_height: float = Field(default=0.72, ge=0.1, le=3.0)
@@ -47,6 +53,27 @@ class ModelTransform(BaseModel):
 
 class AvatarVisualSettings(ModelTransform):
     animation_speed: float = Field(default=1.0, ge=0.1, le=4.0)
+    animation_aliases: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def aliases_are_bounded(self) -> AvatarVisualSettings:
+        allowed = {
+            "idle",
+            "listening",
+            "thinking",
+            "speaking",
+            "happy",
+            "error",
+            "wave",
+            "celebrate",
+        }
+        if set(self.animation_aliases).difference(allowed):
+            raise ValueError("animation alias uses an unsupported OpenMimicry state")
+        if len(self.animation_aliases) > 8 or any(
+            not value.strip() or len(value) > 128 for value in self.animation_aliases.values()
+        ):
+            raise ValueError("animation aliases must contain 1-128 character clip names")
+        return self
 
 
 class PackCreateRequest(BaseModel):
@@ -108,8 +135,11 @@ async def avatar_settings(request: Request) -> dict[str, object]:
         "pack": pack_id,
         "runtime": request.app.state.wiring.orchestrator.runtime.name,
         "required_runtime": runtime_for_pack_kind(pack["kind"]) or "unavailable",
-        "transform": _threejs_transform(request.app.state.config, pack_id),
+        "transform": _threejs_transform(
+            request.app.state.config, pack_id, request.app.state.character_registry
+        ),
         "animation_speed": request.app.state.config.avatar.animation_speed,
+        "animation_aliases": _threejs_aliases(request.app.state.config, pack_id),
     }
 
 
@@ -125,6 +155,104 @@ async def pack_import(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"ok": True, "pack": result}
+
+
+@router.post("/pack/import-vrm-archive", status_code=201)
+async def import_vrm_archive(
+    request: Request,
+    pack_id: str = Query(min_length=1, max_length=64),
+    name: str = Query(min_length=1, max_length=128),
+    author: str = Query(min_length=1, max_length=128),
+    license_name: str = Query(min_length=1, max_length=256),
+    source_url: str = Query(default="", max_length=2048),
+) -> dict[str, object]:
+    """Create a private VRM pack from a custom user-supplied ZIP."""
+
+    try:
+        result = request.app.state.character_registry.install_vrm_archive(
+            await request.body(),
+            pack_id=pack_id,
+            name=name,
+            author=author,
+            license_name=license_name,
+            source_url=source_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "pack": result, "private_local_import": True}
+
+
+@router.get("/packs/{pack_id}/export")
+async def export_pack(pack_id: str, request: Request) -> Response:
+    try:
+        content = request.app.state.character_registry.export_zip(pack_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{pack_id}.character.zip"'},
+    )
+
+
+@router.delete("/packs/{pack_id}")
+async def delete_pack(pack_id: str, request: Request) -> dict[str, object]:
+    if pack_id == str(request.app.state.active_pack):
+        raise HTTPException(status_code=409, detail="select another character before removing it")
+    try:
+        request.app.state.character_registry.delete(pack_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"ok": True, "deleted": pack_id}
+
+
+_ANIMATION_STATES = (
+    "idle",
+    "listening",
+    "thinking",
+    "speaking",
+    "happy",
+    "error",
+    "wave",
+    "celebrate",
+)
+
+
+@router.get("/packs/{pack_id}/animations")
+async def pack_animations(pack_id: str, request: Request) -> dict[str, object]:
+    try:
+        features = request.app.state.character_registry.model_features(pack_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    clips = list(features["clips"])
+    terms = {
+        "idle": ("idle", "breath", "stand"),
+        "listening": ("listen", "attention"),
+        "thinking": ("think", "ponder"),
+        "speaking": ("speak", "talk", "voice"),
+        "happy": ("happy", "joy", "smile"),
+        "error": ("error", "confus", "sad"),
+        "wave": ("wave", "greet"),
+        "celebrate": ("celebr", "victory", "cheer"),
+    }
+    suggestions: dict[str, str] = {}
+    for state in _ANIMATION_STATES:
+        selected = next(
+            (clip for clip in clips if any(term in clip.casefold() for term in terms[state])), None
+        )
+        if selected:
+            suggestions[state] = selected
+    expressions = list(features["expressions"])
+    return {
+        "pack": pack_id,
+        "clips": clips,
+        "expressions": expressions,
+        "expression_bindings": features["expression_bindings"],
+        "vrm_version": features["vrm"],
+        "suggestions": suggestions,
+        "has_embedded_animations": bool(clips),
+        "has_vrm_expressions": bool(expressions),
+    }
 
 
 @router.post("/pack/create", status_code=201)
@@ -254,10 +382,12 @@ async def pack_swap(req: PackSwapRequest, request: Request) -> dict[str, object]
         update={
             "avatar": current_config.avatar.model_copy(
                 update={"pack": req.pack, "runtime": required_runtime}
-            )
+            ),
+            "companion": current_config.companion.model_copy(update={"active_id": None}),
         }
     )
     persist_avatar_selection(pack=req.pack, runtime=required_runtime)
+    persist_active_companion(None)
     return {"ok": True, "pack": req.pack, "runtime": required_runtime}
 
 
@@ -312,13 +442,16 @@ async def update_avatar_transform(
             detail="3D transforms are available only for VRM/glTF characters",
         )
 
-    transform = values.model_dump(mode="json", exclude={"animation_speed"})
+    transform = values.model_dump(mode="json", exclude={"animation_speed", "animation_aliases"})
     current = request.app.state.config
     runtime_cfg = dict(current.avatar.runtimes.get("threejs", {}))
     runtime_cfg["animation_speed"] = values.animation_speed
     transforms = dict(runtime_cfg.get("transforms", {}))
     transforms[pack_id] = transform
     runtime_cfg["transforms"] = transforms
+    alias_sets = dict(runtime_cfg.get("animation_aliases", {}))
+    alias_sets[pack_id] = dict(values.animation_aliases)
+    runtime_cfg["animation_aliases"] = alias_sets
     runtimes = dict(current.avatar.runtimes)
     runtimes["threejs"] = runtime_cfg
     candidate = current.model_copy(
@@ -348,6 +481,7 @@ async def update_avatar_transform(
             pack_id,
             transform,
             animation_speed=values.animation_speed,
+            animation_aliases=values.animation_aliases,
         )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -358,6 +492,7 @@ async def update_avatar_transform(
         "runtime": "threejs",
         "transform": transform,
         "animation_speed": values.animation_speed,
+        "animation_aliases": values.animation_aliases,
     }
 
 
@@ -368,9 +503,29 @@ def _pack_summary(request: Request, pack_id: str) -> dict[str, str]:
     raise HTTPException(status_code=404, detail=f"character pack {pack_id!r} is not installed")
 
 
-def _threejs_transform(config: AppConfig, pack_id: str) -> dict[str, object]:
+def _threejs_transform(
+    config: AppConfig, pack_id: str, registry: object | None = None
+) -> dict[str, object]:
     runtime_cfg = dict(config.avatar.runtimes.get("threejs", {}))
     values = runtime_cfg.get("transforms", {}).get(pack_id, {})
+    if not values and registry is not None:
+        try:
+            pack_root = registry.resolve(pack_id)  # type: ignore[attr-defined]
+            manifest = (
+                yaml.safe_load((Path(pack_root) / "pack.yaml").read_text(encoding="utf-8")) or {}
+            )
+            metadata = manifest.get("metadata", {}) if isinstance(manifest, dict) else {}
+            values = metadata.get("transform", {}) if isinstance(metadata, dict) else {}
+        except Exception:
+            values = {}
     if not isinstance(values, dict):
         values = {}
     return ModelTransform.model_validate(values).model_dump(mode="json")
+
+
+def _threejs_aliases(config: AppConfig, pack_id: str) -> dict[str, str]:
+    runtime_cfg = dict(config.avatar.runtimes.get("threejs", {}))
+    values = runtime_cfg.get("animation_aliases", {}).get(pack_id, {})
+    if not isinstance(values, dict):
+        return {}
+    return {str(key): str(value) for key, value in values.items()}

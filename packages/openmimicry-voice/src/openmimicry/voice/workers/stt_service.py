@@ -182,7 +182,7 @@ class Service:
     def _decode(self, model: Any, path: Path) -> tuple[str, float | None]:
         segments, info = model.transcribe(
             str(path),
-            language=self.language,
+            language=None if self.language == "auto" else self.language,
             beam_size=self.beam_size,
             condition_on_previous_text=False,
             initial_prompt=self.prompt,

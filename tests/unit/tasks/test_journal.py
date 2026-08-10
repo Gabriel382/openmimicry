@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
-from openmimicry.core.schemas.tasks import TaskHandle, TaskRequest, TaskUpdate
+from openmimicry.core.schemas.tasks import TaskHandle, TaskRequest, TaskResult, TaskUpdate
 from openmimicry.tasks import JournaledTaskRuntime, TaskJournal
 from openmimicry.tasks.mocks import MockTaskRuntimeAdapter
 
@@ -80,3 +80,36 @@ async def test_fast_terminal_updates_are_replayed_to_late_subscriber(tmp_path) -
     assert updates[-1].status == "succeeded"
     assert runtime.journal.get_task(handle.id)["status"] == "succeeded"
     await runtime.close()
+
+
+def test_project_session_reuse_is_guarded_by_git_fingerprint(tmp_path) -> None:
+    repository = tmp_path / "project"
+    git = repository / ".git"
+    git.mkdir(parents=True)
+    (git / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    (git / "index").write_bytes(b"index-one")
+    journal = TaskJournal(str(tmp_path / "tasks.sqlite3"))
+    project = journal.create_project(name="Demo", root_path=str(repository))
+    context = journal.project_context(project["id"])
+    handle = TaskHandle(id="claude-one", runtime="claude_code")
+    journal.record_submission(
+        handle,
+        TaskRequest(
+            summary="change",
+            instructions="change project",
+            metadata={
+                "project_id": project["id"],
+                "repository_fingerprint": context["current_fingerprint"],
+            },
+        ),
+    )
+    journal.record_result(
+        TaskResult(handle=handle, status="succeeded", metadata={"session_id": "session-1"})
+    )
+    assert journal.project_context(project["id"])["resume_session_id"] == "session-1"
+
+    (git / "index").write_bytes(b"index changed outside the prior session")
+    changed = journal.project_context(project["id"])
+    assert changed["repository_changed"] is True
+    assert changed["resume_session_id"] is None
+    journal.close()

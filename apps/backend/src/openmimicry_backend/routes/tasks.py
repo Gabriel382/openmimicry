@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import cast
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from openmimicry.core.schemas.tasks import TaskConstraints, TaskRequest
 from pydantic import BaseModel, Field
+
+from ..user_settings import persist_task_runtime_settings
 
 __all__ = ["router"]
 
@@ -22,6 +28,15 @@ class TaskCreate(BaseModel):
     project_id: str | None = None
     preferred_runtime: str | None = None
     capabilities: set[str] = set()
+
+
+class ClaudeSettingsUpdate(BaseModel):
+    cli: str = Field(default="claude", min_length=1, max_length=4096)
+    working_dir: str = Field(default=".", min_length=1, max_length=4096)
+    auth_mode: str = Field(default="subscription", pattern="^(subscription|api)$")
+    permission_mode: str = Field(default="acceptEdits", min_length=1, max_length=64)
+    model: str | None = Field(default=None, max_length=128)
+    max_turns: int | None = Field(default=None, ge=1, le=1000)
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -51,12 +66,20 @@ async def submit_task(values: TaskCreate, request: Request) -> dict[str, object]
     preferred_runtime = values.preferred_runtime
     if values.project_id:
         try:
-            project = runtime.journal.get_project(values.project_id)
+            project = runtime.journal.project_context(values.project_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="unknown project") from exc
         working_dir = project["root_path"]
         if preferred_runtime is None and isinstance(project.get("provider_runtime"), str):
             preferred_runtime = project["provider_runtime"]
+    metadata: dict[str, object] = {}
+    if values.project_id:
+        metadata = {
+            "project_id": values.project_id,
+            "repository_fingerprint": project["current_fingerprint"],
+        }
+        if isinstance(project.get("resume_session_id"), str):
+            metadata["provider_session_id"] = project["resume_session_id"]
     handle = await runtime.submit(
         TaskRequest(
             summary=values.summary,
@@ -64,7 +87,7 @@ async def submit_task(values: TaskCreate, request: Request) -> dict[str, object]
             capabilities_required=values.capabilities,
             preferred_runtime=preferred_runtime,
             constraints=TaskConstraints(working_dir=working_dir),
-            metadata={"project_id": values.project_id} if values.project_id else {},
+            metadata=metadata,
         )
     )
     return {"handle": handle.model_dump(mode="json")}
@@ -103,7 +126,45 @@ async def runtime_status(request: Request) -> dict[str, object]:
             "runtimes": {},
             "error": "task runtime does not expose diagnostics",
         }
-    return await probe()
+    diagnostics = cast(Callable[[], Awaitable[dict[str, object]]], probe)
+    return await diagnostics()
+
+
+def _claude_adapter(request: Request):
+    adapter = _runtime(request).adapter("claude_code")
+    if adapter is None:
+        raise HTTPException(status_code=409, detail="Claude Code runtime is not configured")
+    return adapter
+
+
+@router.get("/settings/claude")
+async def get_claude_settings(request: Request) -> dict[str, object]:
+    adapter = _claude_adapter(request)
+    values = adapter._settings
+    return {
+        "cli": values.cli,
+        "working_dir": values.working_dir,
+        "auth_mode": values.auth_mode,
+        "permission_mode": values.permission_mode,
+        "model": values.model,
+        "max_turns": values.max_turns,
+    }
+
+
+@router.post("/settings/claude")
+async def update_claude_settings(
+    values: ClaudeSettingsUpdate, request: Request
+) -> dict[str, object]:
+    from dataclasses import replace
+
+    adapter = _claude_adapter(request)
+    path = Path(values.working_dir).expanduser()
+    if not path.is_dir():
+        raise HTTPException(status_code=422, detail="Claude working directory does not exist")
+    settings = replace(adapter._settings, **values.model_dump())
+    adapter.reconfigure(settings)
+    persist_task_runtime_settings("claude_code", values.model_dump(exclude_none=True))
+    return {"ok": True, "settings": values.model_dump(mode="json")}
 
 
 @router.post("/notifications/{notification_id}/read")

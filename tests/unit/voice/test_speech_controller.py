@@ -308,6 +308,31 @@ async def test_safe_tts_pauses_and_restores_passive_listening() -> None:
         await bus.aclose()
 
 
+async def test_switching_wake_off_during_tts_cancels_stale_resume() -> None:
+    bus = EventBus()
+    stt = MockSTTAdapter()
+    tts = MockTTSAdapter(chunk_interval_s=0.05)
+    config = _voice_config(barge_in_enabled=False)
+    ctl = SpeechController(stt=stt, tts=tts, bus=bus, config=config)
+    await ctl.start()
+    try:
+        await ctl.enable_live_listening()
+        assert stt.start_calls == 1
+
+        await ctl.say("wake listening must remain off after this speech finishes")
+        assert ctl.live_listening is False
+        await ctl.disable_live_listening()
+        assert ctl._current_tts_task is not None
+        await ctl._current_tts_task
+
+        assert ctl.live_listening is False
+        assert ctl.listening_mode == "off"
+        assert stt.start_calls == 1
+    finally:
+        await ctl.stop()
+        await bus.aclose()
+
+
 async def test_enable_live_listening_starts_stt_in_wake_mode(controller) -> None:
     ctl, _bus, stt, _tts = controller
     await ctl.enable_live_listening()

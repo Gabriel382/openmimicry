@@ -8,13 +8,15 @@ let agentVoice = true;
 let pttActive = false;
 let pttPointerHeld = false;
 let pttStage = "idle";
-let wakeNames = ["Mimi", "Hey Mimi"];
-let wakeAliases = ["Me me"];
 let sttModel = "medium.en";
 let postSpeechSilenceDuration = 1.0;
 let memoryLLMBackend = "";
 let llmProfiles = {};
 let packCatalog = new Map();
+const animationStates = ["idle", "listening", "thinking", "speaking", "happy", "error", "wave", "celebrate"];
+let animationAliases = {};
+let animationClips = [];
+let animationSuggestions = {};
 
 async function apiError(response) {
   let detail = "";
@@ -79,15 +81,6 @@ function applyVoiceStatus(status) {
   if (typeof status.agent_voice === "boolean") agentVoice = status.agent_voice;
   if (typeof status.ptt_active === "boolean") pttActive = status.ptt_active;
   if (typeof status.ptt_stage === "string") pttStage = status.ptt_stage;
-  if (Array.isArray(status.wake_names) && status.wake_names.length) {
-    wakeNames = status.wake_names.filter((name) => typeof name === "string");
-    const primary = wakeNames.find((name) => !name.toLowerCase().startsWith("hey ")) || wakeNames[0];
-    if (primary) byId("wake-name").value = primary;
-  }
-  if (Array.isArray(status.wake_aliases)) {
-    wakeAliases = status.wake_aliases.filter((name) => typeof name === "string");
-    byId("wake-aliases").value = wakeAliases.join(", ");
-  }
   if (typeof status.stt_model === "string") {
     sttModel = status.stt_model;
     byId("stt-model").value = sttModel;
@@ -256,8 +249,9 @@ async function refreshVoiceProfiles() {
     select.append(option);
   }
   if (!select.options.length) select.append(new Option("No saved voice profiles", ""));
-  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
-  else if (data.active_profile) select.value = data.active_profile;
+  if (data.active_profile && [...select.options].some((option) => option.value === data.active_profile)) {
+    select.value = data.active_profile;
+  } else if ([...select.options].some((option) => option.value === previous)) select.value = previous;
 }
 
 async function refreshCompanions() {
@@ -267,9 +261,13 @@ async function refreshCompanions() {
   const select = byId("companion-select");
   select.replaceChildren();
   for (const companion of data.companions || []) {
-    select.append(new Option(companion.name || companion.id, companion.id));
+    const active = companion.id === data.active_companion ? " · active" : "";
+    select.append(new Option(`${companion.name || companion.id}${active}`, companion.id));
   }
   if (!select.options.length) select.append(new Option("No imported companions", ""));
+  if (data.active_companion && [...select.options].some((option) => option.value === data.active_companion)) {
+    select.value = data.active_companion;
+  }
 }
 
 function downloadFrom(path) {
@@ -315,18 +313,65 @@ function updateRequiredRuntime() {
 function setTransformFields(data) {
   const transform = data.transform || {};
   const position = transform.position || [0, 0, 0];
-  const rotation = transform.rotation || [0, 0, 0];
+  const rotation = transform.rotation || [0, 180, 0];
   byId("threejs-auto-fit").value = String(transform.auto_fit ?? transform.autoFit ?? true);
   byId("threejs-scale").value = String(transform.scale ?? 1);
   byId("threejs-position-x").value = String(position[0] ?? 0);
   byId("threejs-position-y").value = String(position[1] ?? 0);
   byId("threejs-position-z").value = String(position[2] ?? 0);
   byId("threejs-rotation-x").value = String(rotation[0] ?? 0);
-  byId("threejs-rotation-y").value = String(rotation[1] ?? 0);
+  byId("threejs-rotation-y").value = String(rotation[1] ?? 180);
   byId("threejs-rotation-z").value = String(rotation[2] ?? 0);
   byId("threejs-target-height").value = String(transform.target_height ?? transform.targetHeight ?? 0.72);
   byId("threejs-target-y").value = String(transform.target_y ?? transform.targetY ?? 1.3);
   byId("threejs-animation-speed").value = String(data.animation_speed ?? 1);
+  animationAliases = { ...(data.animation_aliases || {}) };
+  renderAnimationAliases();
+}
+
+function renderAnimationAliases() {
+  const root = byId("threejs-animation-alias-editor");
+  root.replaceChildren();
+  for (const state of animationStates) {
+    const row = document.createElement("div");
+    row.className = "animation-alias-row";
+    const label = document.createElement("label");
+    label.textContent = state;
+    const select = document.createElement("select");
+    select.dataset.animationState = state;
+    select.append(new Option("Procedural/default fallback", ""));
+    for (const clip of animationClips) select.append(new Option(clip, clip));
+    const selected = animationAliases[state] || "";
+    if (selected && !animationClips.includes(selected)) select.append(new Option(`${selected} (not found)`, selected));
+    select.value = selected;
+    select.addEventListener("change", () => {
+      if (select.value) animationAliases[state] = select.value;
+      else delete animationAliases[state];
+    });
+    row.append(label, select);
+    root.append(row);
+  }
+}
+
+async function refreshAnimationClips(packId = byId("pack").value) {
+  const target = byId("threejs-animation-status");
+    target.textContent = "Inspecting skeletal clips and VRM expressions…";
+  try {
+    const response = await fetch(`/packs/${encodeURIComponent(packId)}/animations`);
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    animationClips = data.clips || [];
+    animationSuggestions = data.suggestions || {};
+    renderAnimationAliases();
+    const expressions = data.expressions || [];
+    if (animationClips.length) {
+      target.textContent = `${animationClips.length} skeletal clip(s) and ${expressions.length} VRM facial expression(s) found.`;
+    } else if (expressions.length) {
+      target.textContent = `No skeletal clips; ${expressions.length} VRM facial expression(s) found and mapped automatically (${expressions.join(", ")}). Stable procedural body motion is used for lifecycle states.`;
+    } else {
+      target.textContent = "No skeletal clips or VRM facial expressions were found. Stable procedural body motion remains available; import a VRM/GLB with clips for named animation mapping.";
+    }
+  } catch (error) { target.textContent = String(error); }
 }
 
 async function refreshAvatarSettings() {
@@ -339,6 +384,7 @@ async function refreshAvatarSettings() {
   byId("runtime").value = data.runtime;
   byId("threejs-settings").hidden = data.required_runtime !== "threejs";
   setTransformFields(data);
+  if (data.required_runtime === "threejs") await refreshAnimationClips(data.pack);
 }
 
 async function refreshLLMSettings() {
@@ -453,6 +499,40 @@ async function refreshTaskRuntimeStatus() {
   }
 }
 
+async function refreshClaudeSettings() {
+  try {
+    const response = await fetch("/tasks/settings/claude");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    byId("claude-cli").value = data.cli || "claude";
+    byId("claude-working-dir").value = data.working_dir || ".";
+    byId("claude-auth-mode").value = data.auth_mode || "subscription";
+    byId("claude-permission-mode").value = data.permission_mode || "acceptEdits";
+    byId("claude-model").value = data.model || "";
+    byId("claude-max-turns").value = data.max_turns || "";
+  } catch (error) {
+    byId("claude-settings-error").textContent = String(error);
+  }
+}
+
+async function refreshProjects() {
+  try {
+    const response = await fetch("/tasks/projects");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    const select = byId("project-select");
+    const previous = select.value;
+    select.replaceChildren();
+    for (const project of data.projects || []) {
+      select.append(new Option(`${project.name} — ${project.root_path}`, project.id));
+    }
+    if (!select.options.length) select.append(new Option("No registered project", ""));
+    if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  } catch (error) {
+    byId("claude-settings-error").textContent = String(error);
+  }
+}
+
 async function discoverLLMModels() {
   const target = byId("llm-error");
   target.textContent = "Loading provider catalog…";
@@ -485,6 +565,20 @@ async function refreshInteractionSettings() {
     byId("bubble-base").value = String(data.base_ms);
     byId("bubble-per-character").value = String(data.ms_per_character);
     byId("bubble-max").value = String(data.maximum_ms);
+  } catch (error) {
+    byId("interaction-error").textContent = String(error);
+  }
+}
+
+async function refreshLanguageSettings() {
+  try {
+    const response = await fetch("/language/settings");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    byId("input-language").value = data.input || "en";
+    byId("output-language").value = data.output || "en";
+    if (data.status === "preparing") byId("interaction-error").textContent = data.detail || "Preparing language…";
+    else if (data.status === "error") byId("interaction-error").textContent = `Language error: ${data.detail || "unknown error"}`;
   } catch (error) {
     byId("interaction-error").textContent = String(error);
   }
@@ -582,10 +676,28 @@ async function refreshPersonality() {
     const response = await fetch("/personality/settings");
     if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
     const data = await response.json();
+    byId("personality-name").value = data.name || "OpenMimicry";
+    byId("personality-aliases").value = (data.aliases || []).join(", ");
     byId("personality-prompt").value = data.system_prompt || "";
   } catch (error) {
     byId("personality-error").textContent = String(error);
   }
+}
+
+async function refreshTools() {
+  try {
+    const response = await fetch("/tools/settings");
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    byId("tools-enabled").value = String(Boolean(data.enabled));
+    byId("tools-provider").value = data.provider || "local";
+    byId("tools-endpoint").value = data.endpoint || "";
+    byId("tools-roots").value = (data.allowed_roots || []).join("\n");
+    byId("tools-apps").value = JSON.stringify(data.application_aliases || {}, null, 2);
+    for (const [id, key] of [["tools-browser", "allow_browser"], ["tools-files", "allow_files"], ["tools-folders", "allow_folders"], ["tools-applications", "allow_applications"], ["tools-alarms", "allow_alarms"], ["tools-music", "allow_music"]]) {
+      byId(id).value = String(Boolean(data[key]));
+    }
+  } catch (error) { byId("tools-error").textContent = String(error); }
 }
 
 byId("chat-form").addEventListener("submit", (event) => {
@@ -645,6 +757,29 @@ byId("swap-pack").addEventListener("click", async () => {
     target.textContent = String(error);
   }
 });
+byId("pack-download").addEventListener("click", () => {
+  const id = byId("pack").value;
+  if (id) downloadFrom(`/packs/${encodeURIComponent(id)}/export`);
+});
+byId("pack-delete").addEventListener("click", async () => {
+  const id = byId("pack").value;
+  if (!id || !window.confirm(`Remove the private character '${id}'?`)) return;
+  const target = byId("settings-error");
+  try {
+    const response = await fetch(`/packs/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(await apiError(response));
+    await refreshPacks();
+    target.textContent = `Removed ${id}.`;
+  } catch (error) { target.textContent = String(error); }
+});
+byId("threejs-animation-refresh").addEventListener("click", () => refreshAnimationClips());
+byId("threejs-animation-auto").addEventListener("click", () => {
+  animationAliases = { ...animationAliases, ...animationSuggestions };
+  renderAnimationAliases();
+  byId("threejs-animation-status").textContent = Object.keys(animationSuggestions).length
+    ? "Suggested mappings applied. Save and preview to commit them."
+    : "No clip names matched the built-in lifecycle heuristics.";
+});
 byId("threejs-transform-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("settings-error");
@@ -670,6 +805,7 @@ byId("threejs-transform-form").addEventListener("submit", async (event) => {
         target_height: number("threejs-target-height"),
         target_y: number("threejs-target-y"),
         animation_speed: number("threejs-animation-speed"),
+        animation_aliases: animationAliases,
       }),
     });
     if (!response.ok) throw new Error(await apiError(response));
@@ -680,24 +816,27 @@ byId("threejs-transform-form").addEventListener("submit", async (event) => {
     target.textContent = String(error);
   }
 });
-byId("wake-name-form").addEventListener("submit", async (event) => {
+byId("vrm-archive-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const target = byId("voice-error");
-  target.textContent = "";
+  const target = byId("settings-error");
+  const file = byId("vrm-source-zip").files?.[0];
+  if (!file) { target.textContent = "Choose a custom character ZIP."; return; }
+  const query = new URLSearchParams({
+    pack_id: byId("vrm-pack-id").value.trim(),
+    name: byId("vrm-custom-name").value.trim(),
+    author: byId("vrm-custom-author").value.trim(),
+    license_name: byId("vrm-custom-license").value.trim(),
+    source_url: byId("vrm-custom-source").value.trim(),
+  });
+  target.textContent = "Validating and privately importing the VRM…";
   try {
-    const response = await fetch("/voice/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        wake_name: byId("wake-name").value.trim(),
-        wake_aliases: byId("wake-aliases").value.split(",").map((value) => value.trim()).filter(Boolean),
-      }),
+    const response = await fetch(`/pack/import-vrm-archive?${query}`, {
+      method: "POST", headers: { "Content-Type": "application/zip" }, body: file,
     });
-    if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
-    applyVoiceStatus(await response.json());
-  } catch (error) {
-    target.textContent = String(error);
-  }
+    if (!response.ok) throw new Error(await apiError(response));
+    await refreshPacks();
+    target.textContent = "VRM imported into the private character directory with credits.";
+  } catch (error) { target.textContent = String(error); }
 });
 byId("stt-quality-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1006,6 +1145,69 @@ byId("refresh-task-archive").addEventListener("click", async () => {
   await Promise.all([refreshTaskArchive(), refreshTaskRuntimeStatus()]);
 });
 byId("refresh-task-runtime").addEventListener("click", refreshTaskRuntimeStatus);
+byId("claude-settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("claude-settings-error");
+  target.textContent = "Applying Claude settings to future tasks…";
+  const maxTurns = byId("claude-max-turns").value;
+  try {
+    const response = await fetch("/tasks/settings/claude", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cli: byId("claude-cli").value.trim(),
+        working_dir: byId("claude-working-dir").value.trim(),
+        auth_mode: byId("claude-auth-mode").value,
+        permission_mode: byId("claude-permission-mode").value,
+        model: byId("claude-model").value.trim() || null,
+        max_turns: maxTurns ? Number(maxTurns) : null,
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    target.textContent = "Claude settings saved; active tasks were not interrupted.";
+    await refreshTaskRuntimeStatus();
+  } catch (error) { target.textContent = String(error); }
+});
+byId("project-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("claude-settings-error");
+  try {
+    const response = await fetch("/tasks/projects", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: byId("project-name").value.trim(),
+        root_path: byId("project-root").value.trim(),
+        description: byId("project-description").value.trim(),
+        provider_runtime: "claude_code",
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    const data = await response.json();
+    await refreshProjects();
+    byId("project-select").value = data.project.id;
+    target.textContent = "Project registered. Its Git metadata will guard Claude session reuse.";
+  } catch (error) { target.textContent = String(error); }
+});
+byId("project-task-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("claude-settings-error");
+  const instructions = byId("project-task").value.trim();
+  try {
+    const response = await fetch("/tasks", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        summary: instructions.length > 120 ? `${instructions.slice(0, 117)}...` : instructions,
+        instructions,
+        project_id: byId("project-select").value || null,
+        preferred_runtime: "claude_code",
+        capabilities: ["code"],
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    byId("project-task").value = "";
+    target.textContent = "Claude task started in the background. You can keep chatting.";
+    await refreshTaskArchive();
+  } catch (error) { target.textContent = String(error); }
+});
 byId("interaction-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const target = byId("interaction-error");
@@ -1028,6 +1230,32 @@ byId("interaction-form").addEventListener("submit", async (event) => {
   } catch (error) {
     target.textContent = String(error);
   }
+});
+byId("language-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("interaction-error");
+  target.textContent = "Warming the selected speech language…";
+  try {
+    const response = await fetch("/language/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: byId("input-language").value, output: byId("output-language").value }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    let data = await response.json();
+    for (let attempt = 0; data.status === "preparing" && attempt < 600; attempt += 1) {
+      target.textContent = data.detail || "Preparing language models in the background…";
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      const status = await fetch("/language/settings");
+      if (!status.ok) throw new Error(await apiError(status));
+      data = await status.json();
+    }
+    if (data.status === "error") throw new Error(data.detail || "Language preparation failed");
+    if (data.status !== "ready") throw new Error("Language preparation timed out after 10 minutes");
+    byId("input-language").value = data.input;
+    byId("output-language").value = data.output;
+    target.textContent = data.detail || "Languages applied.";
+  } catch (error) { target.textContent = String(error); }
 });
 byId("memory-refresh").addEventListener("click", refreshMemory);
 byId("memory-enabled").addEventListener("change", () => syncMemoryControls("enabled"));
@@ -1087,13 +1315,42 @@ byId("personality-form").addEventListener("submit", async (event) => {
     const response = await fetch("/personality/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system_prompt: byId("personality-prompt").value }),
+      body: JSON.stringify({
+        name: byId("personality-name").value.trim(),
+        aliases: byId("personality-aliases").value.split(",").map((value) => value.trim()).filter(Boolean),
+        system_prompt: byId("personality-prompt").value,
+      }),
     });
     if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
     target.textContent = "Saved. The next interaction uses this personality.";
   } catch (error) {
     target.textContent = String(error);
   }
+});
+byId("tools-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const target = byId("tools-error");
+  try {
+    const bool = (id) => byId(id).value === "true";
+    const response = await fetch("/tools/settings", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: bool("tools-enabled"),
+        provider: byId("tools-provider").value,
+        endpoint: byId("tools-endpoint").value.trim() || null,
+        allowed_roots: byId("tools-roots").value.split("\n").map((value) => value.trim()).filter(Boolean),
+        application_aliases: JSON.parse(byId("tools-apps").value || "{}"),
+        allow_browser: bool("tools-browser"),
+        allow_files: bool("tools-files"),
+        allow_folders: bool("tools-folders"),
+        allow_applications: bool("tools-applications"),
+        allow_alarms: bool("tools-alarms"),
+        allow_music: bool("tools-music"),
+      }),
+    });
+    if (!response.ok) throw new Error(await apiError(response));
+    target.textContent = "Tool policy saved for the next command.";
+  } catch (error) { target.textContent = String(error); }
 });
 
 byId("companion-export-form").addEventListener("submit", (event) => {
@@ -1131,10 +1388,25 @@ byId("companion-activate").addEventListener("click", async () => {
     const data = await response.json();
     await refreshPacks();
     byId("pack").value = data.active_pack;
-    await refreshPersonality();
+    await Promise.all([refreshPersonality(), refreshVoiceProfiles(), refreshVoiceSettings(), refreshCompanions()]);
     target.textContent = data.restart_required
       ? "Companion activated. Restart the backend once to reload its appearance and selected voice safely."
       : "Companion activated.";
+  } catch (error) { target.textContent = String(error); }
+});
+byId("companion-download").addEventListener("click", () => {
+  const id = byId("companion-select").value;
+  if (id) downloadFrom(`/companions/stored/${encodeURIComponent(id)}/export`);
+});
+byId("companion-delete").addEventListener("click", async () => {
+  const id = byId("companion-select").value;
+  if (!id || !window.confirm(`Remove the private companion '${id}'?`)) return;
+  const target = byId("companion-error");
+  try {
+    const response = await fetch(`/companions/stored/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(await apiError(response));
+    await refreshCompanions();
+    target.textContent = `Removed ${id}. The currently loaded avatar and voice remain active until you select another.`;
   } catch (error) { target.textContent = String(error); }
 });
 
@@ -1144,12 +1416,16 @@ renderTasks();
 refreshHealth();
 refreshTaskArchive();
 refreshTaskRuntimeStatus();
+refreshClaudeSettings();
+refreshProjects();
 refreshVoiceSettings();
 refreshVoiceProfiles().catch((error) => { byId("voice-error").textContent = String(error); });
 refreshCompanions().catch((error) => { byId("companion-error").textContent = String(error); });
 refreshPacks().catch((error) => { byId("settings-error").textContent = String(error); });
 refreshLLMSettings();
 refreshInteractionSettings();
+refreshLanguageSettings();
 refreshMemory();
 refreshPersonality();
+refreshTools();
 connect();

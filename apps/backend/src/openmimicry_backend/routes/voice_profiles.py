@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from openmimicry.core.schemas.app import TTSConfigSection
 from pydantic import BaseModel, Field
 
-from ..user_settings import persist_tts_clone
+from ..companion_state import tts_for_voice_profile
+from ..user_settings import persist_active_companion, persist_tts_clone
 from ..voice_profiles import VoiceProfileError, VoiceProfileStore
 from ..wiring import refresh_tts
 
@@ -31,7 +33,23 @@ def _store(request: Request) -> VoiceProfileStore:
 @router.get("/voice/profiles")
 async def list_voice_profiles(request: Request) -> dict[str, object]:
     active = getattr(request.app.state, "active_voice_profile", None)
-    return {"profiles": _store(request).list(), "active_profile": active}
+    store = _store(request)
+    profiles = store.list()
+    if active and not any(item["id"] == active for item in profiles):
+        companion_id = request.app.state.config.companion.active_id
+        if companion_id:
+            bundled = (
+                Path(request.app.state.config.app.data_dir).expanduser()
+                / "companions"
+                / companion_id
+                / "voice"
+            )
+            try:
+                profile, directory = store.resolve_directory(bundled)
+                profiles.append(store.public(profile, directory))
+            except VoiceProfileError:
+                pass
+    return {"profiles": profiles, "active_profile": active}
 
 
 @router.post("/voice/profiles/reference", status_code=201)
@@ -90,33 +108,15 @@ async def activate_voice_profile(profile_id: str, request: Request) -> dict[str,
     try:
         profile, directory = _store(request).resolve(profile_id)
         reference = profile.get("reference")
-        persist_tts_clone(
-            provider=str(profile["provider"]),
-            voice_id=str(profile["voice_id"]),
-            consent_record=str(profile["consent_record"]),
-            reference_path=str(directory / reference) if isinstance(reference, str) else None,
-            profile_id=profile_id,
-        )
         current = request.app.state.config
-        tts = TTSConfigSection.model_validate(
-            {
-                **current.voice.tts.model_dump(mode="json"),
-                "adapter": str(profile["provider"]),
-                "engine": str(profile["provider"]),
-                "voice": str(profile["voice_id"]),
-                "clone": {
-                    "provider": str(profile["provider"]),
-                    "voice_id": str(profile["voice_id"]),
-                    "consent_record": str(profile["consent_record"]),
-                    "reference_path": (
-                        str(directory / reference) if isinstance(reference, str) else None
-                    ),
-                    "store_reference_locally": True,
-                },
-            }
-        )
+        tts = tts_for_voice_profile(current.voice.tts, profile, directory)
         candidate = current.model_copy(
-            update={"voice": current.voice.model_copy(update={"tts": tts})}
+            update={
+                "voice": current.voice.model_copy(
+                    update={"tts": tts, "active_profile": profile_id}
+                ),
+                "companion": current.companion.model_copy(update={"active_id": None}),
+            }
         )
         supervisor = request.app.state.supervisor
         await supervisor.set_runtime_state("refreshing", reason="voice_profile")
@@ -124,6 +124,14 @@ async def activate_voice_profile(profile_id: str, request: Request) -> dict[str,
             await refresh_tts(request.app.state.wiring, candidate)
         finally:
             await supervisor.set_runtime_state("ready")
+        persist_tts_clone(
+            provider=str(profile["provider"]),
+            voice_id=str(profile["voice_id"]),
+            consent_record=str(profile["consent_record"]),
+            reference_path=str(directory / reference) if isinstance(reference, str) else None,
+            profile_id=profile_id,
+        )
+        persist_active_companion(None)
         request.app.state.config = candidate
     except (VoiceProfileError, OSError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

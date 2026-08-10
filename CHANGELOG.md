@@ -7,6 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.2] — Wake, custom VRM, and Chatterbox reliability
+
+### Added
+
+- Separate discovery of skeletal animation clips and VRM facial expressions.
+- Stable, non-accumulating procedural lifecycle motion for VRMs without clips.
+- Case-insensitive custom VRM expression resolution in the Three.js renderer.
+- A worker-local Chatterbox tokenizer compatibility retry for the exact
+  `TextEncodeInput` scalar failure.
+
+### Changed
+
+- All unsaved 3D models now default to a front-facing 180° Y rotation.
+- VRM archives are imported only through one generic private custom-character
+  workflow; creator-specific presets have been removed.
+- The dashboard reports clip and expression capabilities independently and
+  lists discovered expression names.
+
+### Fixed
+
+- Switching wake/continuous listening off during TTS can no longer be undone by
+  a stale post-speech microphone resume.
+- Late recorder transcripts are rejected after their passive mode is disabled.
+- Failed Chatterbox synthesis workers are discarded before the next turn.
+- Invisible tool-result control characters are removed before synthesis.
+
+## [1.9.1] — Companion identity, multilingual voice, VRM, and tool stabilization
+
+### Added
+
+- Non-blocking language preparation with explicit progress and failure state.
+- Brazilian Portuguese (`pt-BR`) STT/output-language support and a matching
+  Piper voice for standard local TTS.
+- Download/remove controls for private companions and character packs.
+- VRM embedded-clip discovery, lifecycle selectors, and automatic alias mapping.
+- Observable deterministic-tool routing and broader multilingual alarm syntax.
+
+### Changed
+
+- Personality name and aliases are now the single source of assistant identity
+  for prompts, wake recognition, companion persistence, and exports.
+- Companion activation transactionally applies its avatar, runtime, transform,
+  personality, wake aliases, and bundled voice profile.
+- Claude delegation matches `ask claude` anywhere in an accepted utterance and
+  voice-gates its acknowledgement so text and playback begin together.
+- An untouched Claude working directory of `.` resolves to the current Git or
+  OpenMimicry project root on first configuration.
+
+### Fixed
+
+- Removed the duplicate wake-name and recognition-alias controls from Voice.
+- GLaDOS and other bundled companion voices no longer lose precedence to stale
+  global profiles with the same identifier.
+- Three.js rotation accepts a full ±360° range, and legacy Torikinoko/MINIUS
+  imports default to a front-facing 180° Y rotation.
+- `Set an alarm to 17h!` and equivalent Portuguese, Spanish, and French phrases
+  route to the durable built-in alarm service instead of the conversational LLM.
+- Language changes no longer hold the dashboard in an opaque backend-refresh
+  state while models download or warm.
+
+### Security
+
+- Bundled companion voice references are signature-checked and bounded to
+  20 MiB before they are loaded.
+- Only private imported companions and character packs can be deleted; bundled
+  defaults remain protected.
+- User-created character, voice, personality, and companion data remains outside
+  Git by default.
+
+## [1.9.0] — Persistent multilingual companions and background agents
+
+### Added
+
+- Full companion profile v2 with assistant name/aliases, personality, voice,
+  avatar/runtime, Three.js transform/rotation, animation speed, and clip aliases.
+- Independent `auto`/English/French/Spanish/Portuguese input and output language
+  settings with warm-before-commit STT refresh.
+- Dashboard-configurable Claude CLI model/settings, named project roots,
+  fingerprint-guarded session reuse, background execution, and notifications.
+- Opt-in provider-neutral tools for browser links, Spotify search, create-only
+  text files, allowed folders, exact application aliases, and durable alarms.
+- Private original-ZIP import presets for Torikinoko and MINIUS; restricted
+  creator model bytes are never redistributed.
+
+### Changed
+
+- The last activated companion is restored before avatar and voice adapters are
+  built; checked-in defaults are used only when no private selection exists.
+- Explicit current/internet questions reliably trigger OpenRouter research in
+  automatic mode, while greetings remain ordinary conversation.
+- Claude delegation acknowledges immediately and continues alongside chat.
+- Memory identity is user-scoped (`user_name`) and personality identity is
+  authoritative for the assistant.
+
+### Fixed
+
+- Saved avatar and voice selections no longer diverge on startup or activation.
+- URLs, Markdown links, and citation markers are no longer read aloud by TTS.
+- Direct phrases such as `Claude, ...` and `Launch Claude to ...` are recognized.
+- Imported Three.js models can map lifecycle and gesture names to their own
+  embedded clips without per-message transform drift.
+
+### Security
+
+- Tools are disabled by default and cannot infer arbitrary shell commands.
+- Creator archives, local characters, voice references, personalities,
+  companion profiles, credentials, and local databases remain private-by-default.
+
 ## [1.8.5] — Observable and reliable Claude Code tasks
 
 ### Added
